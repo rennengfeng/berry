@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Search } from 'lucide-react'
 import { formatCurrencyFromUSD } from '@/lib/currency'
+import { getLobeIcon } from '@/lib/lobe-icon'
 import { api } from '@/lib/api'
 import { getFrontendModels } from './api'
 import type { FrontendModel } from './types'
@@ -95,8 +96,13 @@ export function ModelSquare() {
   })
 
   const models = payload?.models ?? []
-  const vendors = payload?.vendors ?? []
   const usableGroups = payload?.usable_group ?? {}
+
+  const vendors = useMemo(() => {
+    const all = payload?.vendors ?? []
+    const vendorNamesWithModels = new Set(models.map((m) => m.vendor_name).filter(Boolean))
+    return all.filter((v) => vendorNamesWithModels.has(v.name))
+  }, [payload?.vendors, models])
 
   // Build perf index by model name
   const perfIndex = useMemo(() => {
@@ -213,7 +219,7 @@ export function ModelSquare() {
         >
           <option value="all">{t('portal.page.models.allGroups')}</option>
           {Object.entries(usableGroups).map(([key, desc]) => (
-            <option key={key} value={key}>{desc || key}</option>
+            <option key={key} value={key}>{key}{desc && desc !== key ? ` (${desc})` : ''}</option>
           ))}
         </select>
         <select
@@ -263,10 +269,15 @@ export function ModelSquare() {
                   return (
                     <tr key={model.model_name} className="border-b border-white/[0.04] transition hover:bg-white/[0.02]">
                       <td className="px-4 py-4">
-                        <p className="font-medium text-white/90">{model.model_name}</p>
-                        {model.description && (
-                          <p className="mt-0.5 text-xs text-white/35 line-clamp-1">{model.description}</p>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <span className="shrink-0">{getLobeIcon(model.icon, 20)}</span>
+                          <div>
+                            <p className="font-medium text-white/90">{model.model_name}</p>
+                            {model.description && (
+                              <p className="mt-0.5 text-xs text-white/35 line-clamp-1">{model.description}</p>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-4 text-center text-xs text-white/60">{model.vendor_name ?? '—'}</td>
                       <td className="px-4 py-4 text-center">
