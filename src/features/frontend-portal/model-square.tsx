@@ -10,17 +10,19 @@ import type { FrontendModel } from './types'
 
 type PriceMode = 'site' | 'official'
 
-function getGroupRatioForModel(model: FrontendModel, selectedGroup: string) {
-  const ratiosByGroup = model.group_ratio || {}
+function getGroupRatioForModel(model: FrontendModel, selectedGroup: string, topLevelGroupRatio: Record<string, number>) {
   if (selectedGroup !== 'all') {
-    const selected = ratiosByGroup[selectedGroup]
-    if (Number.isFinite(selected) && (model.enable_groups || []).includes(selectedGroup)) {
-      return selected as number
+    const perModel = model.group_ratio?.[selectedGroup]
+    if (Number.isFinite(perModel) && (model.enable_groups || []).includes(selectedGroup)) {
+      return perModel as number
     }
+    const topLevel = topLevelGroupRatio[selectedGroup]
+    if (Number.isFinite(topLevel)) return topLevel
   }
-  const ratios = (model.enable_groups || [])
-    .map((group) => ratiosByGroup[group])
-    .filter((value): value is number => Number.isFinite(value))
+  const groups = model.enable_groups || []
+  const ratios = groups
+    .map((g) => model.group_ratio?.[g] ?? topLevelGroupRatio[g])
+    .filter((v): v is number => Number.isFinite(v))
   return ratios.length > 0 ? Math.min(...ratios) : 1
 }
 
@@ -28,14 +30,15 @@ function formatPrice(
   model: FrontendModel,
   type: 'input' | 'output' | 'cache_create' | 'cache_read',
   mode: PriceMode,
-  selectedGroup: string
+  selectedGroup: string,
+  topLevelGroupRatio: Record<string, number>
 ): string {
   if (model.quota_type === 1) {
     if (type === 'input') {
       const modelPrice = mode === 'official'
         ? Number(model.official_model_price ?? model.model_price ?? 0)
         : Number(model.model_price ?? 0)
-      const ratio = mode === 'site' ? getGroupRatioForModel(model, selectedGroup) : 1
+      const ratio = mode === 'site' ? getGroupRatioForModel(model, selectedGroup, topLevelGroupRatio) : 1
       return `${formatCurrencyFromUSD(modelPrice * ratio, { digitsLarge: 4, digitsSmall: 4, abbreviate: false })} / 次`
     }
     return '-'
@@ -44,7 +47,7 @@ function formatPrice(
   const modelRatio = mode === 'official'
     ? Number(model.official_model_ratio ?? model.model_ratio ?? 0)
     : Number(model.model_ratio ?? 0)
-  const ratio = mode === 'site' ? getGroupRatioForModel(model, selectedGroup) : 1
+  const ratio = mode === 'site' ? getGroupRatioForModel(model, selectedGroup, topLevelGroupRatio) : 1
   const base = modelRatio * 2 * ratio
 
   if (type === 'input') {
@@ -72,7 +75,7 @@ export function ModelSquare() {
   const [priceMode, setPriceMode] = useState<PriceMode>('site')
   const [searchValue, setSearchValue] = useState('')
   const [vendorFilter, setVendorFilter] = useState('all')
-  const [groupFilter, setGroupFilter] = useState('all')
+  const [groupFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showRatio, setShowRatio] = useState(false)
 
@@ -96,13 +99,21 @@ export function ModelSquare() {
   })
 
   const models = payload?.models ?? []
-  const usableGroups = payload?.usable_group ?? {}
+  const topLevelGroupRatio = payload?.group_ratio ?? {}
 
   const vendors = useMemo(() => {
     const all = payload?.vendors ?? []
     const vendorNamesWithModels = new Set(models.map((m) => m.vendor_name).filter(Boolean))
     return all.filter((v) => vendorNamesWithModels.has(v.name))
   }, [payload?.vendors, models])
+
+  const vendorIconMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const v of payload?.vendors ?? []) {
+      if (v.icon) map.set(v.name, v.icon)
+    }
+    return map
+  }, [payload?.vendors])
 
   // Build perf index by model name
   const perfIndex = useMemo(() => {
@@ -213,16 +224,6 @@ export function ModelSquare() {
           ))}
         </select>
         <select
-          value={groupFilter}
-          onChange={(e) => setGroupFilter(e.target.value)}
-          className="rounded-lg border border-white/10 bg-[#1a1a2e] px-3 py-2 text-sm text-white focus:border-purple-400/50 focus:outline-none"
-        >
-          <option value="all">{t('portal.page.models.allGroups')}</option>
-          {Object.entries(usableGroups).map(([key, desc]) => (
-            <option key={key} value={key}>{key}{desc && desc !== key ? ` (${desc})` : ''}</option>
-          ))}
-        </select>
-        <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           className="rounded-lg border border-white/10 bg-[#1a1a2e] px-3 py-2 text-sm text-white focus:border-purple-400/50 focus:outline-none"
@@ -251,9 +252,8 @@ export function ModelSquare() {
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-white/[0.06] bg-white/[0.02] text-xs text-white/40">
-                  <th className="px-4 py-3 font-medium">{t('portal.page.models.modelInfo')}</th>
+                  <th className="min-w-[240px] px-4 py-3 font-medium">{t('portal.page.models.modelInfo')}</th>
                   <th className="px-4 py-3 font-medium text-center">{t('portal.page.models.vendor')}</th>
-                  <th className="px-4 py-3 font-medium text-center">{t('portal.page.models.group')}</th>
                   <th className="px-4 py-3 font-medium text-center">{t('portal.page.models.type')}</th>
                   {showRatio && <th className="px-4 py-3 font-medium text-center">{t('portal.page.models.groupRatio')}</th>}
                   <th className="px-4 py-3 font-medium text-center">{t('portal.page.models.inputPrice')}</th>
@@ -268,23 +268,21 @@ export function ModelSquare() {
                   const selectedGroup = showRatio && groupFilter !== 'all' ? groupFilter : 'all'
                   return (
                     <tr key={model.model_name} className="border-b border-white/[0.04] transition hover:bg-white/[0.02]">
-                      <td className="px-4 py-4">
+                      <td className="min-w-[240px] px-4 py-4">
                         <div className="flex items-center gap-2">
-                          <span className="shrink-0">{getLobeIcon(model.icon, 20)}</span>
-                          <div>
-                            <p className="font-medium text-white/90">{model.model_name}</p>
+                          <span className="shrink-0">{getLobeIcon(model.icon || vendorIconMap.get(model.vendor_name ?? ''), 20)}</span>
+                          <div className="min-w-0">
+                            <p className="font-medium text-white/90 whitespace-nowrap">{model.model_name}</p>
                             {model.description && (
                               <p className="mt-0.5 text-xs text-white/35 line-clamp-1">{model.description}</p>
                             )}
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-center text-xs text-white/60">{model.vendor_name ?? '—'}</td>
                       <td className="px-4 py-4 text-center">
-                        <div className="flex flex-wrap justify-center gap-1">
-                          {(model.enable_groups ?? []).map((g) => (
-                            <span key={g} className="inline-block rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-white/50">{g}</span>
-                          ))}
+                        <div className="inline-flex items-center gap-1.5">
+                          <span className="shrink-0">{getLobeIcon(vendorIconMap.get(model.vendor_name ?? ''), 16)}</span>
+                          <span className="text-xs text-white/60 whitespace-nowrap">{model.vendor_name ?? '—'}</span>
                         </div>
                       </td>
                       <td className="px-4 py-4 text-center">
@@ -299,24 +297,24 @@ export function ModelSquare() {
                       {showRatio && (
                         <td className="px-4 py-4 text-center text-xs text-white/60">
                           {groupFilter !== 'all'
-                            ? `${model.group_ratio?.[groupFilter] ?? 1}x`
+                            ? `${topLevelGroupRatio[groupFilter] ?? model.group_ratio?.[groupFilter] ?? 1}x`
                             : (model.enable_groups ?? []).map((g) => (
-                                <span key={g} className="mr-1 inline-block rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px]">{model.group_ratio?.[g] ?? 1}x</span>
+                                <span key={g} className="mr-1 inline-block rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px]">{topLevelGroupRatio[g] ?? model.group_ratio?.[g] ?? 1}x</span>
                               ))
                           }
                         </td>
                       )}
                       <td className="px-4 py-4 text-center text-xs text-white/60">
-                        {formatPrice(model, 'input', priceMode, selectedGroup)}
+                        {formatPrice(model, 'input', priceMode, selectedGroup, topLevelGroupRatio)}
                       </td>
                       <td className="px-4 py-4 text-center text-xs text-white/60">
-                        {formatPrice(model, 'output', priceMode, selectedGroup)}
+                        {formatPrice(model, 'output', priceMode, selectedGroup, topLevelGroupRatio)}
                       </td>
                       <td className="px-4 py-4 text-center text-xs text-white/60">
-                        {formatPrice(model, 'cache_create', priceMode, selectedGroup)}
+                        {formatPrice(model, 'cache_create', priceMode, selectedGroup, topLevelGroupRatio)}
                       </td>
                       <td className="px-4 py-4 text-center text-xs text-white/60">
-                        {formatPrice(model, 'cache_read', priceMode, selectedGroup)}
+                        {formatPrice(model, 'cache_read', priceMode, selectedGroup, topLevelGroupRatio)}
                       </td>
                       <td className="px-4 py-4 text-center">
                         {(() => {

@@ -104,6 +104,11 @@ export async function getFrontendModels(): Promise<FrontendModelsPayload> {
     }
   }
 
+  const vendorIconMap = new Map<number, string>()
+  for (const v of pricing.vendors ?? []) {
+    if (v.icon) vendorIconMap.set(v.id, v.icon)
+  }
+
   const models: FrontendModel[] = (pricing.data ?? []).map((m) => {
     const monitors = monitorIndex.get(m.model_name) ?? []
     return {
@@ -112,7 +117,7 @@ export async function getFrontendModels(): Promise<FrontendModelsPayload> {
       vendor_id: m.vendor_id,
       vendor_name: m.vendor_name,
       tags: m.tags,
-      icon: m.vendor_icon,
+      icon: m.vendor_icon || (m.vendor_id ? vendorIconMap.get(m.vendor_id) : undefined),
       quota_type: m.quota_type,
       model_ratio: m.model_ratio,
       completion_ratio: m.completion_ratio,
