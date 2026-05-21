@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "rsbuild dev",
     "build": "rsbuild build",
-    "postbuild": "xcopy /E /I /Y \"..\\default\\dist\" \"..\\classic\\dist\"",
+    "postbuild": "cp -r ../default/dist ../classic/dist 2>/dev/null || xcopy /E /I /Y \"..\\default\\dist\" \"..\\classic\\dist\"",
     "build:check": "tsc -b && rsbuild build",
     "typecheck": "tsc -b",
     "lint": "eslint .",
