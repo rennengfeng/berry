@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "rsbuild dev",
     "build": "rsbuild build",
-    "postbuild": "cp -r ../default/dist ../classic/dist 2>/dev/null || xcopy /E /I /Y \"..\\default\\dist\" \"..\\classic\\dist\"",
+    "postbuild": "node -e \"const fs=require('fs');const s='../default/dist';const d='../classic/dist';if(fs.existsSync(s)){fs.cpSync(s,d,{recursive:true})}\"",
     "build:check": "tsc -b && rsbuild build",
     "typecheck": "tsc -b",
     "lint": "eslint .",
