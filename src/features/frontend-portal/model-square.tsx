@@ -231,8 +231,8 @@ export function ModelSquare() {
           className="rounded-lg border border-white/10 bg-[#1a1a2e] px-3 py-2 text-sm text-white focus:border-purple-400/50 focus:outline-none"
         >
           <option value="all">{t('portal.page.models.allGroups')}</option>
-          {Object.entries(usableGroups).map(([key, desc]) => (
-            <option key={key} value={key}>{key}{desc && desc !== key ? ` (${desc})` : ''}</option>
+          {Object.entries(usableGroups).map(([key]) => (
+            <option key={key} value={key}>{key} ({topLevelGroupRatio[key] ?? 1}x)</option>
           ))}
         </select>
         <select
