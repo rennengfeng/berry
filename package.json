@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "rsbuild dev",
     "build": "rsbuild build",
-    "postbuild": "node -e \"const fs=require('fs');const s='../default/dist';const d='../classic/dist';if(fs.existsSync(s)){fs.cpSync(s,d,{recursive:true})}\"",
+    "postbuild": "bun scripts/postbuild.mjs",
     "build:check": "tsc -b && rsbuild build",
     "typecheck": "tsc -b",
     "lint": "eslint .",
