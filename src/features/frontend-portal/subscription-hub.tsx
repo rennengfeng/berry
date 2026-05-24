@@ -317,6 +317,28 @@ export function SubscriptionHub() {
           >
             {paymentLoading ? t('portal.page.topup.processing') : t('portal.page.topup.topupNow')}
           </button>
+
+          {/* Redemption Code */}
+          <div className="mt-5 rounded-xl border border-white/8 bg-white/[0.02] p-4">
+            <p className="mb-2 text-sm font-medium text-white/70">{t('portal.page.topup.haveCode')}</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={redemptionCode}
+                onChange={(e) => setRedemptionCode(e.target.value)}
+                placeholder={t('portal.page.topup.enterCode')}
+                className="flex-1 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-purple-400/50 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleRedeem}
+                disabled={!redemptionCode || redeeming}
+                className="shrink-0 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {redeeming ? t('portal.page.topup.processing') : t('portal.page.topup.redeem')}
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Subscription Plans + Referral */}
