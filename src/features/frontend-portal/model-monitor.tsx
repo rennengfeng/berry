@@ -162,8 +162,8 @@ export function ModelMonitor() {
                     </td>
                     <td className="py-3 pr-4">
                       <span className="inline-flex items-center gap-1">
-                        <CheckCircle className={cn('h-3.5 w-3.5', m.success_rate >= 0.95 ? 'text-emerald-400' : m.success_rate >= 0.8 ? 'text-amber-400' : 'text-rose-400')} />
-                        {(m.success_rate * 100).toFixed(1)}%
+                        <CheckCircle className={cn('h-3.5 w-3.5', m.success_rate >= (m.success_rate > 1 ? 95 : 0.95) ? 'text-emerald-400' : m.success_rate >= (m.success_rate > 1 ? 80 : 0.8) ? 'text-amber-400' : 'text-rose-400')} />
+                        {(m.success_rate > 1 ? m.success_rate : m.success_rate * 100).toFixed(1)}%
                       </span>
                     </td>
                     <td className="py-3 pr-4">{m.avg_tps.toFixed(1)}</td>

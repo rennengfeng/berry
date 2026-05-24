@@ -107,7 +107,8 @@ export function ModelSquare() {
   const perfIndex = useMemo(() => {
     const map = new Map<string, { success_rate: number; avg_latency_ms: number }>()
     for (const m of perfData ?? []) {
-      map.set(m.model_name, { success_rate: m.success_rate, avg_latency_ms: m.avg_latency_ms })
+      const rate = m.success_rate > 1 ? m.success_rate / 100 : m.success_rate
+      map.set(m.model_name, { success_rate: rate, avg_latency_ms: m.avg_latency_ms })
     }
     return map
   }, [perfData])

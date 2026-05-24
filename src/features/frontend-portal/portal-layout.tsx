@@ -42,6 +42,7 @@ import {
   KeyRound,
   LogOut,
   Mail,
+  Megaphone,
   Settings,
   User,
   Wallet,
@@ -105,6 +106,7 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const [noticeOpen, setNoticeOpen] = useState(false)
   const [noticeDismissed, setNoticeDismissed] = useState(false)
+  const [noticeTab, setNoticeTab] = useState<'notice' | 'timeline'>('notice')
   const authStore = useAuthStore((s) => s.auth)
   const user = authStore.user
   const { t, i18n } = useTranslation()
@@ -120,6 +122,9 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
     },
     staleTime: 60_000,
   })
+
+  const { status: portalStatus } = useStatus()
+  const announcements = (portalStatus?.announcements_enabled ? (portalStatus?.announcements ?? []) : []) as Array<{ content?: string; publishDate?: string; type?: string }>
 
   const hasNotice = Boolean(noticeData) && !noticeDismissed
 
@@ -322,7 +327,7 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
             <div className="mb-4 flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
                 <Bell className="h-5 w-5 text-purple-400" />
-                系统公告
+                {t('portal.notice.title')}
               </h2>
               <button
                 type="button"
@@ -332,15 +337,72 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            {noticeData ? (
-              <div className="prose prose-invert prose-sm max-h-[400px] overflow-y-auto text-white/70">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {noticeData}
-                </ReactMarkdown>
-              </div>
+            {/* Tabs */}
+            <div className="mb-4 flex rounded-lg border border-white/10 bg-white/[0.03] p-0.5">
+              <button
+                type="button"
+                onClick={() => setNoticeTab('notice')}
+                className={cn('flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition', noticeTab === 'notice' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white/70')}
+              >
+                <Bell className="h-3.5 w-3.5" />{t('portal.notice.tab.notice')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setNoticeTab('timeline')}
+                className={cn('flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition', noticeTab === 'timeline' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white/70')}
+              >
+                <Megaphone className="h-3.5 w-3.5" />{t('portal.notice.tab.timeline')}
+              </button>
+            </div>
+            {/* Tab Content */}
+            {noticeTab === 'notice' ? (
+              noticeData ? (
+                <div className="prose prose-invert prose-sm max-h-[400px] overflow-y-auto text-white/70">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {noticeData}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <p className="text-sm text-white/40">{t('portal.notice.empty')}</p>
+              )
             ) : (
-              <p className="text-sm text-white/40">当前暂无新的公告</p>
+              <div className="max-h-[400px] space-y-3 overflow-y-auto">
+                {announcements.length === 0 ? (
+                  <p className="text-sm text-white/40">{t('portal.notice.noTimeline')}</p>
+                ) : (
+                  announcements.slice(0, 20).map((item, i) => (
+                    <div key={i} className="border-b border-white/[0.06] pb-3 last:border-0">
+                      <div className="flex items-start gap-2">
+                        <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', item.type === 'error' ? 'bg-rose-400' : item.type === 'warning' ? 'bg-amber-400' : 'bg-emerald-400')} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-white/80">{item.content}</p>
+                          {item.publishDate && (
+                            <p className="mt-1 text-xs text-white/30">{new Date(item.publishDate).toLocaleString()}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             )}
+            {/* Footer */}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setNoticeOpen(false); setNoticeDismissed(true) }}
+                className="rounded-lg px-3 py-1.5 text-xs text-white/50 transition hover:bg-white/10 hover:text-white/70"
+              >
+                {t('portal.notice.dismissToday')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setNoticeOpen(false)}
+                className="rounded-lg bg-purple-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-purple-700"
+              >
+                {t('portal.notice.close')}
+              </button>
+            </div>
           </div>
         </div>
       )}
