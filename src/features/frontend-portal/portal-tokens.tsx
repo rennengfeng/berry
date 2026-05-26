@@ -5,6 +5,7 @@ import { KeyRound, Search, Plus, CheckCircle, XCircle, Copy, Eye, EyeOff, Loader
 import { toast } from 'sonner'
 import { ApiKeysProvider, useApiKeys } from '@/features/keys/components/api-keys-provider'
 import { ApiKeysMutateDrawer } from '@/features/keys/components/api-keys-mutate-drawer'
+import { CCSwitchDialog } from '@/features/keys/components/dialogs/cc-switch-dialog'
 import { deleteApiKey, updateApiKeyStatus } from '@/features/keys/api'
 import { quotaUnitsToDollars } from '@/lib/format'
 import type { ApiKey } from '@/features/keys/types'
@@ -55,6 +56,8 @@ function PortalTokensInner() {
   }
 
   const [hiddenKeys, setHiddenKeys] = useState<Record<number, boolean>>({})
+  const [ccSwitchOpen, setCcSwitchOpen] = useState(false)
+  const [ccSwitchKey, setCcSwitchKey] = useState('')
 
   const handleViewKey = async (token: ApiKey) => {
     if (resolvedKeys[token.id]) {
@@ -83,6 +86,17 @@ function PortalTokensInner() {
       refetch()
     } else {
       toast.error(res.message || '删除失败')
+    }
+  }
+
+  const handleCcSwitch = async (token: ApiKey) => {
+    let key = resolvedKeys[token.id]
+    if (!key) {
+      key = (await resolveRealKey(token.id)) ?? ''
+    }
+    if (key) {
+      setCcSwitchKey(key)
+      setCcSwitchOpen(true)
     }
   }
 
@@ -284,6 +298,13 @@ function PortalTokensInner() {
                           </button>
                           <button
                             type="button"
+                            onClick={() => handleCcSwitch(token)}
+                            className="text-xs font-medium text-cyan-400 transition hover:text-cyan-300"
+                          >
+                            CC
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleDelete(token)}
                             className="text-xs font-medium text-red-400 transition hover:text-red-300"
                           >
@@ -344,6 +365,12 @@ function PortalTokensInner() {
           }
         }}
         currentRow={editingKey ?? undefined}
+      />
+
+      <CCSwitchDialog
+        open={ccSwitchOpen}
+        onOpenChange={setCcSwitchOpen}
+        tokenKey={ccSwitchKey}
       />
     </div>
   )
