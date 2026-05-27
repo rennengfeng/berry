@@ -36,6 +36,12 @@ const DARK_THEME_OVERRIDES = {
   ],
 }
 
+const DARK_THEME_PIE_OVERRIDES = {
+  background: 'transparent',
+  title: { textStyle: { fill: 'hsl(var(--foreground))' }, subtextStyle: { fill: 'hsl(var(--muted-foreground))' } },
+  legends: { item: { label: { style: { fill: 'hsl(var(--foreground))' } } } },
+}
+
 const MODEL_COLOR_MAP: Record<string, string> = {
   'gpt-3.5-turbo': 'rgb(184,227,167)',
   'gpt-4': 'rgb(135,206,235)',
@@ -389,7 +395,7 @@ export function PortalDataBoard() {
       label: { visible: hasData },
       tooltip: { mark: { content: [{ key: (datum: any) => datum['type'], value: (datum: any) => renderCompactNumber(datum['value']) }] } },
       color: hasData ? { specified: chartData.modelColors } : { type: 'ordinal' as const, range: ['hsl(var(--muted))'] },
-      ...DARK_THEME_OVERRIDES,
+      ...DARK_THEME_PIE_OVERRIDES,
     }
   }, [chartData, t])
 

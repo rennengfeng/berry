@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Crown, RefreshCw, Sparkles, Check } from 'lucide-react'
+import { Crown, RefreshCw, Check } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { formatQuota } from '@/lib/format'
@@ -387,7 +387,7 @@ export function SubscriptionPlansCard({
           {hasAny && (
             <>
               <Separator className='my-3' />
-              <div className='max-h-64 space-y-3 overflow-y-auto pr-1'>
+              <div className='max-h-96 space-y-3 overflow-y-auto pr-1'>
                 {allSubscriptions.map((sub) => {
                   const subscription = sub.subscription
                   const totalAmount = Number(subscription?.amount_total || 0)
@@ -506,7 +506,7 @@ export function SubscriptionPlansCard({
 
         {/* Available plans grid */}
         {plans.length > 0 ? (
-          <div className='grid grid-cols-1 gap-3 2xl:grid-cols-2 2xl:gap-4'>
+          <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 xl:gap-4'>
             {plans.map((p, index) => {
               const plan = p?.plan
               if (!plan) return null
@@ -535,77 +535,68 @@ export function SubscriptionPlansCard({
                 <Card
                   key={plan.id}
                   className={cn(
-                    'transition-shadow hover:shadow-md',
+                    'aspect-[3/4] transition-shadow hover:shadow-md',
                     isPopular && 'border-primary/70 shadow-sm'
                   )}
                 >
                   <CardContent className='flex h-full flex-col p-3.5 sm:p-4'>
-                    <div className='mb-2 flex items-start justify-between gap-3'>
-                      <div className='min-w-0'>
-                        <h4 className='truncate font-semibold'>
-                          {plan.title || t('Subscription Plans')}
-                        </h4>
-                        {plan.subtitle && (
-                          <p className='text-muted-foreground truncate text-xs'>
-                            {plan.subtitle}
-                          </p>
-                        )}
-                      </div>
-                      {isPopular && (
-                        <StatusBadge
-                          variant='info'
-                          copyable={false}
-                          className='shrink-0'
-                        >
-                          <Sparkles className='h-3 w-3' />
-                          {t('Recommended')}
-                        </StatusBadge>
+                    <div className='mb-2'>
+                      <h4 className='truncate text-sm font-semibold text-orange-400'>
+                        {plan.title || t('Subscription Plans')}
+                      </h4>
+                      {plan.subtitle && (
+                        <p className='mt-0.5 truncate text-xs text-foreground'>
+                          {plan.subtitle}
+                        </p>
                       )}
                     </div>
 
-                    <div className='py-2'>
-                      <span className='text-primary text-2xl font-bold'>
-                        ${price}
-                      </span>
-                    </div>
-
-                    <div className='flex-1 space-y-1.5 pb-3'>
+                    <div className='flex-1 space-y-1 pb-3'>
                       {benefits.map((label) => (
                         <div
                           key={label}
-                          className='text-muted-foreground flex items-center gap-2 text-xs'
+                          className='flex items-center gap-2 text-xs text-foreground'
                         >
-                          <Check className='text-primary h-3 w-3 shrink-0' />
+                          <Check className='h-3 w-3 shrink-0 text-primary' />
                           <span>{label}</span>
                         </div>
                       ))}
                     </div>
 
-                    <Separator className='mb-3' />
+                    <div className='mt-auto space-y-2.5'>
+                      <div>
+                        <span className='text-sm font-semibold text-orange-400'>
+                          ${price}
+                        </span>
+                        <span className='text-xs text-muted-foreground'>
+                          /{formatDuration(plan, t)}
+                        </span>
+                      </div>
 
-                    {reached ? (
-                      <Tooltip>
-                        <TooltipTrigger render={<div />}>
-                          <Button variant='outline' className='w-full' disabled>
-                            {t('Limit Reached')}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {t('Purchase limit reached')} ({count}/{limit})
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <Button
-                        variant='outline'
-                        className='w-full'
-                        onClick={() => {
-                          setSelectedPlan(p)
-                          setPurchaseOpen(true)
-                        }}
-                      >
-                        {t('Subscribe Now')}
-                      </Button>
-                    )}
+                      {reached ? (
+                        <Tooltip>
+                          <TooltipTrigger render={<div />}>
+                            <Button variant='outline' className='w-full text-xs' size='sm' disabled>
+                              {t('Limit Reached')}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {t('Purchase limit reached')} ({count}/{limit})
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <Button
+                          className='w-full bg-purple-600 text-xs text-white hover:bg-purple-700'
+                          size='sm'
+                          onClick={() => {
+                            setSelectedPlan(p)
+                            setPurchaseOpen(true)
+                          }}
+                        >
+                          {t('Subscribe Now')}
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               )
