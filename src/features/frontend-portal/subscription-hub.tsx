@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Check, Copy, Gift, RefreshCw, Search, Users, Wallet } from 'lucide-react'
+import { Check, RefreshCw } from 'lucide-react'
 import { formatCurrencyFromUSD } from '@/lib/currency'
 import { api, getSelf } from '@/lib/api'
 import { formatQuota } from '@/lib/format'
@@ -35,7 +35,10 @@ import type {
   PresetAmount,
   UserWalletData,
 } from '@/features/wallet/types'
-import { getSelfSubscriptionFull } from '@/features/subscriptions/api'
+import { getSelfSubscriptionFull, getPublicPlans } from '@/features/subscriptions/api'
+import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/dialogs/subscription-purchase-dialog'
+import { formatDuration, formatResetPeriod } from '@/features/subscriptions/lib'
+import type { PlanRecord } from '@/features/subscriptions/types'
 
 export function SubscriptionHub() {
   const { t } = useTranslation()
@@ -52,7 +55,6 @@ export function SubscriptionHub() {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
   const [redemptionCode, setRedemptionCode] = useState('')
-  const [copied, setCopied] = useState(false)
 
   const { topupInfo, presetAmounts, loading: topupLoading } = useTopupInfo()
   const {
@@ -62,7 +64,7 @@ export function SubscriptionHub() {
     calculatePaymentAmount,
     processPayment,
   } = usePayment()
-  const { affiliateLink, transferQuota, transferring } = useAffiliate()
+  const { transferQuota, transferring } = useAffiliate()
   const { redeeming, redeemCode } = useRedemption()
   const { processing: pancakeProcessing, processWaffoPancakePayment } = useWaffoPancakePayment()
 
@@ -75,6 +77,15 @@ export function SubscriptionHub() {
     queryFn: getSelfSubscriptionFull,
     staleTime: 30_000,
   })
+
+  const plansQuery = useQuery({
+    queryKey: ['frontend-subscription-hub-plans'],
+    queryFn: getPublicPlans,
+    staleTime: 60_000,
+  })
+
+  const [purchaseOpen, setPurchaseOpen] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState<PlanRecord | null>(null)
 
   const fetchUser = useCallback(async () => {
     try {
@@ -172,14 +183,6 @@ export function SubscriptionHub() {
     }
   }
 
-  const copyInviteLink = () => {
-    if (!affiliateLink) return
-    navigator.clipboard.writeText(affiliateLink)
-    setCopied(true)
-    toast.success(t('portal.page.topup.linkCopied'))
-    setTimeout(() => setCopied(false), 2000)
-  }
-
   const getDiscountRate = useCallback(() => {
     return topupInfo?.discount?.[topupAmount] || DEFAULT_DISCOUNT_RATE
   }, [topupInfo, topupAmount])
@@ -188,6 +191,7 @@ export function SubscriptionHub() {
   const minTopup = getMinTopupAmount(topupInfo)
   const hasRechargeOptions = !!topupInfo?.enable_online_topup || !!topupInfo?.enable_stripe_topup
   const allSubscriptions = subscriptionQuery.data?.data?.all_subscriptions ?? []
+  const publicPlans = plansQuery.data?.data ?? []
 
   const {
     records,
@@ -341,7 +345,7 @@ export function SubscriptionHub() {
           </div>
         </div>
 
-        {/* Subscription Plans + Referral */}
+        {/* Subscription Plans + My Subscriptions */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
           {/* Plans */}
           <div className="rounded-xl border border-white/8 bg-white/[0.02] p-5">
@@ -351,22 +355,26 @@ export function SubscriptionHub() {
                 <p className="mt-0.5 text-xs text-white/40">{t('portal.page.topup.subscriptionDesc')}</p>
               </div>
             </div>
-            {allSubscriptions.length > 0 ? (
+            {publicPlans.length > 0 ? (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {allSubscriptions.slice(0, 4).map((plan: any, i: number) => {
+                {publicPlans.slice(0, 4).map((p: PlanRecord, i: number) => {
+                  const plan = p?.plan
+                  if (!plan) return null
                   const colors = ['text-white/70', 'text-orange-400', 'text-purple-400', 'text-yellow-400']
+                  const price = Number(plan.price_amount || 0).toFixed(2)
                   return (
-                    <div key={plan.id || i} className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
-                      <p className={`text-sm font-semibold ${colors[i % 4]}`}>{plan.name || `${t('portal.page.topup.plan')} ${i + 1}`}</p>
-                      <p className="mt-0.5 text-xs text-white/40">{plan.description || ''}</p>
+                    <div key={plan.id} className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
+                      <p className={`text-sm font-semibold ${colors[i % 4]}`}>{plan.title || `${t('portal.page.topup.plan')} ${i + 1}`}</p>
+                      <p className="mt-0.5 text-xs text-white/40">{plan.subtitle || ''}</p>
                       <p className="mt-3">
                         <span className={`text-xl font-bold ${colors[i % 4]}`}>
-                          ${((plan.price ?? 0) / 100).toFixed(1)}
+                          ${price}
                         </span>
-                        <span className="text-xs text-white/40"> /{t('portal.page.topup.month')}</span>
+                        <span className="text-xs text-white/40"> /{formatDuration(plan, t)}</span>
                       </p>
                       <button
                         type="button"
+                        onClick={() => { setSelectedPlan(p); setPurchaseOpen(true) }}
                         className="mt-4 w-full rounded-lg bg-purple-600 py-2 text-xs font-medium text-white transition hover:bg-purple-700"
                       >
                         {t('portal.page.topup.selectPlan')}
@@ -382,69 +390,89 @@ export function SubscriptionHub() {
             )}
           </div>
 
-          {/* Referral Sidebar */}
+          {/* My Subscriptions Sidebar */}
           <div className="space-y-4">
             <div className="rounded-xl border border-white/8 bg-white/[0.02] p-5">
-              <h3 className="text-base font-semibold text-white">{t('portal.page.topup.referral')}</h3>
-              <p className="mt-0.5 text-xs text-white/40">{t('portal.page.topup.referralDesc')}</p>
-
-              <div className="mt-4">
-                <p className="mb-1.5 text-xs text-white/40">{t('portal.page.topup.myInviteLink')}</p>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 truncate rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/60 font-mono">
-                    {affiliateLink || t('portal.page.topup.generating')}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={copyInviteLink}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/60 hover:text-white"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-base font-semibold text-white">{t('portal.page.topup.mySubscriptions')}</h3>
+                <button
+                  type="button"
+                  onClick={() => void subscriptionQuery.refetch()}
+                  className="text-white/40 hover:text-white/60"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${subscriptionQuery.isFetching ? 'animate-spin' : ''}`} />
+                </button>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-3">
-                <div className="text-center">
-                  <p className="text-lg font-bold text-white">{user?.aff_count ?? 0}</p>
-                  <p className="text-[10px] text-white/40">{t('portal.page.topup.totalInvites')}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold text-white">{user?.aff_count ?? 0}</p>
-                  <p className="text-[10px] text-white/40">{t('portal.page.topup.validInvites')}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold text-purple-400">
-                    {formatQuota(user?.aff_history_quota ?? 0)}
-                  </p>
-                  <p className="text-[10px] text-white/40">{t('portal.page.topup.totalRewards')}</p>
-                </div>
-              </div>
+              {allSubscriptions.length > 0 ? (
+                <div className="max-h-[400px] space-y-3 overflow-y-auto pr-1">
+                  {allSubscriptions.map((sub: any) => {
+                    const subscription = sub.subscription
+                    if (!subscription) return null
+                    const totalAmount = Number(subscription.amount_total || 0)
+                    const usedAmount = Number(subscription.amount_used || 0)
+                    const remainAmount = totalAmount > 0 ? Math.max(0, totalAmount - usedAmount) : 0
+                    const now = Date.now() / 1000
+                    const isExpired = (subscription.end_time || 0) < now
+                    const isCancelled = subscription.status === 'cancelled'
+                    const isActive = subscription.status === 'active' && !isExpired
+                    const remainDays = Math.max(0, Math.ceil(((subscription.end_time || 0) - now) / 86400))
+                    const usagePercent = totalAmount > 0 ? Math.round((usedAmount / totalAmount) * 100) : 0
 
-              <div className="mt-4 space-y-1.5 text-xs text-white/50">
-                <p className="font-medium text-white/70">{t('portal.page.topup.rewardRules')}</p>
-                <p className="flex items-center gap-1.5">
-                  <Check className="h-3 w-3 text-purple-400" />
-                  {t('portal.page.topup.rule1')}
-                </p>
-                <p className="flex items-center gap-1.5">
-                  <Check className="h-3 w-3 text-purple-400" />
-                  {t('portal.page.topup.rule2')}
-                </p>
-                <p className="flex items-center gap-1.5">
-                  <Check className="h-3 w-3 text-purple-400" />
-                  {t('portal.page.topup.rule3')}
-                </p>
-              </div>
+                    return (
+                      <div key={subscription.id} className="rounded-lg border border-white/8 bg-white/[0.03] p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-white/80">
+                            {t('portal.page.topup.subscription')} #{subscription.id}
+                          </span>
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                            isActive
+                              ? 'bg-green-500/10 text-green-400'
+                              : isCancelled
+                                ? 'bg-gray-500/10 text-gray-400'
+                                : 'bg-orange-500/10 text-orange-400'
+                          }`}>
+                            {isActive ? t('portal.page.topup.active') : isCancelled ? t('portal.page.topup.cancelled') : t('portal.page.topup.expired')}
+                          </span>
+                        </div>
 
-              <button
-                type="button"
-                onClick={copyInviteLink}
-                className="mt-4 w-full rounded-lg bg-purple-600 py-2.5 text-center text-xs font-semibold text-white transition hover:bg-purple-700"
-              >
-                <Users className="mr-1.5 inline h-3.5 w-3.5" />
-                {t('portal.page.topup.inviteFriends')}
-              </button>
+                        {isActive && (
+                          <p className="mt-1.5 text-[11px] text-white/40">
+                            {t('portal.page.topup.daysRemaining', { count: remainDays })}
+                          </p>
+                        )}
+
+                        <p className="mt-1 text-[11px] text-white/40">
+                          {isActive ? t('portal.page.topup.validUntil') : isCancelled ? t('portal.page.topup.cancelledAt') : t('portal.page.topup.expiredAt')}{' '}
+                          {new Date((subscription.end_time || 0) * 1000).toLocaleDateString()}
+                        </p>
+
+                        {totalAmount > 0 && (
+                          <>
+                            <div className="mt-2 flex items-center justify-between text-[11px]">
+                              <span className="text-white/40">{t('portal.page.topup.quotaUsage')}</span>
+                              <span className="text-white/60">{formatQuota(usedAmount)} / {formatQuota(totalAmount)}</span>
+                            </div>
+                            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                              <div
+                                className={`h-full rounded-full transition-all ${usagePercent > 80 ? 'bg-orange-400' : 'bg-purple-500'}`}
+                                style={{ width: `${Math.min(usagePercent, 100)}%` }}
+                              />
+                            </div>
+                          </>
+                        )}
+                        {totalAmount === 0 && (
+                          <p className="mt-2 text-[11px] text-white/40">{t('portal.page.topup.quotaUnlimited')}</p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-white/10">
+                  <p className="text-xs text-white/40">{t('portal.page.topup.noActiveSubscriptions')}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -545,6 +573,23 @@ export function SubscriptionHub() {
         onConfirm={handleTransfer}
         availableQuota={user?.aff_quota ?? 0}
         transferring={transferring}
+      />
+
+      <SubscriptionPurchaseDialog
+        open={purchaseOpen}
+        onOpenChange={(open) => {
+          setPurchaseOpen(open)
+          if (!open) {
+            subscriptionQuery.refetch()
+          }
+        }}
+        plan={selectedPlan}
+        enableStripe={!!topupInfo?.enable_stripe_topup}
+        enableCreem={!!topupInfo?.enable_creem_topup}
+        enableOnlineTopUp={!!topupInfo?.enable_online_topup}
+        epayMethods={(topupInfo?.pay_methods ?? []).filter(
+          (m) => m?.type && m.type !== 'stripe' && m.type !== 'creem'
+        )}
       />
     </>
   )
