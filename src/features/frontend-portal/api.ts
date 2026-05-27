@@ -231,8 +231,8 @@ async function safeGetSelfStatToday(): Promise<{
     })
     const item = (res.data?.data ?? {}) as RawSelfStatItem
     return {
-      requests: item.count ?? 0,
-      tokens: (item.prompt_tokens ?? 0) + (item.completion_tokens ?? 0),
+      requests: item.rpm ?? item.count ?? 0,
+      tokens: item.tpm ?? ((item.prompt_tokens ?? 0) + (item.completion_tokens ?? 0)),
       quota: item.quota ?? 0,
     }
   } catch {

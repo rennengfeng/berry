@@ -45,7 +45,9 @@ export function PortalDashboard() {
         date?: string
         quota?: number
         token?: number
+        token_used?: number
         request_count?: number
+        count?: number
         model_name?: string
       }> | undefined
     },
@@ -91,7 +93,7 @@ export function PortalDashboard() {
     for (const item of chartRawData) {
       const date = item.date ?? ''
       const key = date.length > 5 ? date.slice(5) : date
-      grouped[key] = (grouped[key] ?? 0) + (item.request_count ?? 0)
+      grouped[key] = (grouped[key] ?? 0) + (item.request_count ?? item.count ?? 0)
     }
     return Object.entries(grouped)
       .sort(([a], [b]) => a.localeCompare(b))

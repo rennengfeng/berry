@@ -51,7 +51,9 @@ export function PortalDataBoard() {
         date?: string
         quota?: number
         token?: number
+        token_used?: number
         request_count?: number
+        count?: number
         model_name?: string
       }> | undefined
     },
@@ -72,7 +74,9 @@ export function PortalDataBoard() {
       return res.data?.data as Array<{
         quota?: number
         token?: number
+        token_used?: number
         request_count?: number
+        count?: number
       }> | undefined
     },
     staleTime: 60_000,
@@ -112,13 +116,13 @@ export function PortalDataBoard() {
   })
 
   // Compute totals
-  const totalRequests = statData?.reduce((s, d) => s + (d.request_count ?? 0), 0) ?? 0
-  const totalTokens = statData?.reduce((s, d) => s + (d.token ?? 0), 0) ?? 0
+  const totalRequests = statData?.reduce((s, d) => s + (d.request_count ?? d.count ?? 0), 0) ?? 0
+  const totalTokens = statData?.reduce((s, d) => s + (d.token ?? d.token_used ?? 0), 0) ?? 0
   const totalQuota = statData?.reduce((s, d) => s + (d.quota ?? 0), 0) ?? 0
   const totalSpend = (totalQuota / 500000).toFixed(2)
 
-  const prevRequests = prevStatData?.reduce((s, d) => s + (d.request_count ?? 0), 0) ?? 0
-  const prevTokens = prevStatData?.reduce((s, d) => s + (d.token ?? 0), 0) ?? 0
+  const prevRequests = prevStatData?.reduce((s, d) => s + (d.request_count ?? d.count ?? 0), 0) ?? 0
+  const prevTokens = prevStatData?.reduce((s, d) => s + (d.token ?? d.token_used ?? 0), 0) ?? 0
   const prevQuota = prevStatData?.reduce((s, d) => s + (d.quota ?? 0), 0) ?? 0
 
   const calcChange = (curr: number, prev: number) => {

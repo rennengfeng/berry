@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { api } from '@/lib/api'
-import { Search, RotateCcw, Activity, Zap, Clock, AlertTriangle, Download, RefreshCw } from 'lucide-react'
+import { Search, RotateCcw, Activity, Zap, Clock, AlertTriangle, Download, RefreshCw, ChevronRight } from 'lucide-react'
 import dayjs from 'dayjs'
 
 type TimeGranularity = 'hour' | 'day' | 'week'
@@ -18,8 +18,28 @@ type LogItem = {
   completion_tokens?: number
   channel?: number
   group?: string
+  use_time?: number
   request_time?: number
   type?: number
+  is_stream?: boolean
+  content?: string
+  ip?: string
+  other?: string
+  request_id?: string
+}
+
+function parseOther(other?: string): { frt?: number; cache_tokens?: number; cache_creation_tokens?: number } | null {
+  if (!other) return null
+  try {
+    const data = JSON.parse(other)
+    return {
+      frt: data.frt ?? data.first_response_time,
+      cache_tokens: data.cache_tokens ?? data.cached_tokens,
+      cache_creation_tokens: data.cache_creation_tokens,
+    }
+  } catch {
+    return null
+  }
 }
 
 export function PortalLogs() {
@@ -37,6 +57,7 @@ export function PortalLogs() {
 
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [expandedId, setExpandedId] = useState<number | null>(null)
 
   const range = (() => {
     const end = endDate.unix()
@@ -60,6 +81,7 @@ export function PortalLogs() {
         total_token?: number
         quota?: number
         rpm?: number
+        tpm?: number
       } | undefined
     },
     staleTime: 30_000,
@@ -78,8 +100,10 @@ export function PortalLogs() {
       return res.data?.data as Array<{
         date?: string
         request_count?: number
+        count?: number
         quota?: number
         token?: number
+        token_used?: number
       }> | undefined
     },
     staleTime: 30_000,
@@ -117,9 +141,9 @@ export function PortalLogs() {
     setPage(1)
   }
 
-  const totalRequests = statData?.request_count ?? 0
-  const totalTokens = statData?.total_token ?? 0
-  const avgTime = statData?.rpm ?? 0
+  const totalRequests = statData?.rpm ?? statData?.request_count ?? 0
+  const totalTokens = statData?.tpm ?? statData?.total_token ?? 0
+  const avgTime = 0
 
   const formatNum = (n: number) => {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
@@ -160,7 +184,7 @@ export function PortalLogs() {
         key = date.length > 5 ? date.slice(5, 10) : date
       }
       if (!grouped[key]) grouped[key] = { requests: 0, errors: 0 }
-      grouped[key].requests += item.request_count ?? 0
+      grouped[key].requests += item.request_count ?? item.count ?? 0
     }
     return Object.entries(grouped)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -373,43 +397,116 @@ export function PortalLogs() {
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-white/8 text-xs text-white/40">
+                  <th className="w-6 px-2 py-2.5"></th>
                   <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.time')}</th>
-                  <th className="px-3 py-2.5 font-medium">API Key</th>
+                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.tokenName')}</th>
+                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.group')}</th>
+                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.type')}</th>
                   <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.model')}</th>
-                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.endpoint')}</th>
-                  <th className="px-3 py-2.5 font-medium">Tokens</th>
-                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.duration')}</th>
+                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.timingHeader')}</th>
+                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.inputTokens')}</th>
+                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.cost')}</th>
                   <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.status')}</th>
-                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.ipAddress')}</th>
-                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.action')}</th>
                 </tr>
               </thead>
               <tbody>
                 {logs.map((log) => {
-                  const tokens = (log.prompt_tokens ?? 0) + (log.completion_tokens ?? 0)
                   const isError = log.type === 1
+                  const isExpanded = expandedId === log.id
+                  const totalTokens = (log.prompt_tokens ?? 0) + (log.completion_tokens ?? 0)
+                  const cost = (log.quota ?? 0) / 500000
+                  const otherData = parseOther(log.other)
+                  const firstResponseTime = otherData?.frt ? (otherData.frt / 1000).toFixed(1) : null
+
                   return (
-                    <tr key={log.id} className="border-b border-white/[0.04] text-white/70 transition hover:bg-white/[0.02]">
-                      <td className="px-3 py-3 text-xs text-white/50">{dayjs.unix(log.created_at).format('YYYY-MM-DD HH:mm:ss')}</td>
-                      <td className="px-3 py-3 text-xs font-mono text-white/50">{log.token_name ? `sk-···${log.token_name.slice(-4)}` : '—'}</td>
-                      <td className="px-3 py-3">
-                        <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-white/80">{log.model_name ?? '—'}</span>
-                      </td>
-                      <td className="px-3 py-3 text-xs text-white/40">/v1/chat/completions</td>
-                      <td className="px-3 py-3 text-xs">{tokens.toLocaleString()}</td>
-                      <td className="px-3 py-3 text-xs">{log.request_time ? `${(log.request_time / 1000).toFixed(2)}s` : '—'}</td>
-                      <td className="px-3 py-3">
-                        {isError ? (
-                          <span className="inline-block rounded bg-red-500/15 px-2 py-0.5 text-xs text-red-400">{t('portal.page.logs.failed')}</span>
-                        ) : (
-                          <span className="inline-block rounded bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-400">{t('portal.page.logs.success')}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-xs text-white/40">—</td>
-                      <td className="px-3 py-3">
-                        <button type="button" className="text-xs text-purple-400 hover:text-purple-300">{t('portal.page.logs.details')}</button>
-                      </td>
-                    </tr>
+                    <Fragment key={log.id}>
+                      <tr
+                        className={`border-b border-white/[0.04] text-white/70 transition cursor-pointer ${isError ? 'bg-red-500/[0.03]' : 'hover:bg-white/[0.02]'}`}
+                        onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                      >
+                        <td className="px-2 py-3 text-white/30">
+                          <ChevronRight className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                        </td>
+                        <td className="px-3 py-3 text-xs text-white/50">{dayjs.unix(log.created_at).format('YYYY-MM-DD HH:mm:ss')}</td>
+                        <td className="px-3 py-3 text-xs font-mono text-white/50">{log.token_name ? `${log.token_name.slice(0, 6)}···` : '—'}</td>
+                        <td className="px-3 py-3">
+                          {log.group ? (
+                            <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-xs text-purple-300">{log.group}</span>
+                          ) : <span className="text-xs text-white/30">—</span>}
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className={`rounded px-1.5 py-0.5 text-xs ${isError ? 'bg-red-500/15 text-red-400' : 'bg-blue-500/10 text-blue-300'}`}>
+                            {isError ? t('portal.page.logs.error') : t('portal.page.logs.consume')}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-white/80">{log.model_name || '—'}</span>
+                        </td>
+                        <td className="px-3 py-3 text-xs">
+                          {log.use_time ? (
+                            <span className="text-white/60">
+                              {log.use_time}s
+                              {firstResponseTime && <span className="ml-1 text-white/30">{firstResponseTime}s</span>}
+                              {log.is_stream && <span className="ml-1 rounded bg-cyan-500/10 px-1 text-[10px] text-cyan-400">{t('portal.page.logs.stream')}</span>}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td className="px-3 py-3 text-xs text-white/60">
+                          {totalTokens.toLocaleString()}
+                          {otherData?.cache_tokens ? (
+                            <span className="ml-1 text-[10px] text-white/30">
+                              {t('portal.page.logs.cacheRead')} {otherData.cache_tokens.toLocaleString()}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-3 text-xs font-medium text-white/70">${cost.toFixed(6)}</td>
+                        <td className="px-3 py-3">
+                          {isError ? (
+                            <span className="inline-block rounded bg-red-500/15 px-2 py-0.5 text-xs text-red-400">{t('portal.page.logs.failed')}</span>
+                          ) : (
+                            <span className="inline-block rounded bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-400">{t('portal.page.logs.success')}</span>
+                          )}
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-b border-white/[0.04] bg-white/[0.01]">
+                          <td colSpan={10} className="px-6 py-4">
+                            <div className="space-y-2 text-xs text-white/50">
+                              {log.request_id && (
+                                <div className="flex gap-2">
+                                  <span className="text-white/30 w-24 shrink-0">Request ID</span>
+                                  <span className="font-mono text-white/60">{log.request_id}</span>
+                                </div>
+                              )}
+                              {otherData?.cache_tokens != null && (
+                                <div className="flex gap-2">
+                                  <span className="text-white/30 w-24 shrink-0">{t('portal.page.logs.cacheTokens')}</span>
+                                  <span className="text-white/60">{otherData.cache_tokens.toLocaleString()}</span>
+                                </div>
+                              )}
+                              {otherData?.cache_creation_tokens != null && (
+                                <div className="flex gap-2">
+                                  <span className="text-white/30 w-24 shrink-0">{t('portal.page.logs.cacheCreation')}</span>
+                                  <span className="text-white/60">{otherData.cache_creation_tokens.toLocaleString()}</span>
+                                </div>
+                              )}
+                              {log.content && (
+                                <div className="flex gap-2">
+                                  <span className="text-white/30 w-24 shrink-0">{t('portal.page.logs.logDetail')}</span>
+                                  <span className="text-white/60 break-all">{log.content}</span>
+                                </div>
+                              )}
+                              {log.ip && (
+                                <div className="flex gap-2">
+                                  <span className="text-white/30 w-24 shrink-0">IP</span>
+                                  <span className="text-white/60">{log.ip}</span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   )
                 })}
               </tbody>
