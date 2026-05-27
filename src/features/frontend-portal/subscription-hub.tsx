@@ -348,7 +348,7 @@ export function SubscriptionHub() {
         {/* Subscription Plans + My Subscriptions */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
           {/* Plans */}
-          <div className="rounded-xl border border-white/8 bg-white/[0.02] p-5 min-h-[320px]">
+          <div className="rounded-xl border border-white/8 bg-white/[0.02] p-5 min-h-[480px]">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-semibold text-white">{t('portal.page.topup.subscriptionPlans')}</h3>
@@ -356,32 +356,33 @@ export function SubscriptionHub() {
               </div>
             </div>
             {publicPlans.length > 0 ? (
-              <div className="max-h-[280px] overflow-y-auto no-scrollbar">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="max-h-[420px] overflow-y-auto no-scrollbar">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {publicPlans.map((p: PlanRecord, i: number) => {
                     const plan = p?.plan
                     if (!plan) return null
-                    const colors = ['text-white/70', 'text-orange-400', 'text-purple-400', 'text-yellow-400']
                     const price = Number(plan.price_amount || 0).toFixed(2)
                     return (
-                      <div key={plan.id} className="flex flex-col rounded-xl border border-white/8 bg-white/[0.02] p-4">
+                      <div key={plan.id} className="flex aspect-[3/4] flex-col rounded-xl border border-white/8 bg-white/[0.02] p-4">
                         <div className="flex-1">
-                          <p className={`text-sm font-semibold ${colors[i % 4]}`}>{plan.title || `${t('portal.page.topup.plan')} ${i + 1}`}</p>
-                          <p className="mt-1 text-xs leading-relaxed text-white/40">{plan.subtitle || ''}</p>
-                          <p className="mt-3">
-                            <span className={`text-xl font-bold ${colors[i % 4]}`}>
+                          <p className="text-sm font-semibold text-orange-400">{plan.title || `${t('portal.page.topup.plan')} ${i + 1}`}</p>
+                          <p className="mt-1.5 text-xs leading-relaxed text-white/70">{plan.subtitle || ''}</p>
+                        </div>
+                        <div className="mt-auto space-y-3">
+                          <p>
+                            <span className="text-sm font-semibold text-orange-400">
                               ${price}
                             </span>
                             <span className="text-xs text-white/40"> /{formatDuration(plan, t)}</span>
                           </p>
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedPlan(p); setPurchaseOpen(true) }}
+                            className="w-full rounded-lg bg-purple-600 py-2 text-xs font-medium text-white transition hover:bg-purple-700"
+                          >
+                            {t('portal.page.topup.selectPlan')}
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => { setSelectedPlan(p); setPurchaseOpen(true) }}
-                          className="mt-4 w-full rounded-lg bg-purple-600 py-2.5 text-xs font-medium text-white transition hover:bg-purple-700"
-                        >
-                          {t('portal.page.topup.selectPlan')}
-                        </button>
                       </div>
                     )
                   })}
@@ -409,7 +410,7 @@ export function SubscriptionHub() {
               </div>
 
               {allSubscriptions.length > 0 ? (
-                <div className="flex-1 space-y-3 overflow-y-auto no-scrollbar pr-1" style={{ maxHeight: '260px' }}>
+                <div className="flex-1 space-y-3 overflow-y-auto no-scrollbar pr-1" style={{ maxHeight: '390px' }}>
                   {allSubscriptions.map((sub: any) => {
                     const subscription = sub.subscription
                     if (!subscription) return null

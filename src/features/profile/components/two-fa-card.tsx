@@ -66,13 +66,20 @@ export function TwoFACard({ loading: pageLoading }: TwoFACardProps) {
   return (
     <>
       <Card className='gap-0 overflow-hidden py-0'>
-        <CardHeader className='p-3 sm:p-5'>
-          <CardTitle className='text-lg tracking-tight sm:text-xl'>
-            {t('Two-Factor Authentication')}
-          </CardTitle>
-          <CardDescription className='text-xs sm:text-sm'>
-            {t('Add an extra layer of security to your account')}
-          </CardDescription>
+        <CardHeader className='border-b p-3 !pb-3 sm:p-5 sm:!pb-5'>
+          <div className='flex min-w-0 items-center gap-3'>
+            <div className='bg-muted flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:h-9 sm:w-9'>
+              <Shield className='h-4 w-4' />
+            </div>
+            <div className='min-w-0'>
+              <CardTitle className='text-lg tracking-tight sm:text-xl'>
+                {t('Two-Factor Authentication')}
+              </CardTitle>
+              <CardDescription className='text-xs sm:text-sm'>
+                {t('Add an extra layer of security to your account')}
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
 
         <CardContent className='p-3 sm:p-5'>

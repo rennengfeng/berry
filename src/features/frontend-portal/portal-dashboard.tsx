@@ -95,7 +95,7 @@ export function PortalDashboard() {
 
       {/* Bottom row: API Info + Announcements */}
       <div className="min-h-0 flex-1 px-5 pb-3">
-        <div className="grid h-full grid-cols-1 gap-5 lg:grid-cols-[1fr_4fr]">
+        <div className="grid h-full grid-cols-1 gap-5 lg:grid-cols-[4fr_6fr]">
           {/* Left: API Info */}
           <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
             <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
