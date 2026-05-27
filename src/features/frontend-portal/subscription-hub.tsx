@@ -348,7 +348,7 @@ export function SubscriptionHub() {
         {/* Subscription Plans + My Subscriptions */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
           {/* Plans */}
-          <div className="rounded-xl border border-white/8 bg-white/[0.02] p-5">
+          <div className="rounded-xl border border-white/8 bg-white/[0.02] p-5 min-h-[320px]">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-semibold text-white">{t('portal.page.topup.subscriptionPlans')}</h3>
@@ -356,43 +356,47 @@ export function SubscriptionHub() {
               </div>
             </div>
             {publicPlans.length > 0 ? (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {publicPlans.slice(0, 4).map((p: PlanRecord, i: number) => {
-                  const plan = p?.plan
-                  if (!plan) return null
-                  const colors = ['text-white/70', 'text-orange-400', 'text-purple-400', 'text-yellow-400']
-                  const price = Number(plan.price_amount || 0).toFixed(2)
-                  return (
-                    <div key={plan.id} className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
-                      <p className={`text-sm font-semibold ${colors[i % 4]}`}>{plan.title || `${t('portal.page.topup.plan')} ${i + 1}`}</p>
-                      <p className="mt-0.5 text-xs text-white/40">{plan.subtitle || ''}</p>
-                      <p className="mt-3">
-                        <span className={`text-xl font-bold ${colors[i % 4]}`}>
-                          ${price}
-                        </span>
-                        <span className="text-xs text-white/40"> /{formatDuration(plan, t)}</span>
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => { setSelectedPlan(p); setPurchaseOpen(true) }}
-                        className="mt-4 w-full rounded-lg bg-purple-600 py-2 text-xs font-medium text-white transition hover:bg-purple-700"
-                      >
-                        {t('portal.page.topup.selectPlan')}
-                      </button>
-                    </div>
-                  )
-                })}
+              <div className="max-h-[280px] overflow-y-auto no-scrollbar">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {publicPlans.map((p: PlanRecord, i: number) => {
+                    const plan = p?.plan
+                    if (!plan) return null
+                    const colors = ['text-white/70', 'text-orange-400', 'text-purple-400', 'text-yellow-400']
+                    const price = Number(plan.price_amount || 0).toFixed(2)
+                    return (
+                      <div key={plan.id} className="flex flex-col rounded-xl border border-white/8 bg-white/[0.02] p-4">
+                        <div className="flex-1">
+                          <p className={`text-sm font-semibold ${colors[i % 4]}`}>{plan.title || `${t('portal.page.topup.plan')} ${i + 1}`}</p>
+                          <p className="mt-1 text-xs leading-relaxed text-white/40">{plan.subtitle || ''}</p>
+                          <p className="mt-3">
+                            <span className={`text-xl font-bold ${colors[i % 4]}`}>
+                              ${price}
+                            </span>
+                            <span className="text-xs text-white/40"> /{formatDuration(plan, t)}</span>
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedPlan(p); setPurchaseOpen(true) }}
+                          className="mt-4 w-full rounded-lg bg-purple-600 py-2.5 text-xs font-medium text-white transition hover:bg-purple-700"
+                        >
+                          {t('portal.page.topup.selectPlan')}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             ) : (
-              <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-white/10">
+              <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-white/10">
                 <p className="text-sm text-white/40">{t('portal.page.topup.noPlans')}</p>
               </div>
             )}
           </div>
 
           {/* My Subscriptions Sidebar */}
-          <div className="space-y-4">
-            <div className="rounded-xl border border-white/8 bg-white/[0.02] p-5">
+          <div className="flex flex-col">
+            <div className="flex flex-1 flex-col rounded-xl border border-white/8 bg-white/[0.02] p-5">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-base font-semibold text-white">{t('portal.page.topup.mySubscriptions')}</h3>
                 <button
@@ -405,7 +409,7 @@ export function SubscriptionHub() {
               </div>
 
               {allSubscriptions.length > 0 ? (
-                <div className="max-h-[400px] space-y-3 overflow-y-auto pr-1">
+                <div className="flex-1 space-y-3 overflow-y-auto no-scrollbar pr-1" style={{ maxHeight: '260px' }}>
                   {allSubscriptions.map((sub: any) => {
                     const subscription = sub.subscription
                     if (!subscription) return null
@@ -469,7 +473,7 @@ export function SubscriptionHub() {
                   })}
                 </div>
               ) : (
-                <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-white/10">
+                <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-white/10">
                   <p className="text-xs text-white/40">{t('portal.page.topup.noActiveSubscriptions')}</p>
                 </div>
               )}
