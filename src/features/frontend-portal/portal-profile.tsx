@@ -1,6 +1,5 @@
 import { useStatus } from '@/hooks/use-status'
 import { useAuthStore } from '@/stores/auth-store'
-import { ProfileHeader } from '@/features/profile/components/profile-header'
 import { ProfileSecurityCard } from '@/features/profile/components/profile-security-card'
 import { ProfileSettingsCard } from '@/features/profile/components/profile-settings-card'
 import { LanguagePreferencesCard } from '@/features/profile/components/language-preferences-card'
@@ -19,27 +18,23 @@ export function PortalProfile() {
 
   return (
     <div className="portal-settings space-y-5">
-      <ProfileHeader profile={profile} loading={loading} />
-
-      <div className="space-y-5">
-        <ProfileSettingsCard
-          profile={profile}
-          loading={loading}
-          onProfileUpdate={refreshProfile}
+      <ProfileSettingsCard
+        profile={profile}
+        loading={loading}
+        onProfileUpdate={refreshProfile}
+      />
+      <LanguagePreferencesCard
+        profile={profile}
+        onProfileUpdate={refreshProfile}
+      />
+      <ProfileSecurityCard profile={profile} loading={loading} />
+      {checkinEnabled && (
+        <CheckinCalendarCard
+          checkinEnabled={checkinEnabled}
+          turnstileEnabled={turnstileEnabled}
+          turnstileSiteKey={turnstileSiteKey}
         />
-        <LanguagePreferencesCard
-          profile={profile}
-          onProfileUpdate={refreshProfile}
-        />
-        <ProfileSecurityCard profile={profile} loading={loading} />
-        {checkinEnabled && (
-          <CheckinCalendarCard
-            checkinEnabled={checkinEnabled}
-            turnstileEnabled={turnstileEnabled}
-            turnstileSiteKey={turnstileSiteKey}
-          />
-        )}
-      </div>
+      )}
     </div>
   )
 }

@@ -70,21 +70,37 @@ export function PortalLogs() {
     return { start: startDate.unix(), end }
   })()
 
-  const { data: statData } = useQuery({
-    queryKey: ['portal-log-stat-range', range.start, range.end],
+  const todayStart = dayjs().startOf('day').unix()
+  const todayEnd = dayjs().endOf('day').unix()
+
+  const { data: todayStatData } = useQuery({
+    queryKey: ['portal-log-today-stat', todayStart, todayEnd],
     queryFn: async () => {
-      const res = await api.get('/api/log/self/stat', {
-        params: { start_timestamp: range.start, end_timestamp: range.end },
+      const res = await api.get('/api/data/self', {
+        params: {
+          start_timestamp: todayStart,
+          end_timestamp: todayEnd,
+          default_time: 'hour',
+        },
       })
-      return res.data?.data as {
+      return res.data?.data as Array<{
         request_count?: number
-        total_token?: number
-        quota?: number
-        rpm?: number
-        tpm?: number
-      } | undefined
+        count?: number
+        token?: number
+        token_used?: number
+      }> | undefined
     },
     staleTime: 30_000,
+  })
+
+  const { data: tokenList } = useQuery({
+    queryKey: ['portal-user-tokens'],
+    queryFn: async () => {
+      const res = await api.get('/api/token/', { params: { p: 1, size: 100 } })
+      const items = res.data?.data as Array<{ name?: string; key?: string }> | undefined
+      return items?.map(t => t.name).filter(Boolean) as string[] ?? []
+    },
+    staleTime: 60_000,
   })
 
   const { data: chartRawData } = useQuery({
@@ -98,6 +114,7 @@ export function PortalLogs() {
         },
       })
       return res.data?.data as Array<{
+        created_at?: number
         date?: string
         request_count?: number
         count?: number
@@ -141,9 +158,14 @@ export function PortalLogs() {
     setPage(1)
   }
 
-  const totalRequests = statData?.rpm ?? statData?.request_count ?? 0
-  const totalTokens = statData?.tpm ?? statData?.total_token ?? 0
-  const avgTime = 0
+  const totalRequests = todayStatData?.reduce((s, d) => s + (d.request_count ?? d.count ?? 0), 0) ?? 0
+  const totalTokens = todayStatData?.reduce((s, d) => s + (d.token ?? d.token_used ?? 0), 0) ?? 0
+  const avgTime = (() => {
+    if (!logs || logs.length === 0) return 0
+    const withTime = logs.filter(l => l.use_time && l.use_time > 0)
+    if (withTime.length === 0) return 0
+    return Math.round(withTime.reduce((s, l) => s + (l.use_time ?? 0), 0) / withTime.length * 1000)
+  })()
 
   const formatNum = (n: number) => {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
@@ -176,7 +198,7 @@ export function PortalLogs() {
     }
     const grouped: Record<string, { requests: number; errors: number }> = {}
     for (const item of chartRawData) {
-      const date = item.date ?? ''
+      const date = item.date ?? (item.created_at ? dayjs.unix(item.created_at).format('YYYY-MM-DD HH:mm') : '')
       let key: string
       if (granularity === 'hour') {
         key = date.length >= 13 ? date.slice(11, 16) : date.length > 5 ? date.slice(5) : date
@@ -291,13 +313,16 @@ export function PortalLogs() {
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <p className="mb-1.5 text-xs text-white/40">API Key</p>
-                <input
-                  type="text"
+                <select
                   value={keyFilter}
                   onChange={(e) => setKeyFilter(e.target.value)}
-                  placeholder="sk-xxxx..."
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-2 text-xs text-white placeholder:text-white/25 focus:border-purple-400/50 focus:outline-none"
-                />
+                  className="w-full rounded-lg border border-white/10 bg-[#1a1a2e] px-2.5 py-2 text-xs text-white focus:border-purple-400/50 focus:outline-none"
+                >
+                  <option value="">{t('portal.page.logs.allTokens')}</option>
+                  {(tokenList ?? []).map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <p className="mb-1.5 text-xs text-white/40">{t('portal.page.logs.model')}</p>
@@ -394,19 +419,19 @@ export function PortalLogs() {
           <p className="py-8 text-center text-sm text-white/50">{t('portal.page.logs.loading')}</p>
         ) : logs.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/8 text-xs text-white/40">
                   <th className="w-6 px-2 py-2.5"></th>
-                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.time')}</th>
-                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.tokenName')}</th>
-                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.group')}</th>
-                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.type')}</th>
-                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.model')}</th>
-                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.timingHeader')}</th>
-                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.inputTokens')}</th>
-                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.cost')}</th>
-                  <th className="px-3 py-2.5 font-medium">{t('portal.page.logs.status')}</th>
+                  <th className="px-3 py-2.5 text-center font-medium">{t('portal.page.logs.time')}</th>
+                  <th className="px-3 py-2.5 text-center font-medium">{t('portal.page.logs.tokenName')}</th>
+                  <th className="px-3 py-2.5 text-center font-medium">{t('portal.page.logs.group')}</th>
+                  <th className="px-3 py-2.5 text-center font-medium">{t('portal.page.logs.type')}</th>
+                  <th className="px-3 py-2.5 text-center font-medium">{t('portal.page.logs.model')}</th>
+                  <th className="px-3 py-2.5 text-center font-medium">{t('portal.page.logs.timingHeader')}</th>
+                  <th className="px-3 py-2.5 text-center font-medium">{t('portal.page.logs.inputTokens')}</th>
+                  <th className="px-3 py-2.5 text-center font-medium">{t('portal.page.logs.cost')}</th>
+                  <th className="px-3 py-2.5 text-center font-medium">{t('portal.page.logs.status')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -424,25 +449,25 @@ export function PortalLogs() {
                         className={`border-b border-white/[0.04] text-white/70 transition cursor-pointer ${isError ? 'bg-red-500/[0.03]' : 'hover:bg-white/[0.02]'}`}
                         onClick={() => setExpandedId(isExpanded ? null : log.id)}
                       >
-                        <td className="px-2 py-3 text-white/30">
-                          <ChevronRight className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                        <td className="px-2 py-3 text-center text-white/30">
+                          <ChevronRight className={`h-3.5 w-3.5 transition-transform inline-block ${isExpanded ? 'rotate-90' : ''}`} />
                         </td>
-                        <td className="px-3 py-3 text-xs text-white/50">{dayjs.unix(log.created_at).format('YYYY-MM-DD HH:mm:ss')}</td>
-                        <td className="px-3 py-3 text-xs font-mono text-white/50">{log.token_name ? `${log.token_name.slice(0, 6)}···` : '—'}</td>
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 text-center text-xs text-white/50">{dayjs.unix(log.created_at).format('YYYY-MM-DD HH:mm:ss')}</td>
+                        <td className="px-3 py-3 text-center text-xs text-white/60">{log.token_name || '—'}</td>
+                        <td className="px-3 py-3 text-center">
                           {log.group ? (
                             <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-xs text-purple-300">{log.group}</span>
                           ) : <span className="text-xs text-white/30">—</span>}
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 text-center">
                           <span className={`rounded px-1.5 py-0.5 text-xs ${isError ? 'bg-red-500/15 text-red-400' : 'bg-blue-500/10 text-blue-300'}`}>
                             {isError ? t('portal.page.logs.error') : t('portal.page.logs.consume')}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 text-center">
                           <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-white/80">{log.model_name || '—'}</span>
                         </td>
-                        <td className="px-3 py-3 text-xs">
+                        <td className="px-3 py-3 text-center text-xs">
                           {log.use_time ? (
                             <span className="text-white/60">
                               {log.use_time}s
@@ -451,7 +476,7 @@ export function PortalLogs() {
                             </span>
                           ) : '—'}
                         </td>
-                        <td className="px-3 py-3 text-xs text-white/60">
+                        <td className="px-3 py-3 text-center text-xs text-white/60">
                           {totalTokens.toLocaleString()}
                           {otherData?.cache_tokens ? (
                             <span className="ml-1 text-[10px] text-white/30">
@@ -459,8 +484,8 @@ export function PortalLogs() {
                             </span>
                           ) : null}
                         </td>
-                        <td className="px-3 py-3 text-xs font-medium text-white/70">${cost.toFixed(6)}</td>
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 text-center text-xs font-medium text-white/70">${cost.toFixed(6)}</td>
+                        <td className="px-3 py-3 text-center">
                           {isError ? (
                             <span className="inline-block rounded bg-red-500/15 px-2 py-0.5 text-xs text-red-400">{t('portal.page.logs.failed')}</span>
                           ) : (

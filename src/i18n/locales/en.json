@@ -4728,6 +4728,7 @@
     "portal.page.logs.details": "Details",
     "portal.page.logs.noData": "No Data",
     "portal.page.logs.noRecordsFound": "No usage records found",
+    "portal.page.logs.allTokens": "All Tokens",
     "portal.page.logs.perPage": "Per page",
     "portal.page.logs.totalItems": ", {{count}} total",
     "portal.page.models.degraded": "Degraded",
