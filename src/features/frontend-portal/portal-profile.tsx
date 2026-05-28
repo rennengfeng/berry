@@ -1,5 +1,4 @@
 import { useStatus } from '@/hooks/use-status'
-import { useAuthStore } from '@/stores/auth-store'
 import { ProfileSecurityCard } from '@/features/profile/components/profile-security-card'
 import { ProfileSettingsCard } from '@/features/profile/components/profile-settings-card'
 import { LanguagePreferencesCard } from '@/features/profile/components/language-preferences-card'
@@ -7,10 +6,8 @@ import { CheckinCalendarCard } from '@/features/profile/components/checkin-calen
 import { PasskeyCard } from '@/features/profile/components/passkey-card'
 import { TwoFACard } from '@/features/profile/components/two-fa-card'
 import { useProfile } from '@/features/profile/hooks'
-import { useTranslation } from 'react-i18next'
 
 export function PortalProfile() {
-  const { t } = useTranslation()
   const { profile, loading, refreshProfile } = useProfile()
   const { status } = useStatus()
 

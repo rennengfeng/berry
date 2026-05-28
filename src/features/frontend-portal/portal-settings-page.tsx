@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { LogOut, Shield } from 'lucide-react'
 
 export function PortalSettings() {
-  const { auth } = useAuthStore((s) => s.auth)
+  const auth = useAuthStore((s) => s.auth)
   const navigate = useNavigate()
 
   const handleSignOut = () => {

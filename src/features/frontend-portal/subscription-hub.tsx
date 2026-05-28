@@ -362,11 +362,31 @@ export function SubscriptionHub() {
                     const plan = p?.plan
                     if (!plan) return null
                     const price = Number(plan.price_amount || 0).toFixed(2)
+                    const totalAmount = Number(plan.total_amount || 0)
+                    const limit = Number(plan.max_purchase_per_user || 0)
+                    const resetLabel = formatResetPeriod(plan, t)
+                    const noReset = resetLabel === t('No Reset')
+                    const benefits = [
+                      { label: `${t('Validity Period')}: ${formatDuration(plan, t)}` },
+                      !noReset ? { label: `${t('Quota Reset')}: ${resetLabel}` } : null,
+                      { label: `${t('Total Quota')}: ${totalAmount > 0 ? formatQuota(totalAmount) : t('Unlimited')}` },
+                      limit > 0 ? { label: `${t('Purchase Limit')}: ${limit}` } : null,
+                      plan.upgrade_group ? { label: `${t('Upgrade Group')}: ${plan.upgrade_group}` } : null,
+                    ].filter(Boolean) as { label: string }[]
+
                     return (
                       <div key={plan.id} className="flex aspect-[3/4] flex-col rounded-xl border border-white/8 bg-white/[0.02] p-4">
                         <div className="flex-1">
                           <p className="text-sm font-semibold text-orange-400">{plan.title || `${t('portal.page.topup.plan')} ${i + 1}`}</p>
                           <p className="mt-1.5 text-xs leading-relaxed text-white/70">{plan.subtitle || ''}</p>
+                          <div className="mt-3 space-y-1.5">
+                            {benefits.map((item) => (
+                              <div key={item.label} className="flex items-center gap-2 text-xs text-white/60">
+                                <Check className="h-3 w-3 shrink-0 text-blue-400" />
+                                <span>{item.label}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                         <div className="mt-auto space-y-3">
                           <p>
