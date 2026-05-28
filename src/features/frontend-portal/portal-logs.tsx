@@ -118,15 +118,6 @@ export function PortalLogs() {
     staleTime: 30_000,
   })
 
-  const { data: tokenList } = useQuery({
-    queryKey: ['portal-user-tokens'],
-    queryFn: async () => {
-      const res = await api.get('/api/token/', { params: { p: 1, size: 100 } })
-      const items = res.data?.data?.items as Array<{ name?: string; key?: string }> | undefined
-      return items?.map(t => t.name).filter(Boolean) as string[] ?? []
-    },
-    staleTime: 60_000,
-  })
 
   const { data: modelList } = useQuery({
     queryKey: ['portal-user-models-from-logs', range.start, range.end],
@@ -148,13 +139,10 @@ export function PortalLogs() {
   })
 
   const allTokenOptions = (() => {
-    const set = new Set<string>()
-    for (const name of tokenList ?? []) set.add(name)
-    for (const name of modelList?.tokens ?? []) set.add(name)
-    return Array.from(set).sort()
+    return modelList?.tokens ?? []
   })()
 
-  const tokenDisplayName = (name: string) => name === 'playground-vip' ? t('portal.page.logs.playground') : name
+  const tokenDisplayName = (name: string) => /^playground-/i.test(name) ? '在线对话' : name
 
   const { data: chartRawData } = useQuery({
     queryKey: ['portal-log-chart-data', range.start, range.end, granularity],
@@ -509,7 +497,7 @@ export function PortalLogs() {
                           <ChevronRight className={`h-3.5 w-3.5 transition-transform inline-block ${isExpanded ? 'rotate-90' : ''}`} />
                         </td>
                         <td className="px-3 py-3 text-center text-xs text-white/50">{dayjs.unix(log.created_at).format('YYYY-MM-DD HH:mm:ss')}</td>
-                        <td className="px-3 py-3 text-center text-xs text-white/60">{log.token_name === 'playground-vip' ? t('portal.page.logs.playground') : (log.token_name || '—')}</td>
+                        <td className="px-3 py-3 text-center text-xs text-white/60">{tokenDisplayName(log.token_name || '—')}</td>
                         <td className="px-3 py-3 text-center">
                           {log.group ? (
                             <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-xs text-purple-300">{log.group}</span>
