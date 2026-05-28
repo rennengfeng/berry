@@ -71,6 +71,26 @@ export function CommonLogsFilterBar<TData>(
   const { sensitiveVisible, setSensitiveVisible } = useUsageLogsContext()
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
 
+  const uniqueModels = (() => {
+    const rows = props.table.getCoreRowModel().rows
+    const set = new Set<string>()
+    for (const row of rows) {
+      const val = (row.original as Record<string, unknown>).model_name as string
+      if (val) set.add(val)
+    }
+    return Array.from(set).sort()
+  })()
+
+  const uniqueTokens = (() => {
+    const rows = props.table.getCoreRowModel().rows
+    const set = new Set<string>()
+    for (const row of rows) {
+      const val = (row.original as Record<string, unknown>).token_name as string
+      if (val) set.add(val)
+    }
+    return Array.from(set).sort()
+  })()
+
   const [filters, setFilters] = useState<CommonLogFilters>(() => {
     const { start, end } = getDefaultTimeRange()
     return { startTime: start, endTime: end }
@@ -214,13 +234,30 @@ export function CommonLogsFilterBar<TData>(
       }
       additionalSearch={
         <>
-          <Input
-            placeholder={t('Model Name')}
+          <Select
+            items={[
+              { value: 'all', label: t('All Models') },
+              ...uniqueModels.map((m) => ({ value: m, label: m })),
+            ]}
             value={filters.model || ''}
-            onChange={(e) => handleChange('model', e.target.value)}
-            onKeyDown={handleKeyDown}
-            className={inputClass}
-          />
+            onValueChange={(value) => {
+              handleChange('model', value === 'all' ? undefined : (value ?? undefined))
+            }}
+          >
+            <SelectTrigger className={inputClass}>
+              <SelectValue placeholder={t('All Models')} />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                <SelectItem value='all'>{t('All Models')}</SelectItem>
+                {uniqueModels.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {m}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
           <Input
             placeholder={t('Group')}
             type={sensitiveType}
@@ -260,14 +297,30 @@ export function CommonLogsFilterBar<TData>(
       }
       expandable={
         <>
-          <Input
-            placeholder={t('Token Name')}
-            type={sensitiveType}
+          <Select
+            items={[
+              { value: 'all', label: t('All Tokens') },
+              ...uniqueTokens.map((tk) => ({ value: tk, label: tk })),
+            ]}
             value={filters.token || ''}
-            onChange={(e) => handleChange('token', e.target.value)}
-            onKeyDown={handleKeyDown}
-            className={inputClass}
-          />
+            onValueChange={(value) => {
+              handleChange('token', value === 'all' ? undefined : (value ?? undefined))
+            }}
+          >
+            <SelectTrigger className={inputClass}>
+              <SelectValue placeholder={t('All Tokens')} />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                <SelectItem value='all'>{t('All Tokens')}</SelectItem>
+                {uniqueTokens.map((tk) => (
+                  <SelectItem key={tk} value={tk}>
+                    {tk}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
           {isAdmin && (
             <Input
               placeholder={t('Username')}

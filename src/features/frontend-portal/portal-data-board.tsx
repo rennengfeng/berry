@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Wallet, Activity, Zap, Gauge, PieChart, DollarSign, BarChart3, Coins, Hash, Timer, Cpu, Send } from 'lucide-react'
 import { VChart } from '@visactor/react-vchart'
 import { useAuthStore } from '@/stores/auth-store'
-import { formatQuota, formatNumber, stringToColor } from '@/lib/format'
+import { formatQuota, formatNumber } from '@/lib/format'
 import { computeTimeRange } from '@/lib/time'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getUserQuotaDates } from '@/features/dashboard/api'
@@ -36,12 +36,6 @@ const DARK_THEME_OVERRIDES = {
   ],
 }
 
-const DARK_THEME_PIE_OVERRIDES = {
-  background: 'transparent',
-  title: { textStyle: { fill: 'hsl(var(--foreground))' }, subtextStyle: { fill: 'hsl(var(--muted-foreground))' } },
-  legends: { item: { label: { style: { fill: 'hsl(var(--foreground))' } } } },
-}
-
 const MODEL_COLOR_MAP: Record<string, string> = {
   'gpt-3.5-turbo': 'rgb(184,227,167)',
   'gpt-4': 'rgb(135,206,235)',
@@ -54,9 +48,21 @@ const MODEL_COLOR_MAP: Record<string, string> = {
   'dall-e-3': 'rgb(153,50,204)',
 }
 
+// High-contrast color generation — uses index-based assignment within a session
+// to guarantee no two models share the same color, regardless of name similarity
+const DISTINCT_HUES = [0, 210, 120, 45, 280, 330, 170, 60, 240, 15, 300, 90, 195, 150, 350, 75, 255, 30, 135, 315]
+const sessionColorMap = new Map<string, string>()
+
 function modelToColor(name: string): string {
   if (MODEL_COLOR_MAP[name]) return MODEL_COLOR_MAP[name]
-  return stringToColor(name)
+  if (sessionColorMap.has(name)) return sessionColorMap.get(name)!
+  const idx = sessionColorMap.size
+  const hue = DISTINCT_HUES[idx % DISTINCT_HUES.length]
+  const saturation = 70 + (idx % 3) * 5
+  const lightness = 55 + (Math.floor(idx / DISTINCT_HUES.length) * 8) % 15
+  const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`
+  sessionColorMap.set(name, color)
+  return color
 }
 
 function renderCompactNumber(num: number): string {
@@ -390,12 +396,18 @@ export function PortalDataBoard() {
       valueField: 'value',
       categoryField: 'type',
       pie: { style: { cornerRadius: 10 }, state: { hover: { outerRadius: 0.85, stroke: '#000', lineWidth: 1 } } },
-      title: { visible: true, text: t('模型调用次数占比'), subtext: `${t('总计')}：${renderCompactNumber(chartData.totalTimes)}` },
-      legends: { visible: hasData, orient: 'left' as const },
+      title: { visible: true, text: t('模型调用次数占比'), subtext: `${t('总计')}：${renderCompactNumber(chartData.totalTimes)}`, textStyle: { fill: 'hsl(var(--foreground))' }, subtextStyle: { fill: 'hsl(var(--muted-foreground))' } },
+      legends: {
+        visible: hasData,
+        orient: 'left' as const,
+        position: 'middle' as const,
+        item: { shape: { style: { symbolType: 'circle' } }, label: { style: { fill: 'hsl(var(--foreground))' } } },
+        pager: { visible: true },
+      },
       label: { visible: hasData },
       tooltip: { mark: { content: [{ key: (datum: any) => datum['type'], value: (datum: any) => renderCompactNumber(datum['value']) }] } },
       color: hasData ? { specified: chartData.modelColors } : { type: 'ordinal' as const, range: ['hsl(var(--muted))'] },
-      ...DARK_THEME_PIE_OVERRIDES,
+      background: 'transparent',
     }
   }, [chartData, t])
 

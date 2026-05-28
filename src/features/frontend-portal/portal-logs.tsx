@@ -28,7 +28,22 @@ type LogItem = {
   request_id?: string
 }
 
-function parseOther(other?: string): { frt?: number; cache_tokens?: number; cache_creation_tokens?: number } | null {
+function parseOther(other?: string): {
+  frt?: number
+  cache_tokens?: number
+  cache_creation_tokens?: number
+  cache_creation_tokens_5m?: number
+  cache_creation_tokens_1h?: number
+  model_ratio?: number
+  completion_ratio?: number
+  model_price?: number
+  cache_ratio?: number
+  cache_creation_ratio?: number
+  cache_creation_ratio_5m?: number
+  group_ratio?: number
+  user_group_ratio?: number
+  request_path?: string
+} | null {
   if (!other) return null
   try {
     const data = JSON.parse(other)
@@ -36,6 +51,16 @@ function parseOther(other?: string): { frt?: number; cache_tokens?: number; cach
       frt: data.frt ?? data.first_response_time,
       cache_tokens: data.cache_tokens ?? data.cached_tokens,
       cache_creation_tokens: data.cache_creation_tokens,
+      cache_creation_tokens_5m: data.cache_creation_tokens_5m,
+      cache_creation_tokens_1h: data.cache_creation_tokens_1h,
+      model_ratio: data.model_ratio,
+      completion_ratio: data.completion_ratio,
+      model_price: data.model_price,
+      cache_ratio: data.cache_ratio,
+      cache_creation_ratio: data.cache_creation_ratio ?? data.cache_creation_ratio_5m,
+      group_ratio: data.group_ratio,
+      user_group_ratio: data.user_group_ratio,
+      request_path: data.request_path,
     }
   } catch {
     return null
@@ -97,11 +122,39 @@ export function PortalLogs() {
     queryKey: ['portal-user-tokens'],
     queryFn: async () => {
       const res = await api.get('/api/token/', { params: { p: 1, size: 100 } })
-      const items = res.data?.data as Array<{ name?: string; key?: string }> | undefined
+      const items = res.data?.data?.items as Array<{ name?: string; key?: string }> | undefined
       return items?.map(t => t.name).filter(Boolean) as string[] ?? []
     },
     staleTime: 60_000,
   })
+
+  const { data: modelList } = useQuery({
+    queryKey: ['portal-user-models-from-logs', range.start, range.end],
+    queryFn: async () => {
+      const res = await api.get('/api/log/self', {
+        params: { p: 1, size: 100, start_timestamp: range.start, end_timestamp: range.end },
+      })
+      const items = res.data?.data?.items as LogItem[] | undefined
+      if (!items) return { models: [] as string[], tokens: [] as string[] }
+      const modelSet = new Set<string>()
+      const tokenSet = new Set<string>()
+      for (const item of items) {
+        if (item.model_name) modelSet.add(item.model_name)
+        if (item.token_name) tokenSet.add(item.token_name)
+      }
+      return { models: Array.from(modelSet).sort(), tokens: Array.from(tokenSet).sort() }
+    },
+    staleTime: 60_000,
+  })
+
+  const allTokenOptions = (() => {
+    const set = new Set<string>()
+    for (const name of tokenList ?? []) set.add(name)
+    for (const name of modelList?.tokens ?? []) set.add(name)
+    return Array.from(set).sort()
+  })()
+
+  const tokenDisplayName = (name: string) => name === 'playground-vip' ? t('portal.page.logs.playground') : name
 
   const { data: chartRawData } = useQuery({
     queryKey: ['portal-log-chart-data', range.start, range.end, granularity],
@@ -312,15 +365,15 @@ export function PortalLogs() {
           <div className="flex-1 space-y-4">
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <p className="mb-1.5 text-xs text-white/40">API Key</p>
+                <p className="mb-1.5 text-xs text-white/40">{t('portal.page.logs.tokenName')}</p>
                 <select
                   value={keyFilter}
                   onChange={(e) => setKeyFilter(e.target.value)}
                   className="w-full rounded-lg border border-white/10 bg-[#1a1a2e] px-2.5 py-2 text-xs text-white focus:border-purple-400/50 focus:outline-none"
                 >
                   <option value="">{t('portal.page.logs.allTokens')}</option>
-                  {(tokenList ?? []).map((name) => (
-                    <option key={name} value={name}>{name}</option>
+                  {allTokenOptions.map((name) => (
+                    <option key={name} value={name}>{tokenDisplayName(name)}</option>
                   ))}
                 </select>
               </div>
@@ -332,6 +385,9 @@ export function PortalLogs() {
                   className="w-full rounded-lg border border-white/10 bg-[#1a1a2e] px-2.5 py-2 text-xs text-white focus:border-purple-400/50 focus:outline-none"
                 >
                   <option value="">{t('portal.page.logs.allModels')}</option>
+                  {(modelList?.models ?? []).map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -453,7 +509,7 @@ export function PortalLogs() {
                           <ChevronRight className={`h-3.5 w-3.5 transition-transform inline-block ${isExpanded ? 'rotate-90' : ''}`} />
                         </td>
                         <td className="px-3 py-3 text-center text-xs text-white/50">{dayjs.unix(log.created_at).format('YYYY-MM-DD HH:mm:ss')}</td>
-                        <td className="px-3 py-3 text-center text-xs text-white/60">{log.token_name || '—'}</td>
+                        <td className="px-3 py-3 text-center text-xs text-white/60">{log.token_name === 'playground-vip' ? t('portal.page.logs.playground') : (log.token_name || '—')}</td>
                         <td className="px-3 py-3 text-center">
                           {log.group ? (
                             <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-xs text-purple-300">{log.group}</span>
@@ -519,6 +575,50 @@ export function PortalLogs() {
                                 <div className="flex gap-2">
                                   <span className="text-white/30 w-24 shrink-0">{t('portal.page.logs.logDetail')}</span>
                                   <span className="text-white/60 break-all">{log.content}</span>
+                                </div>
+                              )}
+                              {otherData?.model_ratio != null && (
+                                <div className="flex gap-2">
+                                  <span className="text-white/30 w-24 shrink-0">{t('portal.page.logs.billingProcess')}</span>
+                                  <div className="text-white/60 space-y-0.5">
+                                    <div>{t('portal.page.logs.inputPrice')}：${(otherData.model_ratio * 2).toFixed(6)} / 1M tokens</div>
+                                    {otherData.completion_ratio != null && (
+                                      <div>{t('portal.page.logs.outputPrice')}：${(otherData.model_ratio * 2 * otherData.completion_ratio).toFixed(6)} / 1M tokens</div>
+                                    )}
+                                    {otherData.cache_ratio != null && otherData.cache_ratio !== 1 && (
+                                      <div>{t('portal.page.logs.cacheReadPrice')}：${(otherData.model_ratio * 2 * otherData.cache_ratio).toFixed(6)} / 1M tokens</div>
+                                    )}
+                                    {otherData.cache_creation_ratio != null && otherData.cache_creation_ratio !== 1 && (
+                                      <div>{t('portal.page.logs.cacheCreatePrice')}：${(otherData.model_ratio * 2 * otherData.cache_creation_ratio).toFixed(6)} / 1M tokens</div>
+                                    )}
+                                    {(() => {
+                                      const inputPrice = otherData.model_ratio! * 2
+                                      const outputPrice = inputPrice * (otherData.completion_ratio ?? 1)
+                                      const promptT = log.prompt_tokens ?? 0
+                                      const completionT = log.completion_tokens ?? 0
+                                      const cacheT = otherData.cache_tokens ?? 0
+                                      const cacheCreateT = otherData.cache_creation_tokens ?? 0
+                                      const groupR = otherData.user_group_ratio != null && otherData.user_group_ratio !== -1 ? otherData.user_group_ratio : (otherData.group_ratio ?? 1)
+                                      const parts: string[] = []
+                                      if (promptT > 0) parts.push(`${t('portal.page.logs.prompt')} ${promptT} tokens / 1M * $${inputPrice.toFixed(6)}`)
+                                      if (cacheT > 0) parts.push(`${t('portal.page.logs.cacheRead')} ${cacheT} tokens / 1M * $${(inputPrice * (otherData.cache_ratio ?? 1)).toFixed(6)}`)
+                                      if (cacheCreateT > 0) parts.push(`${t('portal.page.logs.cacheCreate')} ${cacheCreateT} tokens / 1M * $${(inputPrice * (otherData.cache_creation_ratio ?? 1)).toFixed(6)}`)
+                                      if (completionT > 0) parts.push(`${t('portal.page.logs.completion')} ${completionT} tokens / 1M * $${outputPrice.toFixed(6)}`)
+                                      if (groupR !== 1) parts.push(`${t('portal.page.logs.groupRatio')} ${groupR}x`)
+                                      const total = (log.quota ?? 0) / 500000
+                                      return (
+                                        <div className="mt-1 text-white/40">
+                                          {parts.join(' + ')} = ${total.toFixed(6)}
+                                        </div>
+                                      )
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
+                              {otherData?.request_path && (
+                                <div className="flex gap-2">
+                                  <span className="text-white/30 w-24 shrink-0">{t('portal.page.logs.requestPath')}</span>
+                                  <span className="text-white/60 font-mono">{otherData.request_path}</span>
                                 </div>
                               )}
                               {log.ip && (

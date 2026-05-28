@@ -316,8 +316,16 @@ export async function getApiKeySummaries(): Promise<ApiKeySummary[]> {
 }
 
 export async function getTokenKey(id: number): Promise<string> {
-  const res = await api.post(`/api/token/${id}/key`)
-  return res.data?.data?.key ?? ''
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await api.post(`/api/token/${id}/key`)
+      const key = res.data?.data?.key ?? ''
+      if (key) return key
+    } catch {
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 300))
+    }
+  }
+  return ''
 }
 
 export async function sendTokenChatCompletion(params: {
@@ -352,7 +360,7 @@ export function openTokenChatCompletionStream(params: {
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
   temperature?: number
   max_tokens?: number
-  onChunk: (chunk: string) => void
+  onChunk: (chunk: string, type: 'content' | 'reasoning') => void
   onComplete: () => void
   onError: (message: string) => void
 }) {
@@ -393,9 +401,11 @@ export function openTokenChatCompletionStream(params: {
       }
 
       const delta = chunk.choices?.[0]?.delta
-      const content = delta?.content || delta?.reasoning_content
-      if (content) {
-        params.onChunk(content)
+      if (delta?.reasoning_content) {
+        params.onChunk(delta.reasoning_content, 'reasoning')
+      }
+      if (delta?.content) {
+        params.onChunk(delta.content, 'content')
       }
     } catch (error) {
       console.error('Failed to parse frontend portal stream chunk:', error)
@@ -406,22 +416,26 @@ export function openTokenChatCompletionStream(params: {
     }
   })
 
-  source.addEventListener('error', (event: Event & { data?: string }) => {
+  source.addEventListener('error', (event: Event & { data?: string; responseText?: string }) => {
     if (completed || source.readyState === 2) {
       return
     }
 
-    let message = event.data || 'Streaming request failed.'
-    if (event.data) {
+    const raw = event.data || event.responseText || ''
+    let message = raw || '流式请求失败'
+    if (raw) {
       try {
-        const parsed = JSON.parse(event.data) as {
+        const parsed = JSON.parse(raw) as {
           error?: { message?: string }
+          message?: string
         }
         if (parsed.error?.message) {
           message = parsed.error.message
+        } else if (parsed.message) {
+          message = parsed.message
         }
       } catch {
-        // Ignore non-JSON error payloads.
+        // Use raw text as-is
       }
     }
 
@@ -448,4 +462,124 @@ export function openTokenChatCompletionStream(params: {
 
   source.stream()
   return close
+}
+
+// ----------------------------------------------------------------------------
+// Token model list — fetch available models for a given API key
+// ----------------------------------------------------------------------------
+
+export async function getTokenModels(token: string): Promise<string[]> {
+  const res = await api.get('/v1/models', {
+    headers: { Authorization: `Bearer ${token}` },
+    skipErrorHandler: true,
+    disableDuplicate: true,
+  } as Record<string, unknown>)
+  const data = res.data?.data
+  return Array.isArray(data) ? data.map((m: { id: string }) => m.id) : []
+}
+
+// ----------------------------------------------------------------------------
+// Image generation
+// ----------------------------------------------------------------------------
+
+export async function sendTokenImageGeneration(params: {
+  token: string
+  model: string
+  prompt: string
+  size?: string
+  quality?: string
+  n?: number
+  style?: string
+}): Promise<{
+  data: Array<{ url?: string; b64_json?: string; revised_prompt?: string }>
+}> {
+  try {
+    const res = await api.post(
+      '/v1/images/generations',
+      {
+        model: params.model,
+        prompt: params.prompt,
+        ...(params.size && { size: params.size }),
+        ...(params.quality && { quality: params.quality }),
+        ...(params.n && { n: params.n }),
+        ...(params.style && { style: params.style }),
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${params.token}`,
+        },
+        skipErrorHandler: true,
+      } as Record<string, unknown>
+    )
+    return res.data
+  } catch (err: unknown) {
+    const axiosErr = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
+    const msg = axiosErr?.response?.data?.error?.message || axiosErr?.response?.data?.message || (err instanceof Error ? err.message : '图像生成请求失败')
+    throw new Error(msg)
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Cookie-auth API functions (Playground-style, no Bearer token needed)
+// ----------------------------------------------------------------------------
+
+export async function getChatUserModels(): Promise<Array<{ label: string; value: string; groups?: string[]; endpoints?: string[] }>> {
+  try {
+    const res = await api.get('/api/pricing')
+    const pricing = res.data as RawPricingResponse
+    if (!pricing.success || !Array.isArray(pricing.data)) return []
+    return pricing.data.map((m) => ({
+      label: m.model_name,
+      value: m.model_name,
+      groups: m.enable_groups,
+      endpoints: m.supported_endpoint_types,
+    }))
+  } catch {
+    return []
+  }
+}
+
+export async function getChatUserGroups(): Promise<Array<{ label: string; value: string; ratio?: number; desc?: string }>> {
+  try {
+    const res = await api.get('/api/user/self/groups')
+    if (!res.data?.success || !res.data.data) return []
+    const groupData = res.data.data as Record<string, { desc: string; ratio: number }>
+    return Object.entries(groupData).map(([group, info]) => ({
+      label: group,
+      value: group,
+      ratio: info.ratio,
+      desc: info.desc,
+    }))
+  } catch {
+    return []
+  }
+}
+
+export async function sendImageGeneration(params: {
+  model: string
+  prompt: string
+  group?: string
+  size?: string
+  quality?: string
+  n?: number
+}): Promise<{ data: Array<{ url?: string; b64_json?: string; revised_prompt?: string }> }> {
+  try {
+    const res = await api.post(
+      '/pg/images/generations',
+      {
+        model: params.model,
+        prompt: params.prompt,
+        ...(params.group && { group: params.group }),
+        ...(params.size && { size: params.size }),
+        ...(params.quality && { quality: params.quality }),
+        ...(params.n && { n: params.n }),
+      },
+      { skipErrorHandler: true } as Record<string, unknown>
+    )
+    return res.data
+  } catch (err: unknown) {
+    const axiosErr = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
+    const msg = axiosErr?.response?.data?.error?.message || axiosErr?.response?.data?.message || (err instanceof Error ? err.message : '图像生成请求失败')
+    throw new Error(msg)
+  }
 }
