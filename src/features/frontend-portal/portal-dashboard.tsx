@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { useStatus } from '@/hooks/use-status'
+import { getSelf } from '@/lib/api'
 import { formatQuota, formatNumber } from '@/lib/format'
 import { getRoleLabel } from '@/lib/roles'
 import { BarChart3, Activity, Users, Bell, Globe } from 'lucide-react'
@@ -11,7 +13,16 @@ import dayjs from 'dayjs'
 export function PortalDashboard() {
   const { t } = useTranslation()
   const user = useAuthStore((s) => s.auth.user)
+  const setUser = useAuthStore((s) => s.auth.setUser)
   const { status } = useStatus()
+
+  useEffect(() => {
+    getSelf().then((res) => {
+      if (res.success && res.data) {
+        setUser(res.data as typeof user)
+      }
+    }).catch(() => {})
+  }, [setUser])
 
   const source = (status?.data ?? status) as Record<string, unknown> | null | undefined
   const announcementsEnabled = source?.announcements_enabled !== false

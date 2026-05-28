@@ -1,25 +1,24 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Activity, RotateCw, Gauge, Zap, CheckCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStatus } from '@/hooks/use-status'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { getFrontendUptimeStatus } from './api'
-import { usePortalAppearance } from './portal-shell'
 
-const STATUS_COLOR_MAP: Record<number, string> = {
+const STATUS_BAR_COLOR: Record<number, string> = {
   1: 'bg-emerald-500',
   0: 'bg-rose-500',
   2: 'bg-amber-500',
   3: 'bg-blue-500',
 }
 
-function statusText(status: number) {
-  if (status === 1) return '正常'
-  if (status === 0) return '异常'
-  if (status === 2) return '高延迟'
-  if (status === 3) return '维护中'
-  return '未知'
+const STATUS_DOT_COLOR: Record<number, string> = {
+  1: 'bg-emerald-500',
+  0: 'bg-rose-500',
+  2: 'bg-amber-500',
+  3: 'bg-blue-500',
 }
 
 type PerfModelSummary = {
@@ -31,7 +30,7 @@ type PerfModelSummary = {
 }
 
 export function ModelMonitor() {
-  const appearance = usePortalAppearance()
+  const { t } = useTranslation()
   const { status } = useStatus()
   const source = (status?.data ?? status) as Record<string, unknown> | null | undefined
   const uptimeEnabled = Boolean(source?.uptime_kuma_enabled)
@@ -52,7 +51,7 @@ export function ModelMonitor() {
   })
 
   const groups = uptimeData ?? []
-  const monitors = useMemo(
+  const allMonitors = useMemo(
     () => groups.flatMap((group) => group.monitors ?? []),
     [groups]
   )
@@ -60,12 +59,12 @@ export function ModelMonitor() {
 
   return (
     <div className="space-y-5">
-      {/* Uptime Kuma section */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur">
+      {/* Uptime Kuma — 服务可用性 */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
             <Activity className="h-5 w-5 text-emerald-400" />
-            服务可用性
+            {t('portal.monitor.serviceAvailability')}
           </h2>
           <button
             type="button"
@@ -78,44 +77,38 @@ export function ModelMonitor() {
         </div>
 
         {!uptimeEnabled ? (
-          <p className="text-sm text-white/40">
-            后台已关闭 Uptime Kuma 展示，请先在系统设置中启用。
-          </p>
+          <p className="text-sm text-white/40">{t('portal.monitor.uptimeDisabled')}</p>
         ) : uptimeLoading ? (
-          <p className="text-sm text-white/40">加载中...</p>
-        ) : monitors.length === 0 ? (
-          <p className="text-sm text-white/40">暂无服务监控数据</p>
+          <p className="text-sm text-white/40">{t('portal.monitor.loading')}</p>
+        ) : allMonitors.length === 0 ? (
+          <p className="text-sm text-white/40">{t('portal.monitor.noData')}</p>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-5">
             {groups.map((group) => (
               <div key={group.categoryName}>
-                <p className="mb-2 text-sm font-medium text-white/70">{group.categoryName}</p>
-                <div className="space-y-2">
+                <p className="mb-3 text-sm font-bold text-white/80">{group.categoryName}</p>
+                <div className="space-y-4">
                   {(group.monitors ?? []).map((monitor) => {
                     const uptimePct = ((monitor.uptime ?? 0) * 100).toFixed(2)
-                    const displayName = monitor.group
-                      ? `${monitor.group} / ${monitor.name}`
-                      : monitor.name
+                    const barColor = STATUS_BAR_COLOR[monitor.status] ?? 'bg-white/30'
+                    const dotColor = STATUS_DOT_COLOR[monitor.status] ?? 'bg-white/30'
                     return (
-                      <div key={`${group.categoryName}-${monitor.group ?? ''}-${monitor.name}`}>
-                        <div className="mb-1 flex items-center justify-between text-sm">
+                      <div key={`${group.categoryName}-${monitor.name}`} className="space-y-1">
+                        <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span
-                              className={cn(
-                                'h-2 w-2 rounded-full',
-                                STATUS_COLOR_MAP[monitor.status] ?? 'bg-white/30'
-                              )}
-                            />
-                            <span className="text-white/80">{displayName}</span>
-                            <span className="text-xs text-white/40">{statusText(monitor.status)}</span>
+                            <span className={cn('h-2.5 w-2.5 rounded-full', dotColor)} />
+                            <span className="text-sm font-medium text-white/90">{monitor.name}</span>
                           </div>
-                          <span className="font-medium text-white">{uptimePct}%</span>
+                          <span className="text-sm font-medium text-white/90">{uptimePct}%</span>
                         </div>
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                          <div
-                            className="h-full rounded-full bg-emerald-500 transition-all"
-                            style={{ width: `${Math.max(0, Math.min(100, Number(uptimePct)))}%` }}
-                          />
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-white/40">{t('portal.monitor.uptime')}</span>
+                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className={cn('h-full rounded-full transition-all', barColor)}
+                              style={{ width: `${Math.max(0, Math.min(100, Number(uptimePct)))}%` }}
+                            />
+                          </div>
                         </div>
                       </div>
                     )
@@ -123,53 +116,71 @@ export function ModelMonitor() {
                 </div>
               </div>
             ))}
+            {/* Legend */}
+            <div className="flex items-center gap-4 border-t border-white/[0.06] pt-3">
+              <span className="flex items-center gap-1.5 text-xs text-white/50">
+                <span className="h-2 w-2 rounded-full bg-rose-500" />{t('portal.monitor.statusDown')}
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-white/50">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />{t('portal.monitor.statusUp')}
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-white/50">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />{t('portal.monitor.statusSlow')}
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-white/50">
+                <span className="h-2 w-2 rounded-full bg-blue-500" />{t('portal.monitor.statusMaintenance')}
+              </span>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Perf Metrics section */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur">
+      {/* Perf Metrics — 性能指标 */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
           <Gauge className="h-5 w-5 text-orange-400" />
-          性能指标
+          {t('portal.monitor.perfMetrics')}
         </h2>
 
         {perfLoading ? (
-          <p className="text-sm text-white/40">加载中...</p>
+          <p className="text-sm text-white/40">{t('portal.monitor.loading')}</p>
         ) : perfModels.length === 0 ? (
-          <p className="text-sm text-white/40">暂无性能数据</p>
+          <p className="text-sm text-white/40">{t('portal.monitor.noPerfData')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 text-left text-xs text-white/50">
-                  <th className="pb-3 pr-4 font-medium">模型</th>
-                  <th className="pb-3 pr-4 font-medium">平均延迟</th>
-                  <th className="pb-3 pr-4 font-medium">成功率</th>
+                  <th className="pb-3 pr-4 font-medium">{t('portal.monitor.model')}</th>
+                  <th className="pb-3 pr-4 font-medium">{t('portal.monitor.avgLatency')}</th>
+                  <th className="pb-3 pr-4 font-medium">{t('portal.monitor.successRate')}</th>
                   <th className="pb-3 pr-4 font-medium">TPS</th>
-                  <th className="pb-3 font-medium">请求数</th>
+                  <th className="pb-3 font-medium">{t('portal.monitor.requestCount')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {perfModels.map((m) => (
-                  <tr key={m.model_name} className="text-white/80">
-                    <td className="py-3 pr-4 font-medium text-white">{m.model_name}</td>
-                    <td className="py-3 pr-4">
-                      <span className="inline-flex items-center gap-1">
-                        <Zap className="h-3.5 w-3.5 text-amber-400" />
-                        {m.avg_latency_ms.toFixed(0)}ms
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <span className="inline-flex items-center gap-1">
-                        <CheckCircle className={cn('h-3.5 w-3.5', m.success_rate >= (m.success_rate > 1 ? 95 : 0.95) ? 'text-emerald-400' : m.success_rate >= (m.success_rate > 1 ? 80 : 0.8) ? 'text-amber-400' : 'text-rose-400')} />
-                        {(m.success_rate > 1 ? m.success_rate : m.success_rate * 100).toFixed(1)}%
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4">{m.avg_tps.toFixed(1)}</td>
-                    <td className="py-3">{m.request_count ?? '-'}</td>
-                  </tr>
-                ))}
+                {perfModels.map((m) => {
+                  const rate = m.success_rate > 1 ? m.success_rate : m.success_rate * 100
+                  return (
+                    <tr key={m.model_name} className="text-white/80">
+                      <td className="py-3 pr-4 font-medium text-white">{m.model_name}</td>
+                      <td className="py-3 pr-4">
+                        <span className="inline-flex items-center gap-1">
+                          <Zap className="h-3.5 w-3.5 text-amber-400" />
+                          {m.avg_latency_ms.toFixed(0)}ms
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className="inline-flex items-center gap-1">
+                          <CheckCircle className={cn('h-3.5 w-3.5', rate >= 95 ? 'text-emerald-400' : rate >= 80 ? 'text-amber-400' : 'text-rose-400')} />
+                          {rate.toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4">{m.avg_tps.toFixed(1)}</td>
+                      <td className="py-3">{m.request_count ?? '-'}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
