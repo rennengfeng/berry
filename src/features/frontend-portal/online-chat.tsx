@@ -50,7 +50,7 @@ import {
 } from '@/components/ai-elements/reasoning'
 import { Response } from '@/components/ai-elements/response'
 import { Shimmer } from '@/components/ai-elements/shimmer'
-import { getChatUserModels, getChatUserGroups, sendImageGeneration } from './api'
+import { getChatUserModels, getApiKeySummaries, sendImageGeneration } from './api'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,8 +106,16 @@ function cleanErrorMessage(raw: string): string {
   let msg = raw
     .replace(/\s*\(request id:[^)]*\)/gi, '')
     .replace(/\$\s*(\d+)\.(\d{2})\d+/g, (_, a, b) => `$${a}.${b}`)
+    // 隐藏上游渠道/分组等内部信息
+    .replace(/upstream\s*group[:\s]*\S+/gi, '')
+    .replace(/channel\s*#?\d+/gi, '')
+    .replace(/渠道\s*#?\d+/gi, '')
+    .replace(/上游分组[：:\s]*\S+/gi, '')
   if (/额度不足/i.test(msg)) {
     msg += '\n如果您是订阅客户，请切换至订阅分组使用。'
+  }
+  if (/all]?\s*channels?\s*(unavailable|failed|exhausted)/i.test(msg) || /所有渠道/.test(msg)) {
+    msg = '当前模型暂时不可用，请稍后重试或切换其他模型。'
   }
   return msg
 }
@@ -264,12 +272,17 @@ export function OnlineChat() {
     return () => { if (persistTimer.current) clearTimeout(persistTimer.current) }
   }, [sessions, messages, activeSessionId])
 
-  // Load models & groups on mount
+  // Load models & tokens on mount
   useEffect(() => {
-    getChatUserGroups().then((g) => {
-      setGroups(g)
-      if (g.length > 0 && !g.find((x) => x.value === 'default')) {
-        setSelectedGroup(g[0].value)
+    getApiKeySummaries().then((tokens) => {
+      const active = tokens.filter((t) => t.status === 1 && t.group)
+      const opts: GroupOption[] = active.map((t) => ({
+        label: t.name,
+        value: t.group!,
+      }))
+      setGroups(opts)
+      if (opts.length > 0 && !opts.find((x) => x.value === 'default')) {
+        setSelectedGroup(opts[0].value)
       }
     })
     getChatUserModels().then((m) => {
