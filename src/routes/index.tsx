@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ExternalLink,
   FileText,
+  Globe,
   Headphones,
   Lock,
   Moon,
@@ -15,6 +16,7 @@ import {
   Puzzle,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { useStatus } from '@/hooks/use-status'
 import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
@@ -36,28 +38,10 @@ function useHomePageContent() {
   })
 }
 
-const DEFAULT_FAQ = [
-  {
-    question: '我该如何使用？',
-    answer: '你只需替换你使用应用程序/项目中的API地址和KEY即可。如果你有任何问题，请随时联系我们。',
-  },
-  {
-    question: '我的信息会被泄漏吗？',
-    answer: '我们严格保护信息和交互数据，仅转发数据不保存数据，数据传输全程加密，保障服务安全性。',
-  },
-  {
-    question: '连接API失败或者中断怎么办？',
-    answer: '请检查网络连接和API Key是否正确。如持续出现问题，请联系客服，我们会第一时间协助排查。',
-  },
-  {
-    question: '你们是怎么计算费用的？',
-    answer: '按照模型官方定价的倍率计费，按量付费无隐形费用。具体价格请查看价格页面。',
-  },
-]
-
 const NAV_LINKS: Array<{ label: string; to: string; external?: boolean; useDocsUrl?: boolean }> = []
 
 function LandingPage() {
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { status } = useStatus()
   const user = useAuthStore((s) => s.auth.user)
@@ -75,6 +59,13 @@ function LandingPage() {
       : ''
   const faqEnabled = source?.faq_enabled !== false
   const faqFromBackend = Array.isArray(source?.faq) ? (source.faq as Array<{ question: string; answer: string }>) : null
+
+  const DEFAULT_FAQ = [
+    { question: t('How do I get started?'), answer: t('Simply replace the API address and KEY in your application/project. Contact us if you have any questions.') },
+    { question: t('Is my data secure?'), answer: t('We strictly protect your data. We only forward requests without storing data. All transmissions are encrypted.') },
+    { question: t('What if the API connection fails?'), answer: t('Check your network and API Key. If the issue persists, contact support and we will help troubleshoot immediately.') },
+    { question: t('How is billing calculated?'), answer: t('Billed at model official pricing rates, pay-as-you-go with no hidden fees. See the pricing page for details.') },
+  ]
   const faqItems = faqFromBackend && faqFromBackend.length > 0 ? faqFromBackend : DEFAULT_FAQ
 
   const { data: pricingData } = useQuery({
@@ -99,51 +90,57 @@ function LandingPage() {
     }
   }
 
+  const switchLang = () => {
+    const next = i18n.language === 'zh' ? 'en' : 'zh'
+    i18n.changeLanguage(next)
+    localStorage.setItem('i18nextLng', next)
+  }
+
   const stats = [
-    { value: `${modelCount || 100}+`, label: 'AI模型' },
-    { value: '99.9%', label: '服务可用性' },
-    { value: '10ms', label: '平均响应时间' },
-    { value: '10K+', label: '开发者' },
-    { value: '1亿+', label: 'API调用次数' },
-    { value: '7×24h', label: '技术支持' },
+    { value: `${modelCount || 100}+`, label: t('AI Models') },
+    { value: '99.9%', label: t('Uptime') },
+    { value: '10ms', label: t('Avg Latency') },
+    { value: '10K+', label: t('Developers') },
+    { value: '100M+', label: t('API Calls') },
+    { value: '7×24h', label: t('Support') },
   ]
 
   const features = [
     {
       icon: Boxes,
-      title: '模型丰富',
-      desc: '接入全球主流AI模型，持续更新，满足各种业务需求',
-      highlight: `${modelCount || 100}+ 模型`,
+      title: t('Rich Models'),
+      desc: t('Access mainstream AI models globally, continuously updated to meet various business needs'),
+      highlight: `${modelCount || 100}+ ${t('Models')}`,
     },
     {
       icon: Shield,
-      title: '稳定可靠',
-      desc: '多重保障机制，99.9%服务可用性，企业级稳定性',
+      title: t('Reliable'),
+      desc: t('Multiple protection mechanisms, 99.9% availability, enterprise-grade stability'),
       highlight: '99.9% SLA',
     },
     {
       icon: Lock,
-      title: '安全合规',
-      desc: '数据加密传输，不存储用户数据，严格遵守隐私政策',
-      highlight: '安全认证',
+      title: t('Secure & Compliant'),
+      desc: t('Encrypted data transmission, no user data stored, strict privacy compliance'),
+      highlight: t('Security Certified'),
     },
     {
       icon: DollarSign,
-      title: '价格透明',
-      desc: '按量付费，无隐藏费用，价格优惠，成本可控',
-      highlight: '最低0.1元/千次',
+      title: t('Transparent Pricing'),
+      desc: t('Pay-as-you-go, no hidden fees, competitive pricing, cost-effective'),
+      highlight: t('From $0.01/1K calls'),
     },
     {
       icon: Puzzle,
-      title: '快速集成',
-      desc: '标准API接口，简单易用，多语言SDK支持',
-      highlight: '5分钟集成',
+      title: t('Quick Integration'),
+      desc: t('Standard API interface, easy to use, multi-language SDK support'),
+      highlight: t('5-min setup'),
     },
     {
       icon: Headphones,
-      title: '专业支持',
-      desc: '7×24小时技术支持，专业团队为您保驾护航',
-      highlight: '7×24h 服务',
+      title: t('Professional Support'),
+      desc: t('24/7 technical support, professional team at your service'),
+      highlight: '7×24h',
     },
   ]
 
@@ -156,49 +153,29 @@ function LandingPage() {
             {systemName}
           </Link>
 
-          <nav className="hidden items-center gap-1 md:flex">
-            {NAV_LINKS.map((link) => {
-              const href = link.useDocsUrl ? (docsUrl || '/docs/') : link.to
-              if (link.external) {
-                return (
-                  <a
-                    key={link.label}
-                    href={href}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="rounded-md px-3.5 py-2 text-sm text-white/70 transition hover:bg-white/5 hover:text-white"
-                  >
-                    {link.label}
-                  </a>
-                )
-              }
-              return (
-                <Link
-                  key={link.label}
-                  to={link.to}
-                  className="rounded-md px-3.5 py-2 text-sm text-white/70 transition hover:bg-white/5 hover:text-white"
-                >
-                  {link.label}
-                </Link>
-              )
-            })}
-          </nav>
-
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={switchLang}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition hover:bg-white/10"
+            >
+              <Globe className="h-3.5 w-3.5" />
+              {i18n.language === 'zh' ? 'EN' : '中文'}
+            </button>
+
             {user ? (
-              <button
-                type="button"
-                onClick={handleCTA}
-                className="rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-2 text-sm font-medium text-white shadow transition hover:from-purple-500 hover:to-indigo-500"
+              <Link
+                to={user.role >= ROLE.ADMIN ? '/dashboard' : '/portal'}
+                className="rounded-lg bg-purple-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-purple-500"
               >
-                控制台
-              </button>
+                {t('Console')}
+              </Link>
             ) : (
               <Link
                 to="/sign-in"
-                className="rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-2 text-sm font-medium text-white shadow transition hover:from-purple-500 hover:to-indigo-500"
+                className="rounded-lg bg-purple-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-purple-500"
               >
-                开始使用
+                {t('Get Started')}
               </Link>
             )}
           </div>
@@ -212,17 +189,17 @@ function LandingPage() {
           <div>
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-purple-500/30 bg-purple-500/10 px-4 py-1.5 text-sm text-purple-300">
               <Zap className="h-3.5 w-3.5" />
-              All In One · 连接全球顶级AI能力
+              {t('All In One · Connect Top AI Capabilities')}
             </div>
             <h1 className="mb-6 text-4xl font-black leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-              一站式 <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">AI</span> 模型聚合平台
+              {t('Unified')} <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">AI</span> {t('Model Gateway')}
             </h1>
             <p className="mb-8 max-w-lg text-base leading-relaxed text-white/50">
-              {homeContent || `聚合 ${modelCount || 100}+ 顶级 AI 模型和服务，为开发者和企业提供稳定、高效、安全的 API 服务`}
+              {homeContent || t('Aggregate {{count}}+ top AI models and services, providing stable, efficient, and secure API services for developers and enterprises', { count: modelCount || 100 })}
             </p>
 
             <div className="mb-8 flex flex-wrap items-center gap-3 text-sm text-white/60">
-              {['稳定可靠', '安全合规', '价格透明', '快速集成'].map((tag) => (
+              {[t('Reliable'), t('Secure & Compliant'), t('Transparent Pricing'), t('Quick Integration')].map((tag) => (
                 <span key={tag} className="inline-flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
                   {tag}
@@ -236,26 +213,17 @@ function LandingPage() {
                 onClick={handleCTA}
                 className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 px-7 py-3 text-sm font-semibold text-white shadow-lg shadow-purple-500/20 transition hover:shadow-purple-500/30"
               >
-                立即开始体验
+                {t('Start Now')}
                 <ChevronRight className="h-4 w-4" />
               </button>
-              {docsUrl ? (
-                <a
-                  href={docsUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-6 py-3 text-sm font-medium text-white/80 transition hover:bg-white/10"
-                >
-                  查看API文档
-                </a>
-              ) : (
-                <a
-                  href="/docs/"
-                  className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-6 py-3 text-sm font-medium text-white/80 transition hover:bg-white/10"
-                >
-                  查看API文档
-                </a>
-              )}
+              <a
+                href={docsUrl || '/docs/'}
+                target={docsUrl ? '_blank' : undefined}
+                rel={docsUrl ? 'noreferrer noopener' : undefined}
+                className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-6 py-3 text-sm font-medium text-white/80 transition hover:bg-white/10"
+              >
+                {t('API Docs')}
+              </a>
             </div>
           </div>
 
@@ -337,9 +305,9 @@ function LandingPage() {
       <section className="mx-auto w-full max-w-7xl px-6 py-20">
         <div className="mb-4 text-center">
           <h2 className="text-3xl font-bold text-white">
-            为什么选择 <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">{systemName}</span>
+            {t('Why Choose')} <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">{systemName}</span>
           </h2>
-          <p className="mt-3 text-sm text-white/40">专业的AI模型聚合平台，为您的业务赋能</p>
+          <p className="mt-3 text-sm text-white/40">{t('Professional AI model aggregation platform, empowering your business')}</p>
         </div>
 
         <div className="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -366,7 +334,7 @@ function LandingPage() {
       {vendors.length > 0 && (
         <section className="border-t border-white/5 py-16">
           <div className="mx-auto max-w-7xl px-6">
-            <p className="mb-8 text-center text-sm text-white/30">值得信赖的合作伙伴</p>
+            <p className="mb-8 text-center text-sm text-white/30">{t('Trusted Partners')}</p>
             <div className="flex flex-wrap items-center justify-center gap-6">
               {vendors.slice(0, 8).map((v) => (
                 <span
@@ -385,7 +353,7 @@ function LandingPage() {
       {faqEnabled && (
         <section className="border-t border-white/5 py-16">
           <div className="mx-auto max-w-3xl px-6">
-            <h2 className="mb-8 text-center text-2xl font-bold text-white">常见问题</h2>
+            <h2 className="mb-8 text-center text-2xl font-bold text-white">{t('FAQ')}</h2>
             <div className="flex flex-col gap-3">
               {faqItems.map((item, i) => (
                 <div
@@ -416,8 +384,17 @@ function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-white/5 py-8">
-        <div className="mx-auto max-w-7xl px-6 text-center text-xs text-white/30">
-          © {new Date().getFullYear()} {systemName}. All rights reserved.
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
+            <span className="text-xs text-white/30">
+              © {new Date().getFullYear()} {systemName}. All rights reserved.
+            </span>
+            <div className="flex items-center gap-4">
+              <Link to="/about" className="text-xs text-white/30 hover:text-white/60 transition">{t('About')}</Link>
+              <Link to="/privacy-policy" className="text-xs text-white/30 hover:text-white/60 transition">{t('Privacy Policy')}</Link>
+              <Link to="/user-agreement" className="text-xs text-white/30 hover:text-white/60 transition">{t('Terms of Service')}</Link>
+            </div>
+          </div>
         </div>
       </footer>
     </div>
