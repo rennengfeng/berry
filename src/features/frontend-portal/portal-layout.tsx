@@ -176,14 +176,14 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
               rel="noreferrer noopener"
               className="ml-4 inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-sm text-white/70 transition hover:bg-white/[0.06] hover:text-white"
             >
-              查看API文档 <ExternalLink className="h-3.5 w-3.5" />
+              {t('Help Docs')} <ExternalLink className="h-3.5 w-3.5" />
             </a>
           ) : (
             <Link
               to="/portal/docs"
               className="ml-4 inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-sm text-white/70 transition hover:bg-white/[0.06] hover:text-white"
             >
-              查看API文档 <ExternalLink className="h-3.5 w-3.5" />
+              {t('Help Docs')} <ExternalLink className="h-3.5 w-3.5" />
             </Link>
           )}
         </div>
@@ -192,7 +192,7 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
             type="button"
             onClick={() => { setNoticeOpen(true); setNoticeDismissed(true) }}
             className="relative rounded-md p-2 text-white/60 transition hover:bg-white/[0.06] hover:text-white"
-            title="系统公告"
+            title="Announcements"
           >
             <Bell className="h-4.5 w-4.5" />
             {hasNotice && (
