@@ -61,10 +61,10 @@ function LandingPage() {
   const faqFromBackend = Array.isArray(source?.faq) ? (source.faq as Array<{ question: string; answer: string }>) : null
 
   const DEFAULT_FAQ = [
-    { question: t('How do I get started?'), answer: t('Simply replace the API address and KEY in your application/project. Contact us if you have any questions.') },
-    { question: t('Is my data secure?'), answer: t('We strictly protect your data. We only forward requests without storing data. All transmissions are encrypted.') },
-    { question: t('What if the API connection fails?'), answer: t('Check your network and API Key. If the issue persists, contact support and we will help troubleshoot immediately.') },
-    { question: t('How is billing calculated?'), answer: t('Billed at model official pricing rates, pay-as-you-go with no hidden fees. See the pricing page for details.') },
+    { question: t('What is Onpleas?'), answer: t('Onpleas is a unified AI model API aggregation platform. One API key to access OpenAI, Claude, Gemini, DeepSeek and 100+ models — no multi-platform setup needed.') },
+    { question: t('How do I get started?'), answer: t('Three steps: 1. Register on the site; 2. Top up or get quota; 3. Get your API Key and start calling. Takes under 5 minutes. Compatible with OpenAI standard API format for seamless migration.') },
+    { question: t('Which AI models are supported?'), answer: t('50+ mainstream AI models including OpenAI (GPT-4o, GPT-5, o-series), Anthropic Claude, Google, and more. Continuously expanding.') },
+    { question: t('How is data security ensured?'), answer: t('We respect your privacy. All data is transmitted via encrypted channels. We strictly comply with applicable laws and regulations. Use with confidence.') },
   ]
   const faqItems = faqFromBackend && faqFromBackend.length > 0 ? faqFromBackend : DEFAULT_FAQ
 

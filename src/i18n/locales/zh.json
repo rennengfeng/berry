@@ -4869,6 +4869,13 @@
     "What if the API connection fails?": "连接API失败或者中断怎么办？",
     "Check your network and API Key. If the issue persists, contact support and we will help troubleshoot immediately.": "请检查网络连接和API Key是否正确。如持续出现问题，请联系客服，我们会第一时间协助排查。",
     "How is billing calculated?": "你们是怎么计算费用的？",
-    "Billed at model official pricing rates, pay-as-you-go with no hidden fees. See the pricing page for details.": "按照模型官方定价的倍率计费，按量付费无隐形费用。具体价格请查看价格页面。"
+    "Billed at model official pricing rates, pay-as-you-go with no hidden fees. See the pricing page for details.": "按照模型官方定价的倍率计费，按量付费无隐形费用。具体价格请查看价格页面。",
+    "What is Onpleas?": "Onpleas 是什么？",
+    "Onpleas is a unified AI model API aggregation platform. One API key to access OpenAI, Claude, Gemini, DeepSeek and 100+ models — no multi-platform setup needed.": "Onpleas 是一个AI大模型API聚合平台，提供各大AI模型接口的聚合管理服务。您只需要一个接口，即可体验 OpenAI、Claude、Gemini、DeepSeek 等100多种大模型，免去多平台注册和配置的繁琐。",
+    "Three steps: 1. Register on the site; 2. Top up or get quota; 3. Get your API Key and start calling. Takes under 5 minutes. Compatible with OpenAI standard API format for seamless migration.": "只需三步：1️⃣ 在主站注册账号；2️⃣ 充值获取额度；3️⃣ 获取 API Key 开始调用。全过程不到5分钟，支持OpenAI标准接口格式，可无缝迁移现有项目。",
+    "Which AI models are supported?": "支持哪些AI模型？",
+    "50+ mainstream AI models including OpenAI (GPT-4o, GPT-5, o-series), Anthropic Claude, Google, and more. Continuously expanding.": "支持 50+ 主流AI模型，包括：OpenAI（GPT-4o、GPT-5、o 模型系列等）、Anthropic Claude、Google 等，并持续扩展中。",
+    "How is data security ensured?": "数据安全性如何保障？",
+    "We respect your privacy. All data is transmitted via encrypted channels. We strictly comply with applicable laws and regulations. Use with confidence.": "我们尊重客户隐私，所有数据传输均采用加密通道，确保您的信息安全。我们严格遵守相关法律法规，您可以放心使用。"
   }
 }
