@@ -46,12 +46,8 @@ export function PortalDashboard() {
       {/* Top: Classic-style profile banner */}
       <div className="shrink-0 px-5 pt-2 pb-3">
         <div className="overflow-hidden rounded-lg border bg-card">
-          {/* Banner background */}
-          <div className="relative h-12 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20">
-            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9InJnYmEoMTM5LDkyLDI0NiwwLjEpIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSJyZ2JhKDU5LDEzMCwyNDYsMC4wNSkiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCBmaWxsPSJ1cmwoI2cpIiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIvPjwvc3ZnPg==')] opacity-50" />
-          </div>
           {/* Profile info */}
-          <div className="relative px-5 pb-4">
+          <div className="relative px-5 py-4">
             {/* Simplified: only username */}
             <div className="-mt-4 mb-3">
               <h2 className="text-xl font-bold">{displayName}</h2>
