@@ -528,7 +528,7 @@ export function PortalLogs() {
                               )}
                               {otherData?.model_ratio != null && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/40 min-w-28 shrink-0">{t('portal.page.logs.billingProcess')}</span>
+                                  <span className="text-white/40 min-w-28 shrink-0">{t('billingProcess')}</span>
                                   <div className="text-white/50 space-y-0.5">
                                     <div>{t('Input Price')}：${(otherData.model_ratio * 2).toFixed(6)} / 1M tokens</div>
                                     {otherData.completion_ratio != null && (

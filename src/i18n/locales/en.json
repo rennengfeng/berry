@@ -4722,6 +4722,7 @@
     "portal.page.logs.cacheTokens": "Cache Tokens",
     "portal.page.logs.cacheCreation": "Cache Creation",
     "portal.page.logs.logDetail": "Log Detail",
+    "billingProcess": "Billing Process",
     "portal.page.logs.endpoint": "Endpoint",
     "portal.page.logs.duration": "Duration",
     "portal.page.logs.action": "Action",

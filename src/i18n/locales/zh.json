@@ -4729,7 +4729,7 @@
     "portal.page.logs.cacheTokens": "缓存 Tokens",
     "portal.page.logs.cacheCreation": "缓存创建 Tokens",
     "portal.page.logs.logDetail": "日志详情",
-    "portal.page.logs.billingProcess": "计费过程",
+    "billingProcess": "计费过程",
     "portal.page.logs.inputPrice": "输入价格",
     "portal.page.logs.outputPrice": "输出价格",
     "portal.page.logs.cacheReadPrice": "缓存读取价格",
