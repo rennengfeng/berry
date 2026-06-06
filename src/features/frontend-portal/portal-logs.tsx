@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { api } from '@/lib/api'
+import { formatQuota } from '@/lib/format'
 import { Search, RotateCcw, Activity, Zap, Clock, AlertTriangle, Download, RefreshCw, ChevronRight } from 'lucide-react'
 import dayjs from 'dayjs'
 
@@ -262,65 +263,61 @@ export function PortalLogs() {
           <h1 className="text-2xl font-bold text-white">{t('portal.page.logs.title')}</h1>
           <p className="mt-1 text-sm text-white/40">{t('portal.page.logs.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/50">
+        <div className="flex items-center gap-2 rounded-lg border border-white/8 bg-white/[0.04] px-3 py-1.5 text-xs text-white/50">
           {startDate.format('YYYY/M/D HH:mm')} → {endDate.format('YYYY/M/D HH:mm')}
         </div>
       </div>
 
-      {/* Stats Cards + Quick Filter — side by side, filter spans full height */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_380px]">
-        {/* Left column: stats + chart stacked */}
-        <div className="space-y-5">
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {statsCards.map((card) => {
-              const Icon = card.icon
-              return (
-                <div key={card.label} className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.05]">
-                    <Icon className={`h-5 w-5 ${card.color}`} />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`h-1.5 w-1.5 rounded-full ${card.dotColor}`} />
-                    <span className="text-xs text-white/40">{card.label}</span>
-                  </div>
-                  <p className="mt-1 text-xl font-bold text-white">{card.value}</p>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Chart */}
-          <div className="rounded-xl border border-white/8 bg-white/[0.02] p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <h3 className="text-base font-semibold text-white">{t('portal.page.logs.requestTrend')}</h3>
-                <div className="flex items-center gap-3 text-xs text-white/40">
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-purple-400" />{t('portal.page.logs.requests')}</span>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-orange-400" />{t('portal.page.logs.errors')}</span>
-                </div>
+      {/* Stats Cards — full width */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {statsCards.map((card) => {
+          const Icon = card.icon
+          return (
+            <div key={card.label} className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.06]">
+                <Icon className={`h-5 w-5 ${card.color}`} />
               </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-0.5">
-                  {(['hour', 'day', 'week'] as const).map((g) => (
-                    <button
-                      key={g}
-                      type="button"
-                      onClick={() => setGranularity(g)}
-                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                        granularity === g ? 'bg-purple-500/80 text-white shadow' : 'text-white/50 hover:text-white/70'
-                      }`}
-                    >
-                      {g === 'hour' ? t('portal.page.logs.hour') : g === 'day' ? t('portal.page.logs.day') : t('portal.page.logs.week')}
-                    </button>
-                  ))}
-                </div>
-                <button type="button" className="rounded-lg border border-white/10 p-1.5 text-white/50 hover:bg-white/5" title={t('portal.page.logs.export')}>
-                  <Download className="h-4 w-4" />
-                </button>
+              <div className="flex items-center gap-1.5">
+                <span className={`h-1.5 w-1.5 rounded-full ${card.dotColor}`} />
+                <span className="text-xs text-white/40">{card.label}</span>
               </div>
+              <p className="mt-1 text-xl font-bold text-white">{card.value}</p>
             </div>
-            <div className="h-[220px]">
+          )
+        })}
+      </div>
+
+      {/* Chart — full width */}
+      <div className="rounded-xl border border-white/8 bg-white/[0.02] p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h3 className="text-base font-semibold text-white">{t('portal.page.logs.requestTrend')}</h3>
+            <div className="flex items-center gap-3 text-xs text-white/40">
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-purple-400" />{t('portal.page.logs.requests')}</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-gray-300" />{t('portal.page.logs.errors')}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 rounded-lg border border-white/8 bg-white/[0.04] p-0.5">
+              {(['hour', 'day', 'week'] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setGranularity(g)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                    granularity === g ? 'bg-purple-600 text-white shadow' : 'text-white/50 hover:text-white/60'
+                  }`}
+                >
+                  {g === 'hour' ? t('portal.page.logs.hour') : g === 'day' ? t('portal.page.logs.day') : t('portal.page.logs.week')}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="rounded-lg border border-white/8 p-1.5 text-white/50 hover:bg-white/[0.04]" title={t('portal.page.logs.export')}>
+              <Download className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <div className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>
                   <defs>
@@ -337,110 +334,74 @@ export function PortalLogs() {
                     labelStyle={{ color: 'rgba(255,255,255,0.7)' }}
                   />
                   <Area type="monotone" dataKey="requests" stroke="#8b5cf6" strokeWidth={2} fill="url(#colorLogReq2)" name={t('portal.page.logs.requests')} />
-                  <Area type="monotone" dataKey="errors" stroke="#f97316" strokeWidth={1.5} fill="none" name={t('portal.page.logs.errors')} />
+                  <Area type="monotone" dataKey="errors" stroke="#d1d5db" strokeWidth={1.5} fill="none" name={t('portal.page.logs.errors')} />
                 </AreaChart>
               </ResponsiveContainer>
-            </div>
-          </div>
         </div>
+      </div>
 
-        {/* Right column: Quick Filter panel — spans full height of left column */}
-        <div className="rounded-xl border border-white/8 bg-white/[0.02] p-5 self-stretch flex flex-col">
-          <div className="mb-5 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-white">{t('portal.page.logs.quickFilter')}</h3>
-            <button type="button" onClick={reset} className="text-xs text-white/40 hover:text-white/60">{t('portal.page.logs.clear')}</button>
-          </div>
-          <div className="flex-1 space-y-4">
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <p className="mb-1.5 text-xs text-white/40">{t('portal.page.logs.tokenName')}</p>
-                <select
-                  value={keyFilter}
-                  onChange={(e) => setKeyFilter(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-[#1a1a2e] px-2.5 py-2 text-xs text-white focus:border-purple-400/50 focus:outline-none"
-                >
-                  <option value="">{t('portal.page.logs.allTokens')}</option>
-                  {allTokenOptions.map((name) => (
-                    <option key={name} value={name}>{tokenDisplayName(name)}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <p className="mb-1.5 text-xs text-white/40">{t('portal.page.logs.model')}</p>
-                <select
-                  value={modelFilter}
-                  onChange={(e) => setModelFilter(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-[#1a1a2e] px-2.5 py-2 text-xs text-white focus:border-purple-400/50 focus:outline-none"
-                >
-                  <option value="">{t('portal.page.logs.allModels')}</option>
-                  {(modelList?.models ?? []).map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <p className="mb-1.5 text-xs text-white/40">{t('portal.page.logs.status')}</p>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-[#1a1a2e] px-2.5 py-2 text-xs text-white focus:border-purple-400/50 focus:outline-none"
-                >
-                  <option value="">{t('portal.page.logs.allStatus')}</option>
-                  <option value="success">{t('portal.page.logs.success')}</option>
-                  <option value="error">{t('portal.page.logs.failed')}</option>
-                </select>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <p className="mb-1.5 text-xs text-white/40">{t('portal.page.logs.ipAddress')}</p>
-                <input
-                  type="text"
-                  value={ipFilter}
-                  onChange={(e) => setIpFilter(e.target.value)}
-                  placeholder="192.168.1.1"
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-2 text-xs text-white placeholder:text-white/25 focus:border-purple-400/50 focus:outline-none"
-                />
-              </div>
-              <div>
-                <p className="mb-1.5 text-xs text-white/40">{t('portal.page.logs.minTokens')}</p>
-                <input
-                  type="text"
-                  value={minTokens}
-                  onChange={(e) => setMinTokens(e.target.value)}
-                  placeholder={t('portal.page.logs.minValue')}
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-2 text-xs text-white placeholder:text-white/25 focus:border-purple-400/50 focus:outline-none"
-                />
-              </div>
-              <div>
-                <p className="mb-1.5 text-xs text-white/40">{t('portal.page.logs.maxTokens')}</p>
-                <input
-                  type="text"
-                  value={maxTokens}
-                  onChange={(e) => setMaxTokens(e.target.value)}
-                  placeholder={t('portal.page.logs.maxValue')}
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-2 text-xs text-white placeholder:text-white/25 focus:border-purple-400/50 focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="mt-auto flex items-center gap-3 pt-5">
-            <button
-              type="button"
-              onClick={reset}
-              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-white/10 py-2.5 text-xs text-white/60 hover:bg-white/5"
-            >
-              <RotateCcw className="h-3 w-3" /> {t('portal.page.logs.reset')}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setPage(1); refetch() }}
-              className="inline-flex flex-[2] items-center justify-center gap-1.5 rounded-lg bg-purple-600 py-2.5 text-xs font-medium text-white shadow hover:bg-purple-500"
-            >
-              <Search className="h-3 w-3" /> {t('portal.page.logs.searchLogs')}
-            </button>
-          </div>
+      {/* Filter Bar — horizontal, between chart and log list (OpenRouter style) */}
+      <div className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.02] px-5 py-4">
+        <div className="flex-1">
+          <select
+            value={keyFilter}
+            onChange={(e) => setKeyFilter(e.target.value)}
+            className="w-full rounded-lg border border-white/8 bg-[#1a1a2e] px-2.5 py-2 text-xs text-white focus:border-purple-400/50 focus:outline-none"
+          >
+            <option value="">{t('portal.page.logs.allTokens')}</option>
+            {allTokenOptions.map((name) => (
+              <option key={name} value={name}>{tokenDisplayName(name)}</option>
+            ))}
+          </select>
         </div>
+        <div className="flex-1">
+          <select
+            value={modelFilter}
+            onChange={(e) => setModelFilter(e.target.value)}
+            className="w-full rounded-lg border border-white/8 bg-[#1a1a2e] px-2.5 py-2 text-xs text-white focus:border-purple-400/50 focus:outline-none"
+          >
+            <option value="">{t('portal.page.logs.allModels')}</option>
+            {(modelList?.models ?? []).map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex-1">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-full rounded-lg border border-white/8 bg-[#1a1a2e] px-2.5 py-2 text-xs text-white focus:border-purple-400/50 focus:outline-none"
+          >
+            <option value="">{t('portal.page.logs.allStatus')}</option>
+            <option value="success">{t('portal.page.logs.success')}</option>
+            <option value="error">{t('portal.page.logs.failed')}</option>
+          </select>
+        </div>
+        {/* Usage / RPM / TPM */}
+        <div className="flex flex-1 items-center justify-center gap-4">
+          <span className="inline-flex items-center gap-2 text-sm">
+            <span className="h-4 w-1 rounded-full bg-purple-500" />
+            <span className="text-white/50">{t('Usage')}</span>
+            <span className="font-mono text-base font-bold text-white">{formatQuota(logs.reduce((s, l) => s + (l.quota ?? 0), 0))}</span>
+          </span>
+          <span className="inline-flex items-center gap-2 text-sm">
+            <span className="h-4 w-1 rounded-full bg-purple-500" />
+            <span className="text-white/50">RPM</span>
+            <span className="font-mono text-base font-bold text-white">{totalRequests}</span>
+          </span>
+          <span className="inline-flex items-center gap-2 text-sm">
+            <span className="h-4 w-1 rounded-full bg-cyan-500" />
+            <span className="text-white/50">TPM</span>
+            <span className="font-mono text-base font-bold text-white">{formatNum(totalTokens)}</span>
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setPage(1); refetch() }}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-5 py-2 text-sm font-medium text-white shadow hover:bg-purple-500"
+        >
+          <Search className="h-3.5 w-3.5" /> {t('portal.page.logs.searchLogs')}
+        </button>
       </div>
 
       {/* Log Table */}
@@ -453,7 +414,7 @@ export function PortalLogs() {
           <button
             type="button"
             onClick={() => refetch()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/60 hover:bg-white/5"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/8 px-3 py-1.5 text-xs text-white/50 hover:bg-white/[0.04]"
           >
             <RefreshCw className="h-3 w-3" /> {t('portal.page.logs.refresh')}
           </button>
@@ -490,18 +451,18 @@ export function PortalLogs() {
                   return (
                     <Fragment key={log.id}>
                       <tr
-                        className={`border-b border-white/[0.04] text-white/70 transition cursor-pointer ${isError ? 'bg-red-500/[0.03]' : 'hover:bg-white/[0.02]'}`}
+                        className={`border-b border-white/5 text-white/60 transition cursor-pointer ${isError ? 'bg-red-500/[0.03]' : 'hover:bg-white/[0.02]'}`}
                         onClick={() => setExpandedId(isExpanded ? null : log.id)}
                       >
-                        <td className="px-2 py-3 text-center text-white/30">
+                        <td className="px-2 py-3 text-center text-white/40">
                           <ChevronRight className={`h-3.5 w-3.5 transition-transform inline-block ${isExpanded ? 'rotate-90' : ''}`} />
                         </td>
                         <td className="px-3 py-3 text-center text-xs text-white/50">{dayjs.unix(log.created_at).format('YYYY-MM-DD HH:mm:ss')}</td>
-                        <td className="px-3 py-3 text-center text-xs text-white/60">{tokenDisplayName(log.token_name || '—')}</td>
+                        <td className="px-3 py-3 text-center text-xs text-white/50">{tokenDisplayName(log.token_name || '—')}</td>
                         <td className="px-3 py-3 text-center">
                           {log.group ? (
                             <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-xs text-purple-300">{log.group}</span>
-                          ) : <span className="text-xs text-white/30">—</span>}
+                          ) : <span className="text-xs text-white/40">—</span>}
                         </td>
                         <td className="px-3 py-3 text-center">
                           <span className={`rounded px-1.5 py-0.5 text-xs ${isError ? 'bg-red-500/15 text-red-400' : 'bg-blue-500/10 text-blue-300'}`}>
@@ -509,26 +470,26 @@ export function PortalLogs() {
                           </span>
                         </td>
                         <td className="px-3 py-3 text-center">
-                          <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-white/80">{log.model_name || '—'}</span>
+                          <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-white/70">{log.model_name || '—'}</span>
                         </td>
                         <td className="px-3 py-3 text-center text-xs">
                           {log.use_time ? (
-                            <span className="text-white/60">
+                            <span className="text-white/50">
                               {log.use_time}s
-                              {firstResponseTime && <span className="ml-1 text-white/30">{firstResponseTime}s</span>}
+                              {firstResponseTime && <span className="ml-1 text-white/40">{firstResponseTime}s</span>}
                               {log.is_stream && <span className="ml-1 rounded bg-cyan-500/10 px-1 text-[10px] text-cyan-400">{t('portal.page.logs.stream')}</span>}
                             </span>
                           ) : '—'}
                         </td>
-                        <td className="px-3 py-3 text-center text-xs text-white/60">
+                        <td className="px-3 py-3 text-center text-xs text-white/50">
                           {totalTokens.toLocaleString()}
                           {otherData?.cache_tokens ? (
-                            <span className="ml-1 text-[10px] text-white/30">
+                            <span className="ml-1 text-[10px] text-white/40">
                               {t('portal.page.logs.cacheRead')} {otherData.cache_tokens.toLocaleString()}
                             </span>
                           ) : null}
                         </td>
-                        <td className="px-3 py-3 text-center text-xs font-medium text-white/70">${cost.toFixed(6)}</td>
+                        <td className="px-3 py-3 text-center text-xs font-medium text-white/60">${cost.toFixed(6)}</td>
                         <td className="px-3 py-3 text-center">
                           {isError ? (
                             <span className="inline-block rounded bg-red-500/15 px-2 py-0.5 text-xs text-red-400">{t('portal.page.logs.failed')}</span>
@@ -538,43 +499,43 @@ export function PortalLogs() {
                         </td>
                       </tr>
                       {isExpanded && (
-                        <tr className="border-b border-white/[0.04] bg-white/[0.01]">
+                        <tr className="border-b border-white/5 bg-white/[0.04]">
                           <td colSpan={10} className="px-6 py-4">
                             <div className="space-y-2 text-xs text-white/50">
                               {log.request_id && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/30 w-24 shrink-0">Request ID</span>
-                                  <span className="font-mono text-white/60">{log.request_id}</span>
+                                  <span className="text-white/40 w-24 shrink-0">Request ID</span>
+                                  <span className="font-mono text-white/50">{log.request_id}</span>
                                 </div>
                               )}
                               {otherData?.cache_tokens != null && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/30 w-24 shrink-0">{t('portal.page.logs.cacheTokens')}</span>
-                                  <span className="text-white/60">{otherData.cache_tokens.toLocaleString()}</span>
+                                  <span className="text-white/40 w-24 shrink-0">{t('portal.page.logs.cacheTokens')}</span>
+                                  <span className="text-white/50">{otherData.cache_tokens.toLocaleString()}</span>
                                 </div>
                               )}
                               {otherData?.cache_creation_tokens != null && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/30 w-24 shrink-0">{t('portal.page.logs.cacheCreation')}</span>
-                                  <span className="text-white/60">{otherData.cache_creation_tokens.toLocaleString()}</span>
+                                  <span className="text-white/40 w-24 shrink-0">{t('portal.page.logs.cacheCreation')}</span>
+                                  <span className="text-white/50">{otherData.cache_creation_tokens.toLocaleString()}</span>
                                 </div>
                               )}
                               {log.content && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/30 w-24 shrink-0">{t('portal.page.logs.logDetail')}</span>
-                                  <span className="text-white/60 break-all">{log.content}</span>
+                                  <span className="text-white/40 w-24 shrink-0">{t('portal.page.logs.logDetail')}</span>
+                                  <span className="text-white/50 break-all">{log.content}</span>
                                 </div>
                               )}
                               {otherData?.model_ratio != null && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/30 w-24 shrink-0">{t('portal.page.logs.billingProcess')}</span>
-                                  <div className="text-white/60 space-y-0.5">
-                                    <div>{t('portal.page.logs.inputPrice')}：${(otherData.model_ratio * 2).toFixed(6)} / 1M tokens</div>
+                                  <span className="text-white/40 w-24 shrink-0">{t('portal.page.logs.billingProcess')}</span>
+                                  <div className="text-white/50 space-y-0.5">
+                                    <div>{t('Input Price')}：${(otherData.model_ratio * 2).toFixed(6)} / 1M tokens</div>
                                     {otherData.completion_ratio != null && (
-                                      <div>{t('portal.page.logs.outputPrice')}：${(otherData.model_ratio * 2 * otherData.completion_ratio).toFixed(6)} / 1M tokens</div>
+                                      <div>{t('Output Price')}：${(otherData.model_ratio * 2 * otherData.completion_ratio).toFixed(6)} / 1M tokens</div>
                                     )}
                                     {otherData.cache_ratio != null && otherData.cache_ratio !== 1 && (
-                                      <div>{t('portal.page.logs.cacheReadPrice')}：${(otherData.model_ratio * 2 * otherData.cache_ratio).toFixed(6)} / 1M tokens</div>
+                                      <div>{t('Cache Read Price')}：${(otherData.model_ratio * 2 * otherData.cache_ratio).toFixed(6)} / 1M tokens</div>
                                     )}
                                     {otherData.cache_creation_ratio != null && otherData.cache_creation_ratio !== 1 && (
                                       <div>{t('portal.page.logs.cacheCreatePrice')}：${(otherData.model_ratio * 2 * otherData.cache_creation_ratio).toFixed(6)} / 1M tokens</div>
@@ -588,11 +549,11 @@ export function PortalLogs() {
                                       const cacheCreateT = otherData.cache_creation_tokens ?? 0
                                       const groupR = otherData.user_group_ratio != null && otherData.user_group_ratio !== -1 ? otherData.user_group_ratio : (otherData.group_ratio ?? 1)
                                       const parts: string[] = []
-                                      if (promptT > 0) parts.push(`${t('portal.page.logs.prompt')} ${promptT} tokens / 1M * $${inputPrice.toFixed(6)}`)
+                                      if (promptT > 0) parts.push(`${t('Prompt')} ${promptT} tokens / 1M * $${inputPrice.toFixed(6)}`)
                                       if (cacheT > 0) parts.push(`${t('portal.page.logs.cacheRead')} ${cacheT} tokens / 1M * $${(inputPrice * (otherData.cache_ratio ?? 1)).toFixed(6)}`)
                                       if (cacheCreateT > 0) parts.push(`${t('portal.page.logs.cacheCreate')} ${cacheCreateT} tokens / 1M * $${(inputPrice * (otherData.cache_creation_ratio ?? 1)).toFixed(6)}`)
-                                      if (completionT > 0) parts.push(`${t('portal.page.logs.completion')} ${completionT} tokens / 1M * $${outputPrice.toFixed(6)}`)
-                                      if (groupR !== 1) parts.push(`${t('portal.page.logs.groupRatio')} ${groupR}x`)
+                                      if (completionT > 0) parts.push(`${t('Completion')} ${completionT} tokens / 1M * $${outputPrice.toFixed(6)}`)
+                                      if (groupR !== 1) parts.push(`${t('Group Ratio')} ${groupR}x`)
                                       const total = (log.quota ?? 0) / 500000
                                       return (
                                         <div className="mt-1 text-white/40">
@@ -605,14 +566,14 @@ export function PortalLogs() {
                               )}
                               {otherData?.request_path && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/30 w-24 shrink-0">{t('portal.page.logs.requestPath')}</span>
-                                  <span className="text-white/60 font-mono">{otherData.request_path}</span>
+                                  <span className="text-white/40 w-24 shrink-0">{t('Request Path')}</span>
+                                  <span className="text-white/50 font-mono">{otherData.request_path}</span>
                                 </div>
                               )}
                               {log.ip && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/30 w-24 shrink-0">IP</span>
-                                  <span className="text-white/60">{log.ip}</span>
+                                  <span className="text-white/40 w-24 shrink-0">IP</span>
+                                  <span className="text-white/50">{log.ip}</span>
                                 </div>
                               )}
                             </div>
@@ -626,23 +587,23 @@ export function PortalLogs() {
             </table>
           </div>
         ) : (
-          <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-white/10">
+          <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-white/8">
             <div className="text-center">
               <p className="text-sm font-medium text-white/50">{t('portal.page.logs.noData')}</p>
-              <p className="mt-1 text-xs text-white/30">{t('portal.page.logs.noRecordsFound')}</p>
+              <p className="mt-1 text-xs text-white/40">{t('portal.page.logs.noRecordsFound')}</p>
             </div>
           </div>
         )}
 
         {/* Pagination */}
         {total > 0 && (
-          <div className="mt-4 flex items-center justify-between border-t border-white/[0.06] pt-4 text-xs text-white/40">
+          <div className="mt-4 flex items-center justify-between border-t border-white/8 pt-4 text-xs text-white/40">
             <div className="flex items-center gap-2">
               <span>{t('portal.page.logs.perPage')}</span>
               <select
                 value={pageSize}
                 onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
-                className="rounded border border-white/10 bg-[#1a1a2e] px-2 py-1 text-xs text-white focus:outline-none"
+                className="rounded border border-white/8 bg-white/[0.02] px-2 py-1 text-xs text-white focus:outline-none"
               >
                 <option value={10}>10</option>
                 <option value={20}>20</option>
@@ -655,7 +616,7 @@ export function PortalLogs() {
                 type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
-                className="rounded-md border border-white/10 px-2.5 py-1 transition hover:bg-white/5 disabled:opacity-30"
+                className="rounded-md border border-white/8 px-2.5 py-1 transition hover:bg-white/[0.04] disabled:opacity-30"
               >
                 ‹
               </button>
@@ -665,7 +626,7 @@ export function PortalLogs() {
                   type="button"
                   onClick={() => setPage(p)}
                   className={`rounded-md px-2.5 py-1 transition ${
-                    page === p ? 'bg-purple-600 text-white' : 'border border-white/10 hover:bg-white/5'
+                    page === p ? 'bg-purple-600 text-white' : 'border border-white/8 hover:bg-white/[0.04]'
                   }`}
                 >
                   {p}
@@ -677,7 +638,7 @@ export function PortalLogs() {
                   type="button"
                   onClick={() => setPage(totalPages)}
                   className={`rounded-md px-2.5 py-1 transition ${
-                    page === totalPages ? 'bg-purple-600 text-white' : 'border border-white/10 hover:bg-white/5'
+                    page === totalPages ? 'bg-purple-600 text-white' : 'border border-white/8 hover:bg-white/[0.04]'
                   }`}
                 >
                   {totalPages}
@@ -687,7 +648,7 @@ export function PortalLogs() {
                 type="button"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
-                className="rounded-md border border-white/10 px-2.5 py-1 transition hover:bg-white/5 disabled:opacity-30"
+                className="rounded-md border border-white/8 px-2.5 py-1 transition hover:bg-white/[0.04] disabled:opacity-30"
               >
                 ›
               </button>

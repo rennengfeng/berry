@@ -255,10 +255,10 @@ function processChartData(data: QuotaDataItem[], granularity: string): ChartData
 }
 
 const TABS = [
-  { key: '1', label: '消耗分布' },
-  { key: '2', label: '调用趋势' },
-  { key: '3', label: '调用次数分布' },
-  { key: '4', label: '调用次数排行' },
+  { key: '1', label: 'Consumption Distribution' },
+  { key: '2', label: 'Call Trend' },
+  { key: '3', label: 'Call Count Distribution' },
+  { key: '4', label: 'Call Count Ranking' },
 ]
 
 export function PortalDataBoard() {
@@ -396,7 +396,7 @@ export function PortalDataBoard() {
       valueField: 'value',
       categoryField: 'type',
       pie: { style: { cornerRadius: 10 }, state: { hover: { outerRadius: 0.85, stroke: '#000', lineWidth: 1 } } },
-      title: { visible: true, text: t('模型调用次数占比'), subtext: `${t('总计')}：${renderCompactNumber(chartData.totalTimes)}`, textStyle: { fill: 'hsl(var(--foreground))' }, subtextStyle: { fill: 'hsl(var(--muted-foreground))' } },
+      title: { visible: true, text: t('Model Call Distribution'), subtext: `${t('Total')}：${renderCompactNumber(chartData.totalTimes)}`, textStyle: { fill: 'hsl(var(--foreground))' }, subtextStyle: { fill: 'hsl(var(--muted-foreground))' } },
       legends: {
         visible: hasData,
         orient: 'left' as const,
@@ -419,7 +419,7 @@ export function PortalDataBoard() {
     seriesField: 'Model',
     stack: true,
     legends: { visible: true, selectMode: 'single' as const, item: { shape: { style: { symbolType: 'circle' } } } },
-    title: { visible: true, text: t('模型消耗分布'), subtext: `${t('总计')}：${formatQuota(chartData.totalQuota)}` },
+    title: { visible: true, text: t('Model Consumption Distribution'), subtext: `${t('Total')}：${formatQuota(chartData.totalQuota)}` },
     bar: { state: { hover: { stroke: '#000', lineWidth: 1 } } },
     tooltip: {
       mark: { content: [{ key: (datum: any) => datum['Model'], value: (datum: any) => formatQuota(datum['rawQuota'] || 0) }] },
@@ -435,7 +435,7 @@ export function PortalDataBoard() {
     yField: 'Count',
     seriesField: 'Model',
     legends: { visible: true, selectMode: 'single' as const, item: { shape: { style: { symbolType: 'circle' } } } },
-    title: { visible: true, text: t('调用趋势'), subtext: `${t('总计')}：${renderCompactNumber(chartData.totalTimes)}` },
+    title: { visible: true, text: t('Call Trend'), subtext: `${t('Total')}：${renderCompactNumber(chartData.totalTimes)}` },
     tooltip: {
       mark: { content: [{ key: (datum: any) => datum['Model'], value: (datum: any) => renderCompactNumber(datum['Count']) }] },
     },
@@ -450,7 +450,7 @@ export function PortalDataBoard() {
     yField: 'Count',
     seriesField: 'Model',
     legends: { visible: true, selectMode: 'single' as const, item: { shape: { style: { symbolType: 'circle' } } } },
-    title: { visible: true, text: t('模型调用次数排行'), subtext: `${t('总计')}：${renderCompactNumber(chartData.totalTimes)}` },
+    title: { visible: true, text: t('Model Call Ranking'), subtext: `${t('Total')}：${renderCompactNumber(chartData.totalTimes)}` },
     bar: { state: { hover: { stroke: '#000', lineWidth: 1 } } },
     tooltip: { mark: { content: [{ key: (datum: any) => datum['Model'], value: (datum: any) => renderCompactNumber(datum['Count']) }] } },
     color: { specified: chartData.modelColors },
@@ -521,7 +521,7 @@ export function PortalDataBoard() {
         <div className="flex flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <PieChart className="h-4 w-4 text-muted-foreground" />
-            <span>{t('模型数据分析')}</span>
+            <span>{t('Model Analytics')}</span>
           </div>
           <div className="flex items-center gap-1">
             {TABS.map((tab) => (

@@ -52,29 +52,9 @@ export function PortalDashboard() {
           </div>
           {/* Profile info */}
           <div className="relative px-5 pb-4">
-            {/* Avatar overlapping banner */}
-            <div className="-mt-8 mb-3 flex items-end gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-lg font-bold text-primary ring-4 ring-card">
-                {initials}
-              </div>
-              <div className="mb-1 min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h2 className="truncate text-xl font-bold">{displayName}</h2>
-                  <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{roleLabel}</span>
-                  {user?.id && (
-                    <span className="shrink-0 text-xs text-muted-foreground">ID: {user.id}</span>
-                  )}
-                </div>
-                <div className="mt-0.5 flex items-center gap-3 text-sm text-muted-foreground">
-                  <span>@{user?.username || '-'}</span>
-                  {user?.group && (
-                    <>
-                      <span>•</span>
-                      <span>{user.group}</span>
-                    </>
-                  )}
-                </div>
-              </div>
+            {/* Simplified: only username */}
+            <div className="-mt-4 mb-3">
+              <h2 className="text-xl font-bold">{displayName}</h2>
             </div>
             {/* Stats row */}
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t pt-3">
