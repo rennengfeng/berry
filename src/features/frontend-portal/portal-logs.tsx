@@ -504,31 +504,31 @@ export function PortalLogs() {
                             <div className="space-y-2 text-xs text-white/50">
                               {log.request_id && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/40 w-24 shrink-0">Request ID</span>
+                                  <span className="text-white/40 min-w-28 shrink-0">Request ID</span>
                                   <span className="font-mono text-white/50">{log.request_id}</span>
                                 </div>
                               )}
                               {otherData?.cache_tokens != null && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/40 w-24 shrink-0">{t('portal.page.logs.cacheTokens')}</span>
+                                  <span className="text-white/40 min-w-28 shrink-0">{t('portal.page.logs.cacheTokens')}</span>
                                   <span className="text-white/50">{otherData.cache_tokens.toLocaleString()}</span>
                                 </div>
                               )}
                               {otherData?.cache_creation_tokens != null && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/40 w-24 shrink-0">{t('portal.page.logs.cacheCreation')}</span>
+                                  <span className="text-white/40 min-w-28 shrink-0">{t('portal.page.logs.cacheCreation')}</span>
                                   <span className="text-white/50">{otherData.cache_creation_tokens.toLocaleString()}</span>
                                 </div>
                               )}
                               {log.content && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/40 w-24 shrink-0">{t('portal.page.logs.logDetail')}</span>
+                                  <span className="text-white/40 min-w-28 shrink-0">{t('portal.page.logs.logDetail')}</span>
                                   <span className="text-white/50 break-all">{log.content}</span>
                                 </div>
                               )}
                               {otherData?.model_ratio != null && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/40 w-24 shrink-0">{t('portal.page.logs.billingProcess')}</span>
+                                  <span className="text-white/40 min-w-28 shrink-0">{t('portal.page.logs.billingProcess')}</span>
                                   <div className="text-white/50 space-y-0.5">
                                     <div>{t('Input Price')}：${(otherData.model_ratio * 2).toFixed(6)} / 1M tokens</div>
                                     {otherData.completion_ratio != null && (
@@ -566,13 +566,13 @@ export function PortalLogs() {
                               )}
                               {otherData?.request_path && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/40 w-24 shrink-0">{t('Request Path')}</span>
+                                  <span className="text-white/40 min-w-28 shrink-0">{t('Request Path')}</span>
                                   <span className="text-white/50 font-mono">{otherData.request_path}</span>
                                 </div>
                               )}
                               {log.ip && (
                                 <div className="flex gap-2">
-                                  <span className="text-white/40 w-24 shrink-0">IP</span>
+                                  <span className="text-white/40 min-w-28 shrink-0">IP</span>
                                   <span className="text-white/50">{log.ip}</span>
                                 </div>
                               )}
