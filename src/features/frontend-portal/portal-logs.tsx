@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import { formatQuota } from '@/lib/format'
 import { Search, RotateCcw, Activity, Zap, Clock, AlertTriangle, Download, RefreshCw, ChevronRight } from 'lucide-react'
 import dayjs from 'dayjs'
+import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 
 type TimeGranularity = 'hour' | 'day' | 'week'
 
@@ -70,8 +71,8 @@ function parseOther(other?: string): {
 
 export function PortalLogs() {
   const { t } = useTranslation()
-  const [startDate] = useState(() => dayjs().subtract(7, 'day').startOf('day'))
-  const [endDate] = useState(() => dayjs().endOf('day'))
+  const [startDate, setStartDate] = useState(() => dayjs().subtract(29, 'day').startOf('day'))
+  const [endDate, setEndDate] = useState(() => dayjs().endOf('day'))
   const [granularity, setGranularity] = useState<TimeGranularity>('day')
 
   const [keyFilter, setKeyFilter] = useState('')
@@ -121,22 +122,34 @@ export function PortalLogs() {
 
 
   const { data: modelList } = useQuery({
-    queryKey: ['portal-user-models-from-logs', range.start, range.end],
+    queryKey: ['portal-log-filter-options', startDate.unix(), endDate.unix()],
     queryFn: async () => {
-      const res = await api.get('/api/log/self', {
-        params: { p: 1, size: 100, start_timestamp: range.start, end_timestamp: range.end },
+      const res = await api.get('/api/log/self/filter-options', {
+        params: { start_timestamp: startDate.unix(), end_timestamp: endDate.unix() },
       })
-      const items = res.data?.data?.items as LogItem[] | undefined
-      if (!items) return { models: [] as string[], tokens: [] as string[] }
-      const modelSet = new Set<string>()
-      const tokenSet = new Set<string>()
-      for (const item of items) {
-        if (item.model_name) modelSet.add(item.model_name)
-        if (item.token_name) tokenSet.add(item.token_name)
+      const payload = res.data?.data as { tokens?: string[]; models?: string[] } | undefined
+      return {
+        tokens: [...(payload?.tokens ?? [])].sort(),
+        models: [...(payload?.models ?? [])].sort(),
       }
-      return { models: Array.from(modelSet).sort(), tokens: Array.from(tokenSet).sort() }
     },
     staleTime: 60_000,
+  })
+
+  const { data: statData } = useQuery({
+    queryKey: ['portal-log-stat', startDate.unix(), endDate.unix(), keyFilter, modelFilter, statusFilter],
+    queryFn: async () => {
+      const params: Record<string, unknown> = {
+        start_timestamp: startDate.unix(),
+        end_timestamp: endDate.unix(),
+      }
+      if (keyFilter) params.token_name = keyFilter
+      if (modelFilter) params.model_name = modelFilter
+      if (statusFilter && statusFilter !== 'all') params.type = statusFilter === 'success' ? 0 : 1
+      const res = await api.get('/api/log/self/stat', { params })
+      return res.data?.data as { quota?: number; rpm?: number; tpm?: number } | undefined
+    },
+    staleTime: 30_000,
   })
 
   const allTokenOptions = (() => {
@@ -169,13 +182,13 @@ export function PortalLogs() {
   })
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['portal-logs', range.start, range.end, keyFilter, modelFilter, statusFilter, page, pageSize],
+    queryKey: ['portal-logs', startDate.unix(), endDate.unix(), keyFilter, modelFilter, statusFilter, page, pageSize],
     queryFn: async () => {
       const params: Record<string, unknown> = {
         p: page,
         size: pageSize,
-        start_timestamp: range.start,
-        end_timestamp: range.end,
+        start_timestamp: startDate.unix(),
+        end_timestamp: endDate.unix(),
       }
       if (keyFilter) params.token_name = keyFilter
       if (modelFilter) params.model_name = modelFilter
@@ -263,9 +276,16 @@ export function PortalLogs() {
           <h1 className="text-2xl font-bold text-white">{t('portal.page.logs.title')}</h1>
           <p className="mt-1 text-sm text-white/40">{t('portal.page.logs.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-white/8 bg-white/[0.04] px-3 py-1.5 text-xs text-white/50">
-          {startDate.format('YYYY/M/D HH:mm')} → {endDate.format('YYYY/M/D HH:mm')}
-        </div>
+        <CompactDateTimeRangePicker
+          start={startDate.toDate()}
+          end={endDate.toDate()}
+          onChange={({ start, end }) => {
+            if (start) setStartDate(dayjs(start))
+            if (end) setEndDate(dayjs(end))
+            setPage(1)
+          }}
+          className="w-[320px]"
+        />
       </div>
 
       {/* Stats Cards — full width */}
@@ -382,7 +402,7 @@ export function PortalLogs() {
           <span className="inline-flex items-center gap-2 text-sm">
             <span className="h-4 w-1 rounded-full bg-purple-500" />
             <span className="text-white/50">{t('Usage')}</span>
-            <span className="font-mono text-base font-bold text-white">{formatQuota(logs.reduce((s, l) => s + (l.quota ?? 0), 0))}</span>
+            <span className="font-mono text-base font-bold text-white">{formatQuota(statData?.quota ?? 0)}</span>
           </span>
           <span className="inline-flex items-center gap-2 text-sm">
             <span className="h-4 w-1 rounded-full bg-purple-500" />
