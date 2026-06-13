@@ -19,14 +19,15 @@ For commercial licensing, please contact support@quantumnous.com
 import z from 'zod'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
+// 支付回调 return_url 落到 /console/topup（订阅 / Stripe）；统一导到充值页，保留 ?pay= 等参数。
 const topupSearchSchema = z.record(z.string(), z.unknown()).catch({})
 
 export const Route = createFileRoute('/console/topup')({
   validateSearch: topupSearchSchema,
   beforeLoad: ({ search }) => {
     throw redirect({
-      to: '/wallet',
-      search: { show_history: true, ...search },
+      to: '/portal/topup',
+      search,
     })
   },
 })

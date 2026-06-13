@@ -111,7 +111,7 @@ function OAuthCallback() {
         window.close()
         setTimeout(() => {
           if (!window.closed) {
-            window.location.replace('/_authenticated/profile/')
+            window.location.replace(((useAuthStore.getState().auth.user?.role ?? 0) >= 10 ? '/_authenticated/profile/' : '/portal/settings'))
           }
         }, 200)
       }
@@ -181,7 +181,7 @@ function OAuthCallback() {
               // Close the callback window if we opened a new tab for binding
               closeBindingWindow()
             } else {
-              safeNavigate('/_authenticated/profile/')
+              safeNavigate(((useAuthStore.getState().auth.user?.role ?? 0) >= 10 ? '/_authenticated/profile/' : '/portal/settings'))
             }
             return
           }

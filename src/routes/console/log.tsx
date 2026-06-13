@@ -16,10 +16,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import z from 'zod'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
+// 支付（在线充值）回调 return_url 可能落到 /console/log；统一导到充值页，保留 ?pay= 等参数。
+const searchSchema = z.record(z.string(), z.unknown()).catch({})
+
 export const Route = createFileRoute('/console/log')({
-  beforeLoad: () => {
-    throw redirect({ to: '/usage-logs' })
+  validateSearch: searchSchema,
+  beforeLoad: ({ search }) => {
+    throw redirect({ to: '/portal/topup', search })
   },
 })

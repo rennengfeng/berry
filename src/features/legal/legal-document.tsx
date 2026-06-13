@@ -24,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Markdown } from '@/components/ui/markdown'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PublicLayout } from '@/components/layout'
+import { pickLang } from '@/lib/multilang'
 import type { LegalDocumentResponse } from './types'
 
 type LegalDocumentProps = {
@@ -52,14 +53,14 @@ export function LegalDocument({
   fetchDocument,
   emptyMessage,
 }: LegalDocumentProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { data, isLoading } = useQuery({
     queryKey: [queryKey],
     queryFn: fetchDocument,
     staleTime: 10 * 60 * 1000,
   })
 
-  const rawContent = data?.data?.trim() ?? ''
+  const rawContent = pickLang(data?.data ?? '', i18n.language).trim()
   const hasContent = rawContent.length > 0
   const isUrl = hasContent && isValidUrl(rawContent)
   const isHtml = hasContent && !isUrl && isLikelyHtml(rawContent)
@@ -67,7 +68,7 @@ export function LegalDocument({
 
   if (isLoading) {
     return (
-      <PublicLayout>
+          <PublicLayout headerProps={{ showNavigation: false }}>
         <div className='mx-auto flex max-w-4xl flex-col gap-4 py-12'>
           <Skeleton className='h-8 w-[45%]' />
           <Skeleton className='h-4 w-full' />
@@ -80,7 +81,7 @@ export function LegalDocument({
 
   if (!success || !hasContent) {
     return (
-      <PublicLayout>
+          <PublicLayout headerProps={{ showNavigation: false }}>
         <div className='mx-auto max-w-2xl py-12'>
           <Card className='border-dashed'>
             <CardHeader className='flex flex-row items-center gap-4'>
@@ -102,7 +103,7 @@ export function LegalDocument({
 
   if (isUrl) {
     return (
-      <PublicLayout>
+          <PublicLayout headerProps={{ showNavigation: false }}>
         <div className='mx-auto max-w-2xl py-12'>
           <Card>
             <CardHeader>
@@ -133,7 +134,7 @@ export function LegalDocument({
   }
 
   return (
-    <PublicLayout>
+        <PublicLayout headerProps={{ showNavigation: false }}>
       <div className='mx-auto max-w-4xl space-y-6 py-12'>
         <div className='space-y-2'>
           <h1 className='text-3xl font-semibold tracking-tight'>{title}</h1>

@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import z from 'zod'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
+import { requireAdmin } from '@/lib/require-admin'
 import { getFreshModuleAccess } from '@/lib/nav-modules'
 import { Pricing } from '@/features/pricing'
 
@@ -38,6 +39,7 @@ const pricingSearchSchema = z.object({
 export const Route = createFileRoute('/pricing/')({
   validateSearch: pricingSearchSchema,
   beforeLoad: async ({ location }) => {
+    requireAdmin()
     const access = await getFreshModuleAccess('pricing')
     if (!access.enabled) {
       throw redirect({ to: '/' })

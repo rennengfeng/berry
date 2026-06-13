@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next'
 import { Markdown } from '@/components/ui/markdown'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PublicLayout } from '@/components/layout'
+import { pickLang } from '@/lib/multilang'
 import { getAboutContent } from './api'
 
 function isValidUrl(value: string) {
@@ -123,20 +124,20 @@ function EmptyAboutState() {
 }
 
 export function About() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { data, isLoading } = useQuery({
     queryKey: ['about-content'],
     queryFn: getAboutContent,
   })
 
-  const rawContent = data?.data?.trim() ?? ''
+  const rawContent = pickLang(data?.data ?? '', i18n.language).trim()
   const hasContent = rawContent.length > 0
   const isUrl = hasContent && isValidUrl(rawContent)
   const isHtml = hasContent && !isUrl && isLikelyHtml(rawContent)
 
   if (isLoading) {
     return (
-      <PublicLayout>
+            <PublicLayout headerProps={{ showNavigation: false }}>
         <div className='mx-auto flex max-w-4xl flex-col gap-4 py-12'>
           <Skeleton className='h-8 w-[45%]' />
           <Skeleton className='h-4 w-full' />
@@ -149,7 +150,7 @@ export function About() {
 
   if (!hasContent) {
     return (
-      <PublicLayout>
+            <PublicLayout headerProps={{ showNavigation: false }}>
         <EmptyAboutState />
       </PublicLayout>
     )
@@ -157,7 +158,7 @@ export function About() {
 
   if (isUrl) {
     return (
-      <PublicLayout showMainContainer={false}>
+      <PublicLayout showMainContainer={false} headerProps={{ showNavigation: false }}>
         <iframe
           src={rawContent}
           className='h-[calc(100vh-3.5rem)] w-full border-0'
@@ -168,7 +169,7 @@ export function About() {
   }
 
   return (
-    <PublicLayout>
+          <PublicLayout headerProps={{ showNavigation: false }}>
       <div className='mx-auto max-w-6xl px-4 py-8'>
         {isHtml ? (
           <div

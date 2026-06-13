@@ -16,13 +16,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute } from '@tanstack/react-router'
-import { requireAdmin } from '@/lib/require-admin'
-import { AuthenticatedLayout } from '@/components/layout'
+import { redirect } from '@tanstack/react-router'
+import { useAuthStore } from '@/stores/auth-store'
+import { ROLE } from '@/lib/roles'
 
-export const Route = createFileRoute('/_authenticated')({
-  beforeLoad: () => {
-    requireAdmin()
-  },
-  component: AuthenticatedLayout,
-})
+/**
+ * 原生（官方）路由访问守卫：仅管理员可访问。
+ * 未登录 → 跳登录页；已登录但非管理员 → 跳 403 拦截。
+ * 用于 TanStack Router 的 beforeLoad。
+ */
+export function requireAdmin() {
+  const { auth } = useAuthStore.getState()
+  if (!auth.user) {
+    throw redirect({ to: '/sign-in' })
+  }
+  if (auth.user.role < ROLE.ADMIN) {
+    throw redirect({ to: '/403' })
+  }
+}
