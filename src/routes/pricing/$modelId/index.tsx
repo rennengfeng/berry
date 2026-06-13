@@ -39,7 +39,7 @@ const modelDetailsSearchSchema = z.object({
 export const Route = createFileRoute('/pricing/$modelId/')({
   validateSearch: modelDetailsSearchSchema,
   beforeLoad: async ({ location }) => {
-    requireAdmin()
+    requireAdmin('/portal/models')
     const access = await getFreshModuleAccess('pricing')
     if (!access.enabled) {
       throw redirect({ to: '/' })

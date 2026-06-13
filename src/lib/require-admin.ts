@@ -21,11 +21,22 @@ import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
 
 /**
- * 原生（官方）路由访问守卫：仅管理员可访问。
- * 未登录 → 跳登录页；已登录但非管理员 → 跳 403 拦截。
- * 用于 TanStack Router 的 beforeLoad。
+ * 原生（官方）路由守卫 —— 有对应二开页面的：非管理员重定向到该二开页。
+ *   - 默认 fallback = /portal（二开门户首页；未登录会再被 portal 守卫导到登录页）
+ *   - 模型相关原生页（/pricing 等）传 /portal/models
  */
-export function requireAdmin() {
+export function requireAdmin(fallback: string = '/portal') {
+  const { auth } = useAuthStore.getState()
+  if (!auth.user || auth.user.role < ROLE.ADMIN) {
+    throw redirect({ to: fallback })
+  }
+}
+
+/**
+ * 原生（官方）路由守卫 —— 没有对应二开页面的：直接拦截。
+ * 未登录 → 登录页；已登录非管理员 → 403。
+ */
+export function requireAdminBlock() {
   const { auth } = useAuthStore.getState()
   if (!auth.user) {
     throw redirect({ to: '/sign-in' })
