@@ -94,12 +94,12 @@ const announcementSchema = z.object({
   content: z
     .string()
     .min(1, 'Content is required')
-    .max(500, 'Content must be less than 500 characters'),
+    .max(2000, 'Content must be less than 2000 characters'),
   publishDate: z.string().min(1, 'Publish date is required'),
   type: z.enum(['default', 'ongoing', 'success', 'warning', 'error']),
   extra: z
     .string()
-    .max(100, 'Extra must be less than 100 characters')
+    .max(600, 'Extra must be less than 600 characters')
     .optional(),
 })
 

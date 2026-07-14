@@ -175,6 +175,7 @@ export function ModelMutateDrawer({
       AudioCompletionRatio: '',
       ExposeRatioEnabled: false,
       'billing_setting.billing_mode': '{}',
+      'billing_setting.billing_unit': '{}',
       'billing_setting.billing_expr': '{}',
       'tool_price_setting.prices': '{}',
       TopupGroupRatio: '',

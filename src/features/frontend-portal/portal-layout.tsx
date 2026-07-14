@@ -21,12 +21,14 @@ For commercial licensing, please contact support@quantumnous.com
  * /portal/* route. Designed to overlay on top of the existing default theme
  * without touching backend code: brand name and logo come from /api/status.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useChatPresets } from '@/features/chat/hooks/use-chat-presets'
+import { isCanvasPreset } from './canvas-link'
 import {
   BarChart3,
   Bell,
@@ -44,6 +46,7 @@ import {
   Mail,
   Megaphone,
   MessageCircle,
+  Paintbrush,
   Settings,
   User,
   Wallet,
@@ -76,6 +79,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/portal/tokens', labelKey: 'portal.tokens', icon: KeyRound },
   { to: '/portal/models', labelKey: 'portal.models', icon: Boxes },
   { to: '/portal/chat', labelKey: 'portal.chat', icon: MessageCircle },
+  { to: '/portal/canvas', labelKey: 'portal.canvas', icon: Paintbrush },
   { to: '/portal/monitor', labelKey: 'portal.monitor', icon: Gauge },
   { to: '/portal/topup', labelKey: 'portal.recharge', icon: CreditCard },
   { to: '/portal/affiliate', labelKey: 'portal.affiliate', icon: Gift },
@@ -115,6 +119,15 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
   const brand = useBrand()
   const location = useLocation()
   const navigate = useNavigate()
+  const isCanvasRoute = location.pathname === '/portal/canvas'
+  const { chatPresets } = useChatPresets()
+  const visibleNavItems = useMemo(
+    () =>
+      NAV_ITEMS.filter(
+        (item) => item.to !== '/portal/canvas' || chatPresets.some(isCanvasPreset)
+      ),
+    [chatPresets]
+  )
 
   const { data: noticeData } = useQuery({
     queryKey: ['portal-notice-bell'],
@@ -152,7 +165,10 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="dark flex h-svh flex-col bg-[#0b0b1a] bg-[radial-gradient(ellipse_at_top_left,rgba(139,92,246,0.08),transparent_50%)] text-white/90" style={{ colorScheme: 'dark', '--background': '#0b0b1a', '--foreground': 'oklch(0.95 0 0)', '--card': 'rgba(255,255,255,0.02)', '--card-foreground': 'oklch(0.95 0 0)', '--popover': '#12122a', '--popover-foreground': 'oklch(0.95 0 0)', '--border': 'rgba(255,255,255,0.08)', '--input': 'rgba(255,255,255,0.06)', '--primary': '#8b5cf6', '--primary-foreground': '#ffffff', '--secondary': 'rgba(255,255,255,0.06)', '--secondary-foreground': 'oklch(0.95 0 0)', '--muted': 'rgba(255,255,255,0.04)', '--muted-foreground': 'rgba(255,255,255,0.5)', '--accent': 'rgba(139,92,246,0.15)', '--accent-foreground': '#c4b5fd', '--destructive': '#ef4444', '--ring': '#8b5cf6', '--sidebar-active': 'linear-gradient(to right, rgba(124,58,237,0.8), rgba(79,70,229,0.8))' } as React.CSSProperties}>
+    <div
+      className="dark flex h-svh flex-col bg-[#0b0b1a] bg-[radial-gradient(ellipse_at_top_left,rgba(139,92,246,0.08),transparent_50%)] text-white/90 portal-theme-dark"
+      data-portal-theme="dark"
+      style={{ colorScheme: 'dark', '--background': '#0b0b1a', '--foreground': 'oklch(0.95 0 0)', '--card': 'rgba(255,255,255,0.02)', '--card-foreground': 'oklch(0.95 0 0)', '--popover': '#12122a', '--popover-foreground': 'oklch(0.95 0 0)', '--border': 'rgba(255,255,255,0.08)', '--input': 'rgba(255,255,255,0.06)', '--primary': '#8b5cf6', '--primary-foreground': '#ffffff', '--secondary': 'rgba(255,255,255,0.06)', '--secondary-foreground': 'oklch(0.95 0 0)', '--muted': 'rgba(255,255,255,0.04)', '--muted-foreground': 'rgba(255,255,255,0.5)', '--accent': 'rgba(139,92,246,0.15)', '--accent-foreground': '#c4b5fd', '--destructive': '#ef4444', '--ring': '#8b5cf6', '--sidebar-active': 'linear-gradient(to right, rgba(124,58,237,0.8), rgba(79,70,229,0.8))' } as React.CSSProperties}>
       {/* Top bar */}
       <header className="z-30 flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-6 py-3">
         <div className="flex items-center gap-4">
@@ -266,7 +282,7 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
             )}
           </button>
           <nav className="flex flex-col gap-1">
-            {NAV_ITEMS.map((item) => {
+            {visibleNavItems.map((item) => {
               const active =
                 !item.external && (location.pathname === item.to ||
                 (item.to !== '/portal' &&
@@ -316,7 +332,14 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
         </aside>
 
         {/* Main content */}
-        <main className="min-w-0 flex-1 overflow-y-auto p-6">{children}</main>
+        <main
+          className={cn(
+            'min-w-0 flex-1',
+            isCanvasRoute ? 'overflow-hidden p-0' : 'overflow-y-auto p-6'
+          )}
+        >
+          {children}
+        </main>
       </div>
 
       {/* Notice Modal */}

@@ -18,12 +18,66 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getUserModels, getUserGroups } from './api'
+import { getUserModels, getUserGroups, sendImageGeneration } from './api'
 import { PlaygroundChat } from './components/playground-chat'
 import { PlaygroundInput } from './components/playground-input'
+import { ERROR_MESSAGES, MESSAGE_STATUS } from './constants'
 import { usePlaygroundState, useChatHandler } from './hooks'
-import { createUserMessage, createLoadingAssistantMessage } from './lib'
-import type { Message as MessageType } from './types'
+import {
+  createUserMessage,
+  createLoadingAssistantMessage,
+  updateAssistantMessageWithError,
+  updateCurrentVersionContent,
+  updateLastAssistantMessage,
+} from './lib'
+import type { ImageGenerationData, Message as MessageType } from './types'
+
+const toImageUrl = (image: ImageGenerationData) => {
+  if (image.url) return image.url
+  if (!image.b64_json) return ''
+  if (image.b64_json.startsWith('data:')) return image.b64_json
+  return `data:image/png;base64,${image.b64_json}`
+}
+
+const escapeImageAlt = (value: string) =>
+  value.replace(/[\[\]\r\n]/g, ' ').trim()
+
+const formatGeneratedImages = (images?: ImageGenerationData[]) => {
+  if (!images?.length) return ''
+
+  return images
+    .map((image, index) => {
+      const imageUrl = toImageUrl(image)
+      if (!imageUrl) return ''
+
+      const altText = escapeImageAlt(
+        image.revised_prompt || `Generated image ${index + 1}`
+      )
+      const markdown = [`![${altText}](${imageUrl})`]
+
+      if (image.revised_prompt) {
+        markdown.push(`> ${image.revised_prompt}`)
+      }
+
+      return markdown.join('\n\n')
+    })
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+const getRequestErrorMessage = (error: unknown) => {
+  const err = error as {
+    response?: { data?: { message?: string; error?: { message?: string } } }
+    message?: string
+  }
+
+  return (
+    err?.response?.data?.message ||
+    err?.response?.data?.error?.message ||
+    err?.message ||
+    ERROR_MESSAGES.API_REQUEST_ERROR
+  )
+}
 
 export function Playground() {
   const {
@@ -43,6 +97,8 @@ export function Playground() {
     parameterEnabled,
     onMessageUpdate: updateMessages,
   })
+  const [isImageGenerating, setIsImageGenerating] = useState(false)
+  const isBusy = isGenerating || isImageGenerating
 
   // Edit dialog state
   const [editingMessageKey, setEditingMessageKey] = useState<string | null>(
@@ -98,6 +154,51 @@ export function Playground() {
 
     // Send chat request
     sendChat(newMessages)
+  }
+
+  const handleGenerateImage = async (text: string) => {
+    const prompt = text.trim()
+    if (!prompt || isBusy) return
+
+    const userMessage = createUserMessage(prompt)
+    const assistantMessage = createLoadingAssistantMessage()
+    const newMessages = [...messages, userMessage, assistantMessage]
+
+    updateMessages(newMessages)
+    setIsImageGenerating(true)
+
+    try {
+      const response = await sendImageGeneration({
+        model: config.model,
+        group: config.group,
+        prompt,
+        n: 1,
+        size: '1024x1024',
+        response_format: 'url',
+      })
+      const content = formatGeneratedImages(response.data)
+
+      if (!content) {
+        throw new Error('Image generation returned no image data')
+      }
+
+      updateMessages((prev) =>
+        updateLastAssistantMessage(prev, (message) => ({
+          ...updateCurrentVersionContent(message, content),
+          reasoning: undefined,
+          isReasoningStreaming: false,
+          isReasoningComplete: true,
+          isContentComplete: true,
+          status: MESSAGE_STATUS.COMPLETE,
+        }))
+      )
+    } catch (error: unknown) {
+      updateMessages((prev) =>
+        updateAssistantMessageWithError(prev, getRequestErrorMessage(error))
+      )
+    } finally {
+      setIsImageGenerating(false)
+    }
   }
 
   const handleCopyMessage = (message: MessageType) => {
@@ -173,7 +274,7 @@ export function Playground() {
           onRegenerateMessage={handleRegenerateMessage}
           onEditMessage={handleEditMessage}
           onDeleteMessage={handleDeleteMessage}
-          isGenerating={isGenerating}
+          isGenerating={isBusy}
           editingKey={editingMessageKey}
           onCancelEdit={handleEditOpenChange}
           onSaveEdit={(newContent) => applyEdit(newContent, false)}
@@ -184,7 +285,7 @@ export function Playground() {
       {/* Input area: center content and constrain to the same container width */}
       <div className='mx-auto w-full max-w-4xl'>
         <PlaygroundInput
-          disabled={isGenerating}
+          disabled={isBusy}
           groups={groups}
           groupValue={config.group}
           isGenerating={isGenerating}
@@ -192,6 +293,7 @@ export function Playground() {
           modelValue={config.model}
           models={models}
           onGroupChange={(value) => updateConfig('group', value)}
+          onGenerateImage={handleGenerateImage}
           onModelChange={(value) => updateConfig('model', value)}
           onStop={stopGeneration}
           onSubmit={handleSendMessage}

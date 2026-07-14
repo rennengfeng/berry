@@ -121,6 +121,15 @@ const modelSchema = z.object({
       })
     }
   }),
+  BillingUnit: z.string().superRefine((value, ctx) => {
+    const result = validateJsonString(value)
+    if (!result.valid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: result.message || 'Invalid JSON',
+      })
+    }
+  }),
   BillingExpr: z.string().superRefine((value, ctx) => {
     const result = validateJsonString(value)
     if (!result.valid) {
@@ -250,6 +259,7 @@ export function RatioSettingsCard({
     ),
     ExposeRatioEnabled: modelDefaults.ExposeRatioEnabled,
     BillingMode: normalizeJsonString(modelDefaults.BillingMode),
+    BillingUnit: normalizeJsonString(modelDefaults.BillingUnit),
     BillingExpr: normalizeJsonString(modelDefaults.BillingExpr),
   })
 
@@ -281,6 +291,7 @@ export function RatioSettingsCard({
         modelDefaults.AudioCompletionRatio
       ),
       BillingMode: formatJsonForTextarea(modelDefaults.BillingMode),
+      BillingUnit: formatJsonForTextarea(modelDefaults.BillingUnit),
       BillingExpr: formatJsonForTextarea(modelDefaults.BillingExpr),
     },
   })
@@ -315,6 +326,7 @@ export function RatioSettingsCard({
       ),
       ExposeRatioEnabled: modelDefaults.ExposeRatioEnabled,
       BillingMode: normalizeJsonString(modelDefaults.BillingMode),
+      BillingUnit: normalizeJsonString(modelDefaults.BillingUnit),
       BillingExpr: normalizeJsonString(modelDefaults.BillingExpr),
     }
 
@@ -331,6 +343,7 @@ export function RatioSettingsCard({
         modelDefaults.AudioCompletionRatio
       ),
       BillingMode: formatJsonForTextarea(modelDefaults.BillingMode),
+      BillingUnit: formatJsonForTextarea(modelDefaults.BillingUnit),
       BillingExpr: formatJsonForTextarea(modelDefaults.BillingExpr),
     })
   }, [modelDefaults, modelForm])
@@ -374,11 +387,13 @@ export function RatioSettingsCard({
         AudioCompletionRatio: normalizeJsonString(values.AudioCompletionRatio),
         ExposeRatioEnabled: values.ExposeRatioEnabled,
         BillingMode: normalizeJsonString(values.BillingMode),
+        BillingUnit: normalizeJsonString(values.BillingUnit),
         BillingExpr: normalizeJsonString(values.BillingExpr),
       }
 
       const apiKeyMap: Record<string, string> = {
         BillingMode: 'billing_setting.billing_mode',
+        BillingUnit: 'billing_setting.billing_unit',
         BillingExpr: 'billing_setting.billing_expr',
       }
 
@@ -490,6 +505,7 @@ export function RatioSettingsCard({
           AudioRatio: modelDefaults.AudioRatio,
           AudioCompletionRatio: modelDefaults.AudioCompletionRatio,
           'billing_setting.billing_mode': modelDefaults.BillingMode,
+          'billing_setting.billing_unit': modelDefaults.BillingUnit,
           'billing_setting.billing_expr': modelDefaults.BillingExpr,
         }}
       />

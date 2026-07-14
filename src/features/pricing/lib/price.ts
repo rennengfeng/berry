@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { formatCurrencyFromUSD } from '@/lib/currency'
 import { QUOTA_TYPE_VALUES, TOKEN_UNIT_DIVISORS } from '../constants'
-import type { PricingModel, TokenUnit, PriceType } from '../types'
+import type { BillingUnit, PricingModel, TokenUnit, PriceType } from '../types'
 
 // ----------------------------------------------------------------------------
 // Price Calculation Utilities
@@ -119,6 +119,35 @@ function calculateTokenPrice(
 
 function hasRatio(value: number | null | undefined): boolean {
   return value !== undefined && value !== null && Number.isFinite(Number(value))
+}
+
+export function getFixedBillingUnit(model: PricingModel): BillingUnit {
+  if (model.billing_unit === 'second' || model.billing_unit === 'image') {
+    return model.billing_unit
+  }
+  return 'request'
+}
+
+export function getFixedBillingUnitLabelKey(model: PricingModel): string {
+  switch (getFixedBillingUnit(model)) {
+    case 'second':
+      return 'per second'
+    case 'image':
+      return 'per image'
+    default:
+      return 'per request'
+  }
+}
+
+export function getFixedBillingTypeLabelKey(model: PricingModel): string {
+  switch (getFixedBillingUnit(model)) {
+    case 'second':
+      return 'Per Second'
+    case 'image':
+      return 'Per Image'
+    default:
+      return 'Per Request'
+  }
 }
 
 /**

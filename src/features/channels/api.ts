@@ -136,7 +136,31 @@ export async function updateChannel(
   id: number,
   data: Partial<Channel>
 ): Promise<{ success: boolean; message?: string; data?: Channel }> {
-  const res = await api.put('/api/channel/', { id, ...data })
+  const payload = { ...data }
+  delete payload.status
+  const res = await api.put('/api/channel/', { id, ...payload })
+  return res.data
+}
+
+/**
+ * Update channel status using the dedicated status endpoint
+ */
+export async function updateChannelStatus(
+  id: number,
+  status: number
+): Promise<{ success: boolean; message?: string; data?: boolean }> {
+  const res = await api.post(`/api/channel/${id}/status`, { status })
+  return res.data
+}
+
+/**
+ * Batch update channel status using the dedicated status endpoint
+ */
+export async function batchUpdateChannelStatus(
+  ids: number[],
+  status: number
+): Promise<{ success: boolean; message?: string; data?: number }> {
+  const res = await api.post('/api/channel/status/batch', { ids, status })
   return res.data
 }
 

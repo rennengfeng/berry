@@ -209,6 +209,7 @@ export type FrontendModel = {
   monitor?: FrontendModelStatus | null
   monitors?: FrontendModelStatus[]
   billing_mode?: string
+  billing_unit?: string
   billing_expr?: string
 }
 

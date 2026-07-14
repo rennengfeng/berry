@@ -70,6 +70,7 @@ type UpstreamRatioSyncProps = {
     AudioRatio: string
     AudioCompletionRatio: string
     'billing_setting.billing_mode': string
+    'billing_setting.billing_unit': string
     'billing_setting.billing_expr': string
   }
 }
@@ -89,7 +90,8 @@ function getDefaultEndpointForChannel(channel: UpstreamChannel): string {
 }
 
 function getBillingCategory(ratioType: string): 'price' | 'ratio' | 'tiered' {
-  if (ratioType === 'model_price') return 'price'
+  if (ratioType === 'model_price' || ratioType === 'billing_unit')
+    return 'price'
   if (ratioType === 'billing_mode' || ratioType === 'billing_expr')
     return 'tiered'
   return 'ratio'
@@ -98,6 +100,7 @@ function getBillingCategory(ratioType: string): 'price' | 'ratio' | 'tiered' {
 function optionKeyBySyncField(ratioType: string): string {
   const explicit: Record<string, string> = {
     billing_mode: 'billing_setting.billing_mode',
+    billing_unit: 'billing_setting.billing_unit',
     billing_expr: 'billing_setting.billing_expr',
   }
   if (explicit[ratioType]) return explicit[ratioType]
@@ -319,6 +322,13 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
           }
         }
 
+        if (finalType === 'model_price' && sourceName && modelDiffs) {
+          const unitVal = modelDiffs.billing_unit?.upstreams?.[sourceName]
+          if (unitVal !== undefined && unitVal !== null && unitVal !== 'same') {
+            newModelRes['billing_unit'] = unitVal
+          }
+        }
+
         return { ...prev, [model]: newModelRes }
       })
     },
@@ -346,6 +356,9 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
       ModelPrice: parseJsonRecord<number>(modelRatios.ModelPrice),
       'billing_setting.billing_mode': parseJsonRecord<string>(
         modelRatios['billing_setting.billing_mode']
+      ),
+      'billing_setting.billing_unit': parseJsonRecord<string>(
+        modelRatios['billing_setting.billing_unit']
       ),
       'billing_setting.billing_expr': parseJsonRecord<string>(
         modelRatios['billing_setting.billing_expr']
@@ -386,6 +399,9 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
         ModelPrice: { ...currentRatios.ModelPrice },
         'billing_setting.billing_mode': {
           ...currentRatios['billing_setting.billing_mode'],
+        },
+        'billing_setting.billing_unit': {
+          ...currentRatios['billing_setting.billing_unit'],
         },
         'billing_setting.billing_expr': {
           ...currentRatios['billing_setting.billing_expr'],

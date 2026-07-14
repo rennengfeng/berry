@@ -165,6 +165,7 @@ export type ModelSettings = {
   AudioCompletionRatio: string
   ExposeRatioEnabled: boolean
   'billing_setting.billing_mode': string
+  'billing_setting.billing_unit': string
   'billing_setting.billing_expr': string
   'tool_price_setting.prices': string
   TopupGroupRatio: string
@@ -208,6 +209,7 @@ export type BillingSettings = {
   AudioCompletionRatio: string
   ExposeRatioEnabled: boolean
   'billing_setting.billing_mode': string
+  'billing_setting.billing_unit': string
   'billing_setting.billing_expr': string
   'tool_price_setting.prices': string
   TopupGroupRatio: string
@@ -349,6 +351,7 @@ export type RatioType =
   | 'audio_completion_ratio'
   | 'model_price'
   | 'billing_mode'
+  | 'billing_unit'
   | 'billing_expr'
 
 export type RatioDifference = {

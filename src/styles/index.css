@@ -781,3 +781,47 @@ For commercial licensing, please contact support@quantumnous.com
 [data-slot='sheet-overlay'] {
   background: rgba(0, 0, 0, 0.6);
 }
+
+.portal-theme-dark .bg-white,
+.portal-theme-dark .bg-white\/\[0\.02\],
+.portal-theme-dark .bg-white\/\[0\.03\],
+.portal-theme-dark .bg-white\/\[0\.04\],
+.portal-theme-dark .bg-white\/\[0\.05\],
+.portal-theme-dark .bg-white\/\[0\.06\],
+.portal-theme-dark .bg-white\/\[0\.08\],
+.portal-theme-dark .bg-white\/\[0\.1\],
+.portal-theme-dark .bg-white\/\[0\.15\] {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+.portal-theme-dark .text-white,
+.portal-theme-dark .text-white\/90,
+.portal-theme-dark .text-white\/80,
+.portal-theme-dark .text-white\/70,
+.portal-theme-dark .text-white\/60,
+.portal-theme-dark .text-white\/50,
+.portal-theme-dark .text-white\/40,
+.portal-theme-dark .text-white\/30 {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.portal-theme-dark .border-white\/5,
+.portal-theme-dark .border-white\/8,
+.portal-theme-dark .border-white\/10,
+.portal-theme-dark .border-white\/15 {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.portal-theme-dark .bg-gray-50,
+.portal-theme-dark .bg-gray-100,
+.portal-theme-dark .bg-gray-200 {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+.portal-theme-dark .hover\:bg-white\/\[0\.02\]:hover,
+.portal-theme-dark .hover\:bg-white\/\[0\.04\]:hover,
+.portal-theme-dark .hover\:bg-white\/\[0\.06\]:hover,
+.portal-theme-dark .hover\:bg-white\/\[0\.08\]:hover,
+.portal-theme-dark .hover\:bg-white\/\[0\.1\]:hover {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}

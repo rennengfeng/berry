@@ -54,6 +54,7 @@ import type { ModelOption, GroupOption } from '../types'
 
 interface PlaygroundInputProps {
   onSubmit: (text: string) => void
+  onGenerateImage?: (text: string) => void
   onStop?: () => void
   disabled?: boolean
   isGenerating?: boolean
@@ -77,6 +78,7 @@ const suggestions = [
 
 export function PlaygroundInput({
   onSubmit,
+  onGenerateImage,
   onStop,
   disabled,
   isGenerating,
@@ -101,6 +103,13 @@ export function PlaygroundInput({
     setText('')
   }
 
+  const handleGenerateImage = () => {
+    const prompt = text.trim()
+    if (!prompt || disabled || !onGenerateImage) return
+    onGenerateImage(prompt)
+    setText('')
+  }
+
   const handleFileAction = (action: string) => {
     toast.info(t('Feature in development'), {
       description: action,
@@ -108,6 +117,7 @@ export function PlaygroundInput({
   }
 
   const handleSuggestionClick = (suggestion: string) => {
+    if (disabled) return
     onSubmit(suggestion)
   }
 
@@ -179,6 +189,17 @@ export function PlaygroundInput({
               <GlobeIcon size={16} />
               <span className='hidden sm:inline'>{t('Search')}</span>
               <span className='sr-only sm:hidden'>{t('Search')}</span>
+            </PromptInputButton>
+
+            <PromptInputButton
+              className='border font-medium'
+              disabled={disabled || !text.trim() || !onGenerateImage}
+              onClick={handleGenerateImage}
+              variant='outline'
+            >
+              <ImageIcon size={16} />
+              <span className='hidden sm:inline'>{t('Image')}</span>
+              <span className='sr-only sm:hidden'>{t('Generate image')}</span>
             </PromptInputButton>
           </PromptInputTools>
 

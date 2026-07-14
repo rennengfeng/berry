@@ -58,6 +58,7 @@ type RawPricingModel = {
   supported_endpoint_types?: string[]
   group_ratio?: Record<string, number>
   billing_mode?: string
+  billing_unit?: string
   billing_expr?: string
 }
 
@@ -136,6 +137,7 @@ export async function getFrontendModels(): Promise<FrontendModelsPayload> {
       status: monitors[0] ?? null,
       monitor: monitors[0] ?? null,
       billing_mode: m.billing_mode,
+      billing_unit: m.billing_unit,
       billing_expr: m.billing_expr,
     }
   })

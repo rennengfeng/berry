@@ -84,7 +84,13 @@ type ModelPricingFormValues = z.infer<
   ReturnType<typeof createModelPricingSchema>
 >
 
-type PricingMode = 'per-token' | 'per-request' | 'tiered_expr'
+type PricingMode =
+  | 'per-token'
+  | 'per-request'
+  | 'per-second'
+  | 'per-image'
+  | 'tiered_expr'
+type BillingUnit = 'request' | 'second' | 'image'
 type LaneKey =
   | 'completion'
   | 'cache'
@@ -104,6 +110,7 @@ export type ModelRatioData = {
   audioRatio?: string
   audioCompletionRatio?: string
   billingMode?: PricingMode
+  billingUnit?: BillingUnit
   billingExpr?: string
   requestRuleExpr?: string
 }
@@ -274,6 +281,8 @@ function createInitialLaneState(data?: ModelRatioData | null) {
 }
 
 function getModeLabel(mode: PricingMode) {
+  if (mode === 'per-second') return 'Per-second'
+  if (mode === 'per-image') return 'Per-image'
   if (mode === 'per-request') return 'Per-request'
   if (mode === 'tiered_expr') return 'Expression'
   return 'Per-token'
@@ -282,9 +291,17 @@ function getModeLabel(mode: PricingMode) {
 function getModeBadgeVariant(
   mode: PricingMode
 ): 'default' | 'secondary' | 'outline' {
+  if (mode === 'per-second') return 'secondary'
+  if (mode === 'per-image') return 'secondary'
   if (mode === 'per-request') return 'secondary'
   if (mode === 'tiered_expr') return 'default'
   return 'outline'
+}
+
+function getBillingUnitForMode(mode: PricingMode): BillingUnit {
+  if (mode === 'per-second') return 'second'
+  if (mode === 'per-image') return 'image'
+  return 'request'
 }
 
 function buildPreviewRows(
@@ -292,6 +309,7 @@ function buildPreviewRows(
   mode: PricingMode,
   billingExpr: string,
   requestRuleExpr: string,
+  billingUnit: BillingUnit,
   promptPrice: string,
   lanePrices: Record<LaneKey, string>,
   laneEnabled: Record<LaneKey, boolean>,
@@ -301,6 +319,7 @@ function buildPreviewRows(
     const effectiveExpr = combineBillingExpr(billingExpr, requestRuleExpr)
     return [
       { key: 'mode', label: 'BillingMode', value: 'tiered_expr' },
+      { key: 'unit', label: 'BillingUnit', value: billingUnit },
       {
         key: 'expr',
         label: t('Expression'),
@@ -310,8 +329,18 @@ function buildPreviewRows(
     ]
   }
 
-  if (mode === 'per-request') {
+  if (
+    mode === 'per-request' ||
+    mode === 'per-second' ||
+    mode === 'per-image'
+  ) {
+    const unit = getBillingUnitForMode(mode)
     return [
+      {
+        key: 'mode',
+        label: 'BillingUnit',
+        value: unit,
+      },
       {
         key: 'price',
         label: 'ModelPrice',
@@ -465,9 +494,13 @@ export function ModelPricingEditorPanel({
       setPricingMode(
         editData.billingMode === 'tiered_expr'
           ? 'tiered_expr'
-          : editData.price
-            ? 'per-request'
-            : 'per-token'
+          : editData.price && editData.billingUnit === 'second'
+            ? 'per-second'
+            : editData.price && editData.billingUnit === 'image'
+              ? 'per-image'
+              : editData.price
+                ? 'per-request'
+                : 'per-token'
       )
       setBillingExpr(editData.billingExpr || '')
       setRequestRuleExpr(editData.requestRuleExpr || '')
@@ -622,6 +655,7 @@ export function ModelPricingEditorPanel({
         pricingMode,
         billingExpr,
         requestRuleExpr,
+        'request',
         promptPrice,
         lanePrices,
         laneEnabled,
@@ -712,6 +746,10 @@ export function ModelPricingEditorPanel({
     const data: ModelRatioData = {
       name: values.name.trim(),
       billingMode: pricingMode,
+      billingUnit:
+        pricingMode === 'tiered_expr'
+          ? 'request'
+          : getBillingUnitForMode(pricingMode),
       price: values.price || '',
       ratio: values.ratio || '',
       cacheRatio: values.cacheRatio || '',
@@ -800,11 +838,15 @@ export function ModelPricingEditorPanel({
               />
 
               <Tabs value={pricingMode} onValueChange={handleModeChange}>
-                <TabsList className='grid w-full grid-cols-3'>
+                <TabsList className='grid w-full grid-cols-5'>
                   <TabsTrigger value='per-token'>{t('Per-token')}</TabsTrigger>
                   <TabsTrigger value='per-request'>
                     {t('Per-request')}
                   </TabsTrigger>
+                  <TabsTrigger value='per-second'>
+                    {t('Per-second')}
+                  </TabsTrigger>
+                  <TabsTrigger value='per-image'>{t('Per-image')}</TabsTrigger>
                   <TabsTrigger value='tiered_expr'>
                     {t('Expression')}
                   </TabsTrigger>
@@ -850,6 +892,80 @@ export function ModelPricingEditorPanel({
                       })}
                     </div>
                   </FieldGroup>
+                </TabsContent>
+
+                <TabsContent value='per-second' className='flex flex-col gap-5'>
+                  <FormField
+                    control={form.control}
+                    name='price'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Second price')}</FormLabel>
+                        <FormControl>
+                          <InputGroup>
+                            <InputGroupAddon>$</InputGroupAddon>
+                            <InputGroupInput
+                              inputMode='decimal'
+                              placeholder='0.01'
+                              {...field}
+                              onChange={(event) => {
+                                const value = event.target.value
+                                if (numericDraftRegex.test(value)) {
+                                  field.onChange(value)
+                                }
+                              }}
+                            />
+                            <InputGroupAddon align='inline-end'>
+                              {t('per second')}
+                            </InputGroupAddon>
+                          </InputGroup>
+                        </FormControl>
+                        <FormDescription>
+                          {t(
+                            'Cost in USD per generated video second. The backend multiplies this price by request duration.'
+                          )}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </TabsContent>
+
+                <TabsContent value='per-image' className='flex flex-col gap-5'>
+                  <FormField
+                    control={form.control}
+                    name='price'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Image price')}</FormLabel>
+                        <FormControl>
+                          <InputGroup>
+                            <InputGroupAddon>$</InputGroupAddon>
+                            <InputGroupInput
+                              inputMode='decimal'
+                              placeholder='0.01'
+                              {...field}
+                              onChange={(event) => {
+                                const value = event.target.value
+                                if (numericDraftRegex.test(value)) {
+                                  field.onChange(value)
+                                }
+                              }}
+                            />
+                            <InputGroupAddon align='inline-end'>
+                              {t('per image')}
+                            </InputGroupAddon>
+                          </InputGroup>
+                        </FormControl>
+                        <FormDescription>
+                          {t(
+                            'Cost in USD per generated image. The backend multiplies this price by request image count.'
+                          )}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </TabsContent>
 
                 <TabsContent

@@ -61,7 +61,12 @@ import {
 import { parseTags } from '../lib/filters'
 import { getAvailableGroups, isTokenBasedModel } from '../lib/model-helpers'
 import { inferModelMetadata } from '../lib/model-metadata'
-import { formatFixedPrice, formatGroupPrice } from '../lib/price'
+import {
+  formatFixedPrice,
+  formatGroupPrice,
+  getFixedBillingTypeLabelKey,
+  getFixedBillingUnitLabelKey,
+} from '../lib/price'
 import type {
   Modality,
   ModelCapability,
@@ -301,7 +306,7 @@ function ModelHeader(props: { model: PricingModel }) {
         <span className='text-muted-foreground/70'>
           {model.quota_type === QUOTA_TYPE_VALUES.TOKEN
             ? t('Token-based')
-            : t('Per Request')}
+            : t(getFixedBillingTypeLabelKey(model))}
         </span>
         {model.billing_mode === 'tiered_expr' && model.billing_expr && (
           <>
@@ -481,7 +486,7 @@ function PriceSection(props: {
         <SectionTitle>{t('Base Price')}</SectionTitle>
         <div className='flex items-baseline justify-between'>
           <span className='text-muted-foreground text-sm'>
-            {t('Per request')}
+            {t(getFixedBillingTypeLabelKey(props.model))}
           </span>
           <span className='text-foreground font-mono text-sm font-semibold tabular-nums'>
             {formatFixedPrice(
@@ -492,6 +497,9 @@ function PriceSection(props: {
               props.usdExchangeRate,
               baseGroupRatioMap
             )}
+            <span className='text-muted-foreground/40 ml-1 text-xs font-normal'>
+              / {t(getFixedBillingUnitLabelKey(props.model))}
+            </span>
           </span>
         </div>
       </section>
@@ -872,9 +880,14 @@ function GroupPricingSection(props: {
             })}
           </TableBody>
         </Table>
-        {isTokenBased && (
+        {isTokenBased ? (
           <p className='text-muted-foreground/40 mt-1.5 px-4 text-[10px] sm:px-0'>
             {t('Prices shown per')} {tokenUnitLabel} tokens
+          </p>
+        ) : (
+          <p className='text-muted-foreground/40 mt-1.5 px-4 text-[10px] sm:px-0'>
+            {t('Prices shown per')}{' '}
+            {t(getFixedBillingUnitLabelKey(props.model))}
           </p>
         )}
       </div>
