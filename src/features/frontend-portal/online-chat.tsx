@@ -50,7 +50,7 @@ import {
 } from '@/components/ai-elements/reasoning'
 import { Response } from '@/components/ai-elements/response'
 import { Shimmer } from '@/components/ai-elements/shimmer'
-import { getChatUserModels, getApiKeySummaries, sendImageGeneration } from './api'
+import { getChatUserModels, sendImageGeneration } from './api'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -81,7 +81,6 @@ type ChatSession = {
 }
 
 type ModelOption = { label: string; value: string; groups?: string[]; endpoints?: string[] }
-type GroupOption = { label: string; value: string; ratio?: number; desc?: string }
 
 const IMAGE_SIZES = ['1024x1024', '1024x1792', '1792x1024', 'auto'] as const
 
@@ -111,19 +110,17 @@ function cleanErrorMessage(raw: string): string {
     .replace(/channel\s*#?\d+/gi, '')
     .replace(/渠道\s*#?\d+/gi, '')
     .replace(/上游分组[：:\s]*\S+/gi, '')
-  if (/Invalid URL|missing authentication/i.test(msg)) {
-    msg = '请求失败：请确认您已登录，并选择了正确的分组和密钥。如果您是订阅用户，请选择订阅分组对应的密钥使用。'
-  }
+  // 不把真实错误强行替换成“选择分组/密钥”，在线聊天走 cookie 鉴权，固定文案会掩盖真正原因。
   if (/额度不足|insufficient.*quota/i.test(msg)) {
-    msg += '\n如果您是订阅客户，请切换至订阅分组对应的密钥使用。'
+    msg += '\n如果您是订阅客户，请确认当前模型在订阅分组中可用。'
   }
   if (/订阅余额仅可用于/i.test(msg)) {
-    msg = '订阅余额仅可用于对应的订阅分组。请选择订阅分组对应的密钥使用。'
+    msg = '订阅余额仅可用于对应的订阅分组。请确认当前模型在订阅分组中可用。'
   }
   if (/all]?\s*channels?\s*(unavailable|failed|exhausted)/i.test(msg) || /所有渠道/.test(msg)) {
     msg = '当前模型暂时不可用，请稍后重试或切换其他模型。'
   }
-  return msg
+  return msg.trim()
 }
 
 // ---------------------------------------------------------------------------
@@ -207,9 +204,8 @@ export function OnlineChat() {
   // Mode & selectors
   const [chatMode, setChatMode] = useState<ChatMode>('chat')
   const [models, setModels] = useState<ModelOption[]>([])
-  const [groups, setGroups] = useState<GroupOption[]>([])
   const [selectedModel, setSelectedModel] = useState('')
-  const [selectedGroup, setSelectedGroup] = useState('default')
+  const [selectedGroup] = useState('')
   const [imageSize, setImageSize] = useState<string>('1024x1024')
 
   // Sessions (chat history) — initialized from localStorage
@@ -278,19 +274,8 @@ export function OnlineChat() {
     return () => { if (persistTimer.current) clearTimeout(persistTimer.current) }
   }, [sessions, messages, activeSessionId])
 
-  // Load models & tokens on mount
+  // Load models on mount
   useEffect(() => {
-    getApiKeySummaries().then((tokens) => {
-      const active = tokens.filter((t) => t.status === 1 && t.group)
-      const opts: GroupOption[] = active.map((t) => ({
-        label: t.name,
-        value: t.group!,
-      }))
-      setGroups(opts)
-      if (opts.length > 0 && !opts.find((x) => x.value === 'default')) {
-        setSelectedGroup(opts[0].value)
-      }
-    })
     getChatUserModels().then((m) => {
       setModels(m)
       if (m.length > 0) setSelectedModel(m[0].value)
@@ -991,20 +976,6 @@ export function OnlineChat() {
                   </SelectContent>
                 </Select>
               )}
-
-              {/* Group selector */}
-              <Select value={selectedGroup} onValueChange={setSelectedGroup} disabled={isGenerating}>
-                <SelectTrigger className="h-7 w-full text-xs">
-                  <SelectValue placeholder={t('Group')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {groups.map((g) => (
-                    <SelectItem key={g.value} value={g.value} className="text-xs">
-                      {g.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
 
               {/* Model selector */}
               <Select value={selectedModel} onValueChange={setSelectedModel} disabled={isGenerating}>

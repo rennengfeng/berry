@@ -484,6 +484,103 @@ export async function getTokenModels(token: string): Promise<string[]> {
 // Image generation
 // ----------------------------------------------------------------------------
 
+type ImageGenerationResult = {
+  data: Array<{ url?: string; b64_json?: string; revised_prompt?: string }>
+}
+
+type ImageTaskPayload = {
+  id?: string
+  task_id?: string
+  data?: ImageGenerationResult['data']
+  output?: {
+    task_id?: string
+    task_status?: string
+    message?: string
+    code?: string
+    results?: Array<{ url?: string; b64_image?: string; message?: string }>
+    choices?: Array<{
+      message?: {
+        content?: Array<{ type?: string; text?: string; image?: string }>
+      }
+    }>
+  }
+  error?: { message?: string }
+}
+
+const IMAGE_TASK_POLL_INTERVAL_MS = 2500
+const IMAGE_TASK_MAX_POLLS = 80
+
+function extractImageTaskId(body: ImageTaskPayload): string {
+  return body.output?.task_id || body.task_id || body.id || ''
+}
+
+function extractImagesFromTask(body: ImageTaskPayload): ImageGenerationResult['data'] {
+  if (Array.isArray(body.data) && body.data.length > 0) return body.data
+  const results = body.output?.results
+  if (Array.isArray(results) && results.length > 0) {
+    return results
+      .map((item) => ({
+        url: item.url,
+        b64_json: item.b64_image,
+        revised_prompt: item.message,
+      }))
+      .filter((item) => item.url || item.b64_json)
+  }
+  const choices = body.output?.choices
+  if (Array.isArray(choices) && choices.length > 0) {
+    const images: ImageGenerationResult['data'] = []
+    for (const choice of choices) {
+      let revisedPrompt = ''
+      for (const part of choice.message?.content ?? []) {
+        if (part.text) revisedPrompt = part.text
+        if (part.image) {
+          if (part.image.startsWith('http')) {
+            images.push({ url: part.image, revised_prompt: revisedPrompt })
+          } else {
+            images.push({ b64_json: part.image, revised_prompt: revisedPrompt })
+          }
+        }
+      }
+    }
+    return images
+  }
+  return []
+}
+
+function assertImageTaskNotFailed(body: ImageTaskPayload) {
+  const status = String(body.output?.task_status || '').toUpperCase()
+  if (status === 'FAILED' || status === 'CANCELED') {
+    throw new Error(body.output?.message || body.error?.message || 'Image generation task failed')
+  }
+}
+
+async function resolveImageGenerationResponse(
+  body: ImageTaskPayload,
+  taskPathPrefix: '/dashscope/api/v1/tasks' | '/pg/images/tasks',
+  headers?: Record<string, string>
+): Promise<ImageGenerationResult> {
+  const directImages = extractImagesFromTask(body)
+  if (directImages.length > 0) return { data: directImages }
+
+  const taskId = extractImageTaskId(body)
+  if (!taskId) return { data: [] }
+
+  for (let i = 0; i < IMAGE_TASK_MAX_POLLS; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, IMAGE_TASK_POLL_INTERVAL_MS))
+    const res = await api.get(`${taskPathPrefix}/${encodeURIComponent(taskId)}`, {
+      ...(headers ? { headers } : {}),
+      skipErrorHandler: true,
+      disableDuplicate: true,
+    } as Record<string, unknown>)
+    const taskBody = res.data as ImageTaskPayload
+    assertImageTaskNotFailed(taskBody)
+    const images = extractImagesFromTask(taskBody)
+    if (images.length > 0) return { data: images }
+  }
+
+  throw new Error('Image generation task timed out')
+}
+
 export async function sendTokenImageGeneration(params: {
   token: string
   model: string
@@ -492,15 +589,14 @@ export async function sendTokenImageGeneration(params: {
   quality?: string
   n?: number
   style?: string
-}): Promise<{
-  data: Array<{ url?: string; b64_json?: string; revised_prompt?: string }>
-}> {
+}): Promise<ImageGenerationResult> {
   try {
     const res = await api.post(
       '/v1/images/generations',
       {
         model: params.model,
         prompt: params.prompt,
+        response_format: 'url',
         ...(params.size && { size: params.size }),
         ...(params.quality && { quality: params.quality }),
         ...(params.n && { n: params.n }),
@@ -513,7 +609,9 @@ export async function sendTokenImageGeneration(params: {
         skipErrorHandler: true,
       } as Record<string, unknown>
     )
-    return res.data
+    return resolveImageGenerationResponse(res.data as ImageTaskPayload, '/dashscope/api/v1/tasks', {
+      Authorization: `Bearer ${params.token}`,
+    })
   } catch (err: unknown) {
     const axiosErr = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
     const msg = axiosErr?.response?.data?.error?.message || axiosErr?.response?.data?.message || (err instanceof Error ? err.message : '图像生成请求失败')
@@ -564,7 +662,7 @@ export async function sendImageGeneration(params: {
   size?: string
   quality?: string
   n?: number
-}): Promise<{ data: Array<{ url?: string; b64_json?: string; revised_prompt?: string }> }> {
+}): Promise<ImageGenerationResult> {
   try {
     const res = await api.post(
       '/pg/images/generations',
@@ -579,7 +677,7 @@ export async function sendImageGeneration(params: {
       },
       { skipErrorHandler: true } as Record<string, unknown>
     )
-    return res.data
+    return resolveImageGenerationResponse(res.data as ImageTaskPayload, '/pg/images/tasks')
   } catch (err: unknown) {
     const axiosErr = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
     const msg = axiosErr?.response?.data?.error?.message || axiosErr?.response?.data?.message || (err instanceof Error ? err.message : '图像生成请求失败')
