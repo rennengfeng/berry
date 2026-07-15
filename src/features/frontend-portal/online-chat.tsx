@@ -236,6 +236,7 @@ export function OnlineChat() {
     [apiKeyOptions, selectedApiKeyId]
   )
   const selectedGroup = selectedApiKey?.group || ''
+  const selectedApiKeyLabel = selectedApiKey?.label || t('API Key')
 
   // Filter models by selected group and chat mode
   const filteredModels = useMemo(() => {
@@ -1022,14 +1023,12 @@ export function OnlineChat() {
                 disabled={isGenerating || apiKeyOptions.length === 0}
               >
                 <SelectTrigger className="h-7 w-full text-xs">
-                  <SelectValue placeholder={t('API Key')} />
+                  <SelectValue>{selectedApiKeyLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {apiKeyOptions.map((key) => (
                     <SelectItem key={key.value} value={key.value} className="text-xs">
-                      {key.groupDesc
-                        ? `${key.label} · ${key.group} · ${key.groupDesc}`
-                        : `${key.label} · ${key.group}`}
+                      {key.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
