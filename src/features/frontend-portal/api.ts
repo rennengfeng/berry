@@ -571,6 +571,7 @@ export async function sendImageGeneration(params: {
       {
         model: params.model,
         prompt: params.prompt,
+        response_format: 'url',
         ...(params.group && { group: params.group }),
         ...(params.size && { size: params.size }),
         ...(params.quality && { quality: params.quality }),
