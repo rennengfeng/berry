@@ -50,7 +50,7 @@ import {
 } from '@/components/ai-elements/reasoning'
 import { Response } from '@/components/ai-elements/response'
 import { Shimmer } from '@/components/ai-elements/shimmer'
-import { getChatUserModels, sendImageGeneration } from './api'
+import { getApiKeySummaries, getChatUserGroups, getChatUserModels, sendImageGeneration } from './api'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -81,6 +81,7 @@ type ChatSession = {
 }
 
 type ModelOption = { label: string; value: string; groups?: string[]; endpoints?: string[] }
+type ApiKeyOption = { label: string; value: string; group: string; groupDesc?: string }
 
 const IMAGE_SIZES = ['1024x1024', '1024x1792', '1792x1024', 'auto'] as const
 
@@ -204,8 +205,9 @@ export function OnlineChat() {
   // Mode & selectors
   const [chatMode, setChatMode] = useState<ChatMode>('chat')
   const [models, setModels] = useState<ModelOption[]>([])
+  const [apiKeyOptions, setApiKeyOptions] = useState<ApiKeyOption[]>([])
   const [selectedModel, setSelectedModel] = useState('')
-  const [selectedGroup] = useState('')
+  const [selectedApiKeyId, setSelectedApiKeyId] = useState('')
   const [imageSize, setImageSize] = useState<string>('1024x1024')
 
   // Sessions (chat history) — initialized from localStorage
@@ -228,6 +230,12 @@ export function OnlineChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const selectedApiKey = useMemo(
+    () => apiKeyOptions.find((key) => key.value === selectedApiKeyId),
+    [apiKeyOptions, selectedApiKeyId]
+  )
+  const selectedGroup = selectedApiKey?.group || ''
 
   // Filter models by selected group and chat mode
   const filteredModels = useMemo(() => {
@@ -274,13 +282,40 @@ export function OnlineChat() {
     return () => { if (persistTimer.current) clearTimeout(persistTimer.current) }
   }, [sessions, messages, activeSessionId])
 
-  // Load models on mount
+  // Load active API keys. The selected key's group is used as the billing group
+  // for playground requests; group data is only used to show a friendly label.
   useEffect(() => {
+    Promise.all([getChatUserGroups(), getApiKeySummaries()]).then(([usableGroups, tokens]) => {
+      const usableGroupMap = new Map(usableGroups.map((group) => [group.value, group]))
+      const keyOptions: ApiKeyOption[] = tokens
+        .filter((token) => token.status === 1)
+        .map((token) => {
+          const group = token.group || 'default'
+          return {
+            label: token.name || group,
+            value: String(token.id),
+            group,
+            groupDesc: usableGroupMap.get(group)?.desc,
+          }
+        })
+      setApiKeyOptions(keyOptions)
+      setSelectedApiKeyId((current) =>
+        current && keyOptions.some((option) => option.value === current)
+          ? current
+          : keyOptions[0]?.value || ''
+      )
+    })
     getChatUserModels().then((m) => {
       setModels(m)
       if (m.length > 0) setSelectedModel(m[0].value)
     })
   }, [])
+
+  useEffect(() => {
+    if (!selectedApiKeyId || apiKeyOptions.length === 0) return
+    if (apiKeyOptions.some((option) => option.value === selectedApiKeyId)) return
+    setSelectedApiKeyId(apiKeyOptions[0].value)
+  }, [apiKeyOptions, selectedApiKeyId])
 
   // Create new session
   const createNewSession = useCallback(() => {
@@ -381,13 +416,14 @@ export function OnlineChat() {
       }
       setMessages((prev) => [...prev, assistantMsg])
       setIsGenerating(true)
+      const requestGroup = selectedGroup || apiKeyOptions[0]?.group || ''
 
       const source = new SSE('/pg/chat/completions', {
         headers: getCommonHeaders(),
         method: 'POST',
         payload: JSON.stringify({
           model: selectedModel,
-          group: selectedGroup,
+          group: requestGroup,
           messages: apiMessages,
           stream: true,
         }),
@@ -500,7 +536,7 @@ export function OnlineChat() {
         sseRef.current = null
       }
     },
-    [selectedModel, selectedGroup, t]
+    [selectedModel, selectedGroup, apiKeyOptions, t]
   )
 
   // Send image generation
@@ -514,12 +550,13 @@ export function OnlineChat() {
       const assistantMsg: ChatMessage = { key: nanoid(), from: 'assistant', content: '', status: 'loading' }
       setMessages((prev) => [...prev, userMsg, assistantMsg])
       setIsGenerating(true)
+      const requestGroup = selectedGroup || apiKeyOptions[0]?.group || ''
 
       try {
         const res = await sendImageGeneration({
           model: selectedModel,
           prompt,
-          group: selectedGroup,
+          group: requestGroup,
           size: imageSize,
         })
         setMessages((prev) => {
@@ -550,13 +587,14 @@ export function OnlineChat() {
         setIsGenerating(false)
       }
     },
-    [selectedModel, selectedGroup, imageSize, t]
+    [selectedModel, selectedGroup, apiKeyOptions, imageSize, t]
   )
 
   // Handle submit
   const handleSubmit = useCallback(() => {
     const text = inputText.trim()
     if (!text && pendingImages.length === 0) return
+    if (!selectedGroup) return
 
     // Auto-create session if none active
     if (!activeSessionId) {
@@ -598,7 +636,7 @@ export function OnlineChat() {
     setMessages(newMessages)
     setPendingImages([])
     sendChat(newMessages)
-  }, [inputText, pendingImages, activeSessionId, chatMode, messages, sendChat, sendImage])
+  }, [inputText, pendingImages, selectedGroup, activeSessionId, chatMode, messages, sendChat, sendImage])
 
   // Handle keyboard
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -929,7 +967,7 @@ export function OnlineChat() {
                 <Button
                   size="icon-sm"
                   onClick={handleSubmit}
-                  disabled={!inputText.trim() && pendingImages.length === 0}
+                  disabled={(!inputText.trim() && pendingImages.length === 0) || !selectedGroup}
                   className="shrink-0"
                 >
                   <SendIcon className="h-4 w-4" />
@@ -938,7 +976,7 @@ export function OnlineChat() {
             </div>
 
             {/* Controls row — evenly distributed */}
-            <div className={cn('mt-2 grid gap-2', chatMode === 'image' ? 'grid-cols-4' : 'grid-cols-3')}>
+            <div className={cn('mt-2 grid gap-2', chatMode === 'image' ? 'grid-cols-5' : 'grid-cols-4')}>
               {/* Mode switch */}
               <div className="flex items-center rounded-lg border p-0.5">
                 <Button
@@ -976,6 +1014,26 @@ export function OnlineChat() {
                   </SelectContent>
                 </Select>
               )}
+
+              {/* API key selector: the selected key's group is used for billing. */}
+              <Select
+                value={selectedApiKeyId}
+                onValueChange={setSelectedApiKeyId}
+                disabled={isGenerating || apiKeyOptions.length === 0}
+              >
+                <SelectTrigger className="h-7 w-full text-xs">
+                  <SelectValue placeholder={t('API Key')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {apiKeyOptions.map((key) => (
+                    <SelectItem key={key.value} value={key.value} className="text-xs">
+                      {key.groupDesc
+                        ? `${key.label} · ${key.group} · ${key.groupDesc}`
+                        : `${key.label} · ${key.group}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
               {/* Model selector */}
               <Select value={selectedModel} onValueChange={setSelectedModel} disabled={isGenerating}>

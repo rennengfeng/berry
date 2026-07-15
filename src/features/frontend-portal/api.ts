@@ -644,12 +644,20 @@ export async function getChatUserGroups(): Promise<Array<{ label: string; value:
     const res = await api.get('/api/user/self/groups')
     if (!res.data?.success || !res.data.data) return []
     const groupData = res.data.data as Record<string, { desc: string; ratio: number }>
-    return Object.entries(groupData).map(([group, info]) => ({
-      label: group,
-      value: group,
-      ratio: info.ratio,
-      desc: info.desc,
-    }))
+    return Object.entries(groupData)
+      .map(([group, info]) => ({
+        label: group,
+        value: group,
+        ratio: info.ratio,
+        desc: info.desc,
+      }))
+      .sort((a, b) => {
+        if (a.value === 'default') return -1
+        if (b.value === 'default') return 1
+        if (a.value === 'auto') return 1
+        if (b.value === 'auto') return -1
+        return a.value.localeCompare(b.value)
+      })
   } catch {
     return []
   }
