@@ -683,9 +683,12 @@ export async function sendImageGeneration(params: {
         ...(params.quality && { quality: params.quality }),
         ...(params.n && { n: params.n }),
       },
-      { skipErrorHandler: true } as Record<string, unknown>
+      {
+        headers: getCommonHeaders(),
+        skipErrorHandler: true,
+      } as Record<string, unknown>
     )
-    return resolveImageGenerationResponse(res.data as ImageTaskPayload, '/pg/images/tasks')
+    return resolveImageGenerationResponse(res.data as ImageTaskPayload, '/pg/images/tasks', getCommonHeaders())
   } catch (err: unknown) {
     const axiosErr = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
     const msg = axiosErr?.response?.data?.error?.message || axiosErr?.response?.data?.message || (err instanceof Error ? err.message : '图像生成请求失败')
