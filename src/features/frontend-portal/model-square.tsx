@@ -187,6 +187,11 @@ function tierConditionsSummary(
     .join(' && ')
 }
 
+function tierGridColumns(count: number): string {
+  const priceCols = count > 0 ? `repeat(${count}, minmax(70px, 0.8fr))` : 'minmax(70px, 0.8fr)'
+  return `minmax(84px, 0.75fr) minmax(110px, 0.9fr) ${priceCols}`
+}
+
 function rowKey(row: Pick<ModelRow, 'model' | 'group'>): string {
   return `${row.model.model_name}-${row.group}`
 }
@@ -553,7 +558,7 @@ export function ModelSquare() {
         <div className="fixed inset-0 z-50 flex" onClick={() => setSelectedModel(null)}>
           <div className="flex-1 bg-black/30" />
           <div
-            className="relative h-full w-full max-w-lg overflow-y-auto border-l border-white/10 bg-[#0f0f1a] p-6 shadow-2xl"
+            className="relative h-full w-full max-w-[980px] overflow-y-auto border-l border-white/10 bg-[#0f0f1a] p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -625,58 +630,41 @@ export function ModelSquare() {
                       {t('portal.page.models.sitePrice')} · {t('Per 1M tokens')}
                     </span>
                   </div>
-                  {selectedDynamicTiers.length > 1 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {selectedDynamicTiers.map((tier) => {
-                        const active = selectedActiveTier?.label === tier.label
-                        return (
-                          <button
-                            key={`detail-tier-${tier.label}`}
-                            type="button"
-                            onClick={() => {
-                              setTierSelection((prev) => ({ ...prev, [selectedKey]: tier.label }))
-                            }}
-                            className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
-                              active
-                                ? 'border-indigo-400/50 bg-indigo-500/20 text-indigo-100'
-                                : 'border-white/10 bg-white/[0.03] text-white/50 hover:bg-white/[0.06] hover:text-white/75'
-                            }`}
-                          >
-                            {tier.label || t('Default')}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[520px] text-sm">
-                      <thead>
-                        <tr className="border-b border-white/10 text-xs text-white/40">
-                          <th className="pb-2 text-left font-medium">{t('Tier')}</th>
-                          <th className="pb-2 text-left font-medium">{t('Conditions')}</th>
-                          {selectedTierFields.map((field) => (
-                            <th key={field.field} className="pb-2 text-right font-medium">
-                              {t(field.labelKey)}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
+                    <div className="min-w-[560px] overflow-hidden rounded-lg border border-white/10">
+                      <div
+                        className="grid gap-1.5 border-b border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/40"
+                        style={{
+                          gridTemplateColumns: tierGridColumns(selectedTierFields.length),
+                        }}
+                      >
+                        <div>{t('Tier')}</div>
+                        <div>{t('Conditions')}</div>
+                        {selectedTierFields.map((field) => (
+                          <div key={field.field} className="text-right">
+                            {t(field.labelKey)}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="divide-y divide-white/8">
                         {selectedDynamicTiers.map((tier) => {
                           const active = selectedActiveTier?.label === tier.label
                           return (
-                            <tr
+                            <div
                               key={`detail-tier-row-${tier.label}`}
-                              className={`border-b border-white/8 ${active ? 'bg-indigo-500/10' : ''}`}
+                              className={`grid gap-1.5 px-3 py-3 ${active ? 'bg-indigo-500/10' : 'bg-white/[0.01]'}`}
+                              style={{
+                                gridTemplateColumns: tierGridColumns(selectedTierFields.length),
+                              }}
                             >
-                              <td className="py-3 align-top">
+                              <div className="pt-0.5">
                                 <span className="rounded-md bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-200">
                                   {tier.label || t('Default')}
                                 </span>
-                              </td>
-                              <td className="py-3 pr-3 align-top text-xs text-white/50">
+                              </div>
+                              <div className="text-xs leading-5 text-white/50">
                                 {tierConditionsSummary(tier.conditions, t)}
-                              </td>
+                              </div>
                               {selectedTierFields.map((field) => {
                                 const value = Number(tier[field.field] ?? 0)
                                 const cls =
@@ -686,16 +674,16 @@ export function ModelSquare() {
                                       ? 'text-amber-300'
                                       : 'text-white'
                                 return (
-                                  <td key={field.field} className={`py-3 text-right align-top font-mono text-xs font-semibold ${cls}`}>
+                                  <div key={field.field} className={`text-right font-mono text-xs font-semibold ${cls}`}>
                                     {value > 0 ? formatCurrencyAmount(value * selectedModel.ratio, '¥') : '-'}
-                                  </td>
+                                  </div>
                                 )
                               })}
-                            </tr>
+                            </div>
                           )
                         })}
-                      </tbody>
-                    </table>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (
