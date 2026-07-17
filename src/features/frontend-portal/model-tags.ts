@@ -60,7 +60,7 @@ type BadgeDef = {
 }
 
 const BADGE_DEFS: BadgeDef[] = [
-  { match: ['new', '新', '🆕'], variant: 'red', i18nKey: 'NEW' },
+  { match: ['new', 'nwe', '新', '🆕'], variant: 'red', i18nKey: 'NEW' },
   { match: ['hot', '热', '火', '🔥'], variant: 'orange', icon: '🔥' },
   { match: ['turbo', 'fast', '极速', '⚡', '⚡️'], variant: 'amber', icon: '⚡' },
   { match: ['recommend', 'pick', '推荐'], variant: 'violet', icon: '⭐' },
