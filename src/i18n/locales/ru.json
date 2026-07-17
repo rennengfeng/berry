@@ -4485,6 +4485,15 @@
     "Zero retention": "Без хранения данных",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "portal.page.models.officialPrice": "Официальная цена",
+    "portal.page.models.sitePrice": "Цена сайта",
+    "portal.tag.text": "Текст",
+    "portal.tag.image": "Изображение",
+    "portal.tag.voice": "Голос",
+    "portal.tag.video": "Видео",
+    "portal.tag.visual": "Визуальный",
+    "portal.tag.tools": "Инструменты",
+    "portal.tag.files": "Файлы"
   }
 }

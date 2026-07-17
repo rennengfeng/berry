@@ -4476,6 +4476,15 @@
     "Zero retention": "Aucune rétention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "portal.page.models.officialPrice": "Prix officiel",
+    "portal.page.models.sitePrice": "Prix du site",
+    "portal.tag.text": "Texte",
+    "portal.tag.image": "Image",
+    "portal.tag.voice": "Voix",
+    "portal.tag.video": "Vidéo",
+    "portal.tag.visual": "Visuel",
+    "portal.tag.tools": "Outils",
+    "portal.tag.files": "Fichiers"
   }
 }

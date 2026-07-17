@@ -4476,6 +4476,15 @@
     "Zero retention": "Không lưu dữ liệu",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "portal.page.models.officialPrice": "Giá chính thức",
+    "portal.page.models.sitePrice": "Giá của trang",
+    "portal.tag.text": "Văn bản",
+    "portal.tag.image": "Hình ảnh",
+    "portal.tag.voice": "Giọng nói",
+    "portal.tag.video": "Video",
+    "portal.tag.visual": "Thị giác",
+    "portal.tag.tools": "Công cụ",
+    "portal.tag.files": "Tệp"
   }
 }

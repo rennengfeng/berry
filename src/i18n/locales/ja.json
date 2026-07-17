@@ -4476,6 +4476,15 @@
     "Zero retention": "データ保持なし",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "portal.page.models.officialPrice": "公式価格",
+    "portal.page.models.sitePrice": "当サイト価格",
+    "portal.tag.text": "テキスト",
+    "portal.tag.image": "画像",
+    "portal.tag.voice": "音声",
+    "portal.tag.video": "動画",
+    "portal.tag.visual": "ビジュアル",
+    "portal.tag.tools": "ツール",
+    "portal.tag.files": "ファイル"
   }
 }

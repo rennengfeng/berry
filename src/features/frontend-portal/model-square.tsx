@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Search, ExternalLink, MessageSquare, BookOpen, X, Copy, Type, Image } from 'lucide-react'
+import { Search, MessageSquare, X, Copy } from 'lucide-react'
 import { toast } from 'sonner'
-import { formatCurrencyFromUSD } from '@/lib/currency'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { api } from '@/lib/api'
 import { getFrontendModels } from './api'
+import { parseModelTags } from './model-tags'
+import { ModelBadges } from './model-badges'
+import { ModelModalityBadge } from './model-modality-badge'
+import { ModelModalities } from './model-modalities'
 import type { FrontendModel } from './types'
 import { Link } from '@tanstack/react-router'
 
@@ -16,6 +19,15 @@ type ModelRow = {
   model: FrontendModel
   group: string
   ratio: number
+  parsed: ReturnType<typeof parseModelTags>
+}
+
+function formatCurrencyAmount(value: number, symbol: '$' | '¥'): string {
+  if (!Number.isFinite(value)) return '-'
+  return `${symbol}${value.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  })}`
 }
 
 function fixedBillingUnitLabel(model: FrontendModel, t: (key: string) => string): string {
@@ -29,7 +41,8 @@ function formatPrice(
   type: 'input' | 'output' | 'cache_create' | 'cache_read',
   mode: PriceMode,
   ratio: number,
-  t: (key: string) => string
+  t: (key: string) => string,
+  symbol: '$' | '¥'
 ): string {
   if (model.quota_type === 1) {
     if (type === 'input') {
@@ -37,7 +50,7 @@ function formatPrice(
         ? Number(model.official_model_price ?? model.model_price ?? 0)
         : Number(model.model_price ?? 0)
       const r = mode === 'site' ? ratio : 1
-      return `${formatCurrencyFromUSD(modelPrice * r, { digitsLarge: 4, digitsSmall: 4, abbreviate: false })} / ${fixedBillingUnitLabel(model, t)}`
+      return `${formatCurrencyAmount(modelPrice * r, symbol)} / ${fixedBillingUnitLabel(model, t)}`
     }
     return '-'
   }
@@ -49,28 +62,101 @@ function formatPrice(
   const base = modelRatio * 2 * r
 
   if (type === 'input') {
-    return formatCurrencyFromUSD(base, { digitsLarge: 4, digitsSmall: 4, abbreviate: false })
+    return formatCurrencyAmount(base, symbol)
   }
   if (type === 'output') {
     const multiplier = Number(model.completion_ratio || 1)
-    return formatCurrencyFromUSD(base * multiplier, { digitsLarge: 4, digitsSmall: 4, abbreviate: false })
+    return formatCurrencyAmount(base * multiplier, symbol)
   }
   if (type === 'cache_create') {
     const createRatio = model.create_cache_ratio
     if (createRatio == null) return '-'
-    return formatCurrencyFromUSD(base * Number(createRatio), { digitsLarge: 4, digitsSmall: 4, abbreviate: false })
+    return formatCurrencyAmount(base * Number(createRatio), symbol)
   }
   if (type === 'cache_read') {
     const cacheRatio = model.cache_ratio
     if (cacheRatio == null) return '-'
-    return formatCurrencyFromUSD(base * Number(cacheRatio), { digitsLarge: 4, digitsSmall: 4, abbreviate: false })
+    return formatCurrencyAmount(base * Number(cacheRatio), symbol)
   }
   return '-'
 }
 
+function formatFixedPrice(model: FrontendModel, mode: PriceMode, ratio: number, symbol: '$' | '¥'): string {
+  const modelPrice = mode === 'official'
+    ? Number(model.official_model_price ?? model.model_price ?? 0)
+    : Number(model.model_price ?? 0)
+  const r = mode === 'site' ? ratio : 1
+  return formatCurrencyAmount(modelPrice * r, symbol)
+}
+
+function isFixedUnitModel(model: FrontendModel): boolean {
+  return model.quota_type === 1 || model.billing_unit === 'image' || model.billing_unit === 'second'
+}
+
+function priceParts(
+  model: FrontendModel,
+  mode: PriceMode,
+  ratio: number,
+  symbol: '$' | '¥',
+  t: (key: string) => string
+): string[] {
+  if (isFixedUnitModel(model)) {
+    return [`${formatFixedPrice(model, mode, ratio, symbol)} / ${fixedBillingUnitLabel(model, t)}`]
+  }
+
+  const cacheRead = formatPrice(model, 'cache_read', mode, ratio, t, symbol)
+  return [
+    `${formatPrice(model, 'input', mode, ratio, t, symbol)} ${t('input')}`,
+    `${formatPrice(model, 'output', mode, ratio, t, symbol)} ${t('output')}`,
+    ...(cacheRead !== '-' ? [`${cacheRead} ${t('cache read')}`] : []),
+  ]
+}
+
+const TAG_I18N_KEY: Record<string, string> = {
+  '文本推理': 'portal.tag.text',
+  text: 'portal.tag.text',
+  reasoning: 'portal.tag.text',
+  '推理': 'portal.tag.text',
+  '图像': 'portal.tag.image',
+  image: 'portal.tag.image',
+  '音频': 'portal.tag.voice',
+  voice: 'portal.tag.voice',
+  audio: 'portal.tag.voice',
+  '视频': 'portal.tag.video',
+  video: 'portal.tag.video',
+  '视觉': 'portal.tag.visual',
+  visual: 'portal.tag.visual',
+  vision: 'portal.tag.visual',
+  tools: 'portal.tag.tools',
+  '工具': 'portal.tag.tools',
+  files: 'portal.tag.files',
+  file: 'portal.tag.files',
+  '文件': 'portal.tag.files',
+}
+
+function tagLabel(tag: string, t: (key: string) => string): string {
+  const key = TAG_I18N_KEY[tag] ?? TAG_I18N_KEY[tag.trim().toLowerCase()]
+  return key ? t(key) : tag
+}
+
 export function ModelSquare() {
-  const { t } = useTranslation()
-  const [priceMode, setPriceMode] = useState<PriceMode>('site')
+  const { t, i18n } = useTranslation()
+  const uiLang = i18n.language?.startsWith('ru') ? 'ru' : i18n.language?.startsWith('zh') ? 'zh' : 'en'
+  const pickDesc = (text?: string) => {
+    if (!text) return ''
+    const s = text.trim()
+    if (s.startsWith('{') && s.endsWith('}')) {
+      try {
+        const value = JSON.parse(s) as Record<string, string>
+        if (value && typeof value === 'object') {
+          return value[uiLang] || value.en || value.zh || Object.values(value)[0] || ''
+        }
+      } catch {
+        // Keep plain text descriptions unchanged when the value is not valid JSON.
+      }
+    }
+    return text
+  }
   const [searchValue, setSearchValue] = useState('')
   const [vendorFilter, setVendorFilter] = useState('all')
   const [groupFilter, setGroupFilter] = useState('all')
@@ -127,9 +213,7 @@ export function ModelSquare() {
   const allTags = useMemo(() => {
     const tagSet = new Set<string>()
     for (const m of models) {
-      if (m.tags) {
-        m.tags.split(',').map((t) => t.trim()).filter(Boolean).forEach((t) => tagSet.add(t))
-      }
+      for (const tag of parseModelTags(m.tags).visibleTags) tagSet.add(tag)
     }
     return Array.from(tagSet).sort()
   }, [models])
@@ -140,7 +224,7 @@ export function ModelSquare() {
       const q = searchValue.toLowerCase()
       filtered = filtered.filter((m) =>
         m.model_name.toLowerCase().includes(q) ||
-        (m.description ?? '').toLowerCase().includes(q) ||
+        (pickDesc(m.description) ?? '').toLowerCase().includes(q) ||
         (m.vendor_name ?? '').toLowerCase().includes(q)
       )
     }
@@ -152,8 +236,7 @@ export function ModelSquare() {
     }
     if (tagFilter !== 'all') {
       filtered = filtered.filter((m) => {
-        const tags = m.tags ? m.tags.split(',').map((t) => t.trim()) : []
-        return tags.includes(tagFilter)
+        return parseModelTags(m.tags).visibleTags.includes(tagFilter)
       })
     }
     if (statusFilter !== 'all') {
@@ -164,23 +247,30 @@ export function ModelSquare() {
       })
     }
 
+    const sorted = [...filtered].sort((a, b) => {
+      const oa = parseModelTags(a.tags).squareOrder
+      const ob = parseModelTags(b.tags).squareOrder
+      return oa - ob || a.model_name.localeCompare(b.model_name)
+    })
+
     const result: ModelRow[] = []
-    for (const model of filtered) {
+    for (const model of sorted) {
+      const parsed = parseModelTags(model.tags)
       const groups = groupFilter !== 'all'
         ? [groupFilter]
         : (model.enable_groups ?? [])
 
       if (groups.length === 0) {
-        result.push({ model, group: '', ratio: 1 })
+        result.push({ model, group: '', ratio: 1, parsed })
       } else {
         for (const g of groups) {
           const ratio = topLevelGroupRatio[g] ?? model.group_ratio?.[g] ?? 1
-          result.push({ model, group: g, ratio })
+          result.push({ model, group: g, ratio, parsed })
         }
       }
     }
     return result
-  }, [models, searchValue, vendorFilter, groupFilter, tagFilter, statusFilter, perfIndex, topLevelGroupRatio])
+  }, [models, searchValue, vendorFilter, groupFilter, tagFilter, statusFilter, perfIndex, topLevelGroupRatio, uiLang])
 
   const getRowStatus = (row: ModelRow): 'available' | 'degraded' | 'unknown' => {
     const monitors = row.model.monitors ?? []
@@ -269,71 +359,24 @@ export function ModelSquare() {
       ) : rows.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {rows.map((row) => {
-            const { model, group, ratio } = row
+            const { model, group, ratio, parsed } = row
             const status = getRowStatus(row)
-
-            // Parse tags from model.tags string
-            const rawTags = model.tags ? model.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
-            const tagColors: Record<string, string> = {
-              '对话': 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
-              'chat': 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
-              'tools': 'bg-purple-500/10 text-purple-400 border border-purple-500/20',
-              'moe': 'bg-pink-500/10 text-pink-400 border border-pink-500/20',
-              'vision': 'bg-green-500/10 text-green-400 border border-green-500/20',
-              '视觉': 'bg-green-500/10 text-green-400 border border-green-500/20',
-              'prefix': 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20',
-              'fim': 'bg-orange-500/10 text-orange-400 border border-orange-500/20',
-              '推理': 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20',
-              '推理模型': 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20',
-              '生图': 'bg-rose-500/10 text-rose-400 border border-rose-500/20',
-            }
 
             return (
               <div
                 key={`${model.model_name}-${group}`}
                 onClick={() => setSelectedModel(row)}
-                className="group cursor-pointer rounded-xl border border-white/8 bg-white/[0.02] p-5 transition hover:border-indigo-400/30 hover:shadow-sm"
+                className="group relative cursor-pointer rounded-xl border border-white/8 bg-white/[0.02] p-5 transition hover:border-indigo-400/30 hover:shadow-sm"
               >
+                <ModelBadges badges={parsed.badges} cornerClass="rounded-tr-xl" />
                 {/* Row 1: Icon + Name + Modality badge + Copy */}
                 <div className="mb-2 flex items-center gap-2">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/[0.04]">
                     {getLobeIcon(model.icon || vendorIconMap.get(model.vendor_name ?? ''), 18)}
                   </div>
                   <h3 className="text-base font-bold text-white line-clamp-1">{model.model_name}</h3>
-                  {/* Modality badge - small icon with shadow like OpenRouter */}
-                  {(() => {
-                    const name = model.model_name.toLowerCase()
-                    const tags = model.tags?.toLowerCase() ?? ''
-                    const isImage = name.includes('image') || name.includes('dall-e') || name.includes('midjourney') || name.includes('stable-diffusion') || name.includes('flux') || tags.includes('生图') || name.includes('imagen') || name.includes('veo') || name.includes('generate')
-                    const isVision = name.includes('vision') || tags.includes('视觉') || tags.includes('vision')
-                    const isAudio = name.includes('tts') || name.includes('whisper') || name.includes('transcribe') || name.includes('audio') || tags.includes('语音')
-                    if (isImage) {
-                      return (
-                        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded bg-gradient-to-br from-pink-400 to-rose-500 shadow-sm shadow-pink-200" title="Image">
-                          <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></svg>
-                        </span>
-                      )
-                    }
-                    if (isAudio) {
-                      return (
-                        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded bg-gradient-to-br from-amber-400 to-orange-500 shadow-sm shadow-amber-200" title="Audio">
-                          <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="22" /></svg>
-                        </span>
-                      )
-                    }
-                    if (isVision) {
-                      return (
-                        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded bg-gradient-to-br from-emerald-400 to-teal-500 shadow-sm shadow-emerald-200" title="Vision">
-                          <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
-                        </span>
-                      )
-                    }
-                    return (
-                      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded bg-gradient-to-br from-indigo-400 to-violet-500 shadow-sm shadow-purple-500/20" title="Text">
-                        <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M4 7V4h16v3" /><path d="M9 20h6" /><path d="M12 4v16" /></svg>
-                      </span>
-                    )
-                  })()}
+                  <ModelModalities input={parsed.inputModalities} output={parsed.outputModalities} />
+                  <ModelModalityBadge modelName={model.model_name} tags={model.tags} />
                   <button
                     type="button"
                     onClick={(e) => {
@@ -350,29 +393,41 @@ export function ModelSquare() {
 
                 {/* Row 2: Description */}
                 <p className="mb-3 text-xs leading-relaxed text-white/50 line-clamp-2">
-                  {model.description || t('No description available')}
+                  {pickDesc(model.description) || t('No description available')}
                 </p>
 
-                {/* Row 3: Provider + Pricing (single line, OpenRouter style) */}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/40">
-                  <span>by <span className="text-white/60">{model.vendor_name || 'Unknown'}</span></span>
-                  <span className="text-gray-200">|</span>
-                  {model.quota_type === 1 ? (
-                    <span>{formatPrice(model, 'input', 'official', ratio, t)}</span>
-                  ) : (
-                    <>
-                      <span>{formatPrice(model, 'input', 'official', ratio, t)} {t('input')}</span>
-                      <span className="text-gray-200">|</span>
-                      <span>{formatPrice(model, 'output', 'official', ratio, t)} {t('output')}</span>
-                      {formatPrice(model, 'cache_read', 'official', ratio, t) !== '-' && (
-                        <>
-                          <span className="text-gray-200">|</span>
-                          <span>{formatPrice(model, 'cache_read', 'official', ratio, t)} {t('cache read')}</span>
-                        </>
-                      )}
-                    </>
-                  )}
+                {/* Row 3: Official + site pricing */}
+                <div className="space-y-1 text-xs text-white/40">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="font-medium text-white/60">{t('portal.page.models.officialPrice')}</span>
+                    {priceParts(model, 'official', ratio, '$', t).map((part) => (
+                      <span key={`official-${part}`} className="contents">
+                        <span className="text-gray-200">|</span>
+                        <span>{part}</span>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="font-medium text-white/70">{t('portal.page.models.sitePrice')}</span>
+                    {priceParts(model, 'site', ratio, '¥', t).map((part) => (
+                      <span key={`site-${part}`} className="contents">
+                        <span className="text-gray-200">|</span>
+                        <span>{part}</span>
+                      </span>
+                    ))}
+                  </div>
                 </div>
+
+                {/* Row 4: Tags */}
+                {parsed.visibleTags.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {parsed.visibleTags.map((tg) => (
+                      <span key={tg} className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-white/60">
+                        {tagLabel(tg, t)}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -417,7 +472,7 @@ export function ModelSquare() {
                 <h3 className="text-sm font-semibold text-white">{t('Basic Info')}</h3>
               </div>
               <p className="text-sm text-white/50">
-                {selectedModel.model.description || t('No model description available')}
+                {pickDesc(selectedModel.model.description) || t('No model description available')}
               </p>
             </div>
 
@@ -462,34 +517,35 @@ export function ModelSquare() {
                     </td>
                     <td className="py-2">
                       <span className="rounded-md bg-purple-500/10 px-2 py-0.5 text-xs text-purple-400">
-                        {selectedModel.model.quota_type === 1 ? fixedBillingUnitLabel(selectedModel.model, t) : t('Token-based')}
+                        {isFixedUnitModel(selectedModel.model) ? fixedBillingUnitLabel(selectedModel.model, t) : t('Token-based')}
                       </span>
                     </td>
                     <td className="py-2 text-right">
                       <div className="space-y-1">
-                        {selectedModel.model.quota_type === 1 ? (
+                        {isFixedUnitModel(selectedModel.model) ? (
                           <div className="text-xs">
-                            <span className="font-semibold text-white">{formatPrice(selectedModel.model, 'input', priceMode, selectedModel.ratio, t)}</span>
+                            <span className="font-semibold text-white">{formatFixedPrice(selectedModel.model, 'site', selectedModel.ratio, '¥')}</span>
+                            <span className="text-white/40"> / {fixedBillingUnitLabel(selectedModel.model, t)}</span>
                           </div>
                         ) : (
                           <>
                             <div className="text-xs">
-                              <span className="font-semibold text-white">{t('Input')} {formatPrice(selectedModel.model, 'input', priceMode, selectedModel.ratio, t)}</span>
+                              <span className="font-semibold text-white">{t('Input')} {formatPrice(selectedModel.model, 'input', 'site', selectedModel.ratio, t, '¥')}</span>
                               <span className="text-white/40"> / 1M Tokens</span>
                             </div>
                             <div className="text-xs">
-                              <span className="font-semibold text-white">{t('Output')} {formatPrice(selectedModel.model, 'output', priceMode, selectedModel.ratio, t)}</span>
+                              <span className="font-semibold text-white">{t('Output')} {formatPrice(selectedModel.model, 'output', 'site', selectedModel.ratio, t, '¥')}</span>
                               <span className="text-white/40"> / 1M Tokens</span>
                             </div>
-                            {formatPrice(selectedModel.model, 'cache_read', priceMode, selectedModel.ratio, t) !== '-' && (
+                            {formatPrice(selectedModel.model, 'cache_read', 'site', selectedModel.ratio, t, '¥') !== '-' && (
                               <div className="text-xs">
-                                <span className="font-semibold text-green-600">{t('Cache Read')} {formatPrice(selectedModel.model, 'cache_read', priceMode, selectedModel.ratio, t)}</span>
+                                <span className="font-semibold text-green-600">{t('Cache Read')} {formatPrice(selectedModel.model, 'cache_read', 'site', selectedModel.ratio, t, '¥')}</span>
                                 <span className="text-white/40"> / 1M Tokens</span>
                               </div>
                             )}
-                            {formatPrice(selectedModel.model, 'cache_create', priceMode, selectedModel.ratio, t) !== '-' && (
+                            {formatPrice(selectedModel.model, 'cache_create', 'site', selectedModel.ratio, t, '¥') !== '-' && (
                               <div className="text-xs">
-                                <span className="font-semibold text-amber-600">{t('Cache Create')} {formatPrice(selectedModel.model, 'cache_create', priceMode, selectedModel.ratio, t)}</span>
+                                <span className="font-semibold text-amber-600">{t('Cache Create')} {formatPrice(selectedModel.model, 'cache_create', 'site', selectedModel.ratio, t, '¥')}</span>
                                 <span className="text-white/40"> / 1M Tokens</span>
                               </div>
                             )}
