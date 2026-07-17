@@ -129,7 +129,8 @@ type CardPriceColumn = {
 function cardPriceColumns(
   model: FrontendModel,
   tier: ParsedTier | undefined,
-  ratio: number
+  ratio: number,
+  t: (key: string) => string
 ): CardPriceColumn[] {
   if (isFixedUnitModel(model)) {
     return [
@@ -476,7 +477,7 @@ export function ModelSquare() {
             const activeTier =
               dynamicTiers.find((tier) => tier.label === tierSelection[key]) ??
               dynamicTiers[0]
-            const priceColumns = cardPriceColumns(model, activeTier, ratio)
+            const priceColumns = cardPriceColumns(model, activeTier, ratio, t)
 
             return (
               <div
