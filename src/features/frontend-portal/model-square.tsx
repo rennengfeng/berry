@@ -129,23 +129,15 @@ type CardPriceColumn = {
 function cardPriceColumns(
   model: FrontendModel,
   tier: ParsedTier | undefined,
-  ratio: number,
-  t: (key: string) => string
+  ratio: number
 ): CardPriceColumn[] {
   if (isFixedUnitModel(model)) {
-    const unit = fixedBillingUnitLabel(model, t)
     return [
       {
         key: 'price',
         labelKey: 'Price',
-        official: formatFixedPrice(model, 'official', ratio, '$'),
-        site: formatFixedPrice(model, 'site', ratio, '¥'),
-      },
-      {
-        key: 'unit',
-        labelKey: 'Billing Type',
-        official: unit,
-        site: unit,
+        official: `${formatFixedPrice(model, 'official', ratio, '$')}/次`,
+        site: `${formatFixedPrice(model, 'site', ratio, '¥')}/次`,
       },
     ]
   }
@@ -157,8 +149,8 @@ function cardPriceColumns(
       return [{
         key: item.field,
         labelKey: item.labelKey,
-        official: formatCurrencyAmount(value, '$'),
-        site: formatCurrencyAmount(value * ratio, '¥'),
+        official: `${formatCurrencyAmount(value, '$')}/M`,
+        site: `${formatCurrencyAmount(value * ratio, '¥')}/M`,
         tone: item.tone,
       }]
     })
@@ -179,7 +171,13 @@ function cardPriceColumns(
     const official = formatPrice(model, field.key, 'official', ratio, t, '$')
     const site = formatPrice(model, field.key, 'site', ratio, t, '¥')
     if (official === '-' && site === '-') return []
-    return [{ key: field.key, labelKey: field.labelKey, official, site, tone: field.tone }]
+    return [{
+      key: field.key,
+      labelKey: field.labelKey,
+      official: official === '-' ? '-' : `${official}/M`,
+      site: site === '-' ? '-' : `${site}/M`,
+      tone: field.tone,
+    }]
   })
 }
 
@@ -478,7 +476,7 @@ export function ModelSquare() {
             const activeTier =
               dynamicTiers.find((tier) => tier.label === tierSelection[key]) ??
               dynamicTiers[0]
-            const priceColumns = cardPriceColumns(model, activeTier, ratio, t)
+            const priceColumns = cardPriceColumns(model, activeTier, ratio)
 
             return (
               <div
@@ -541,43 +539,45 @@ export function ModelSquare() {
                 )}
 
                 {/* Row 3: Price table */}
-                <div className="overflow-hidden rounded-md border border-white/10 text-xs">
-                  <div
-                    className="grid items-center gap-px bg-white/10 text-center font-semibold text-white/70"
-                    style={{ gridTemplateColumns: cardPriceGridColumns(priceColumns.length) }}
-                  >
-                    <div className="bg-white/[0.04] px-2 py-1">{t('Price')}</div>
-                    {priceColumns.map((column) => (
-                      <div key={`head-${column.key}`} className="bg-white/[0.04] px-1.5 py-1 leading-tight">
-                        {t(column.labelKey)}
+                <div className="mx-2 text-xs">
+                  <div className="space-y-1">
+                    <div
+                      className="grid items-center text-center font-semibold text-white/65"
+                      style={{ gridTemplateColumns: cardPriceGridColumns(priceColumns.length) }}
+                    >
+                      <div className="px-1.5 py-0.5">{t('Price')}</div>
+                      {priceColumns.map((column) => (
+                        <div key={`head-${column.key}`} className="px-1.5 py-0.5 leading-tight">
+                          {t(column.labelKey)}
+                        </div>
+                      ))}
+                    </div>
+                    {[
+                      { key: 'official', label: t('portal.page.models.officialPrice'), valueKey: 'official' as const },
+                      { key: 'site', label: t('portal.page.models.sitePrice'), valueKey: 'site' as const },
+                    ].map((row) => (
+                      <div
+                        key={row.key}
+                        className="grid items-center text-center text-white/90"
+                        style={{ gridTemplateColumns: cardPriceGridColumns(priceColumns.length) }}
+                      >
+                        <div className="px-1.5 py-0.5 font-semibold">{row.label}</div>
+                        {priceColumns.map((column) => {
+                          const cls =
+                            column.tone === 'green'
+                              ? 'text-emerald-300'
+                              : column.tone === 'amber'
+                                ? 'text-amber-300'
+                                : 'text-white'
+                          return (
+                            <div key={`${row.key}-${column.key}`} className={`px-1.5 py-0.5 font-medium ${cls}`}>
+                              {column[row.valueKey]}
+                            </div>
+                          )
+                        })}
                       </div>
                     ))}
                   </div>
-                  {[
-                    { key: 'official', label: t('portal.page.models.officialPrice'), valueKey: 'official' as const },
-                    { key: 'site', label: t('portal.page.models.sitePrice'), valueKey: 'site' as const },
-                  ].map((row) => (
-                    <div
-                      key={row.key}
-                      className="grid items-center gap-px bg-white/10 text-center text-white/90"
-                      style={{ gridTemplateColumns: cardPriceGridColumns(priceColumns.length) }}
-                    >
-                      <div className="bg-[#0f0f1a] px-2 py-1 font-semibold">{row.label}</div>
-                      {priceColumns.map((column) => {
-                        const cls =
-                          column.tone === 'green'
-                            ? 'text-emerald-300'
-                            : column.tone === 'amber'
-                              ? 'text-amber-300'
-                              : 'text-white'
-                        return (
-                          <div key={`${row.key}-${column.key}`} className={`bg-[#0f0f1a] px-1.5 py-1 font-medium ${cls}`}>
-                            {column[row.valueKey]}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ))}
                 </div>
 
                 {/* Row 4: Tags */}
