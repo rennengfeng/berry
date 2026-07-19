@@ -29,8 +29,8 @@ import { Route as PortalLogsRouteImport } from './routes/portal/logs'
 import { Route as PortalDocsRouteImport } from './routes/portal/docs'
 import { Route as PortalDashboardRouteImport } from './routes/portal/dashboard'
 import { Route as PortalContactRouteImport } from './routes/portal/contact'
-import { Route as PortalCanvasRouteImport } from './routes/portal/canvas'
 import { Route as PortalChatRouteImport } from './routes/portal/chat'
+import { Route as PortalCanvasRouteImport } from './routes/portal/canvas'
 import { Route as PortalAffiliateRouteImport } from './routes/portal/affiliate'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
 import { Route as ConsoleTopupRouteImport } from './routes/console/topup'
@@ -180,14 +180,14 @@ const PortalContactRoute = PortalContactRouteImport.update({
   path: '/contact',
   getParentRoute: () => PortalRouteRoute,
 } as any)
-const PortalCanvasRoute = PortalCanvasRouteImport.update({
-  id: '/canvas',
-  path: '/canvas',
-  getParentRoute: () => PortalRouteRoute,
-} as any)
 const PortalChatRoute = PortalChatRouteImport.update({
   id: '/chat',
   path: '/chat',
+  getParentRoute: () => PortalRouteRoute,
+} as any)
+const PortalCanvasRoute = PortalCanvasRouteImport.update({
+  id: '/canvas',
+  path: '/canvas',
   getParentRoute: () => PortalRouteRoute,
 } as any)
 const PortalAffiliateRoute = PortalAffiliateRouteImport.update({
@@ -492,6 +492,7 @@ export interface FileRoutesByFullPath {
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/portal/affiliate': typeof PortalAffiliateRoute
+  '/portal/canvas': typeof PortalCanvasRoute
   '/portal/chat': typeof PortalChatRoute
   '/portal/contact': typeof PortalContactRoute
   '/portal/dashboard': typeof PortalDashboardRoute
@@ -561,6 +562,7 @@ export interface FileRoutesByTo {
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/portal/affiliate': typeof PortalAffiliateRoute
+  '/portal/canvas': typeof PortalCanvasRoute
   '/portal/chat': typeof PortalChatRoute
   '/portal/contact': typeof PortalContactRoute
   '/portal/dashboard': typeof PortalDashboardRoute
@@ -635,6 +637,7 @@ export interface FileRoutesById {
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/portal/affiliate': typeof PortalAffiliateRoute
+  '/portal/canvas': typeof PortalCanvasRoute
   '/portal/chat': typeof PortalChatRoute
   '/portal/contact': typeof PortalContactRoute
   '/portal/dashboard': typeof PortalDashboardRoute
@@ -708,6 +711,7 @@ export interface FileRouteTypes {
     | '/console/topup'
     | '/oauth/$provider'
     | '/portal/affiliate'
+    | '/portal/canvas'
     | '/portal/chat'
     | '/portal/contact'
     | '/portal/dashboard'
@@ -777,6 +781,7 @@ export interface FileRouteTypes {
     | '/console/topup'
     | '/oauth/$provider'
     | '/portal/affiliate'
+    | '/portal/canvas'
     | '/portal/chat'
     | '/portal/contact'
     | '/portal/dashboard'
@@ -850,6 +855,7 @@ export interface FileRouteTypes {
     | '/console/topup'
     | '/oauth/$provider'
     | '/portal/affiliate'
+    | '/portal/canvas'
     | '/portal/chat'
     | '/portal/contact'
     | '/portal/dashboard'
@@ -1064,18 +1070,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortalContactRouteImport
       parentRoute: typeof PortalRouteRoute
     }
-    '/portal/canvas': {
-      id: '/portal/canvas'
-      path: '/canvas'
-      fullPath: '/portal/canvas'
-      preLoaderRoute: typeof PortalCanvasRouteImport
-      parentRoute: typeof PortalRouteRoute
-    }
     '/portal/chat': {
       id: '/portal/chat'
       path: '/chat'
       fullPath: '/portal/chat'
       preLoaderRoute: typeof PortalChatRouteImport
+      parentRoute: typeof PortalRouteRoute
+    }
+    '/portal/canvas': {
+      id: '/portal/canvas'
+      path: '/canvas'
+      fullPath: '/portal/canvas'
+      preLoaderRoute: typeof PortalCanvasRouteImport
       parentRoute: typeof PortalRouteRoute
     }
     '/portal/affiliate': {
@@ -1561,8 +1567,8 @@ const AuthenticatedRouteRouteWithChildren =
 
 interface PortalRouteRouteChildren {
   PortalAffiliateRoute: typeof PortalAffiliateRoute
-  PortalChatRoute: typeof PortalChatRoute
   PortalCanvasRoute: typeof PortalCanvasRoute
+  PortalChatRoute: typeof PortalChatRoute
   PortalContactRoute: typeof PortalContactRoute
   PortalDashboardRoute: typeof PortalDashboardRoute
   PortalDocsRoute: typeof PortalDocsRoute
@@ -1577,8 +1583,8 @@ interface PortalRouteRouteChildren {
 
 const PortalRouteRouteChildren: PortalRouteRouteChildren = {
   PortalAffiliateRoute: PortalAffiliateRoute,
-  PortalChatRoute: PortalChatRoute,
   PortalCanvasRoute: PortalCanvasRoute,
+  PortalChatRoute: PortalChatRoute,
   PortalContactRoute: PortalContactRoute,
   PortalDashboardRoute: PortalDashboardRoute,
   PortalDocsRoute: PortalDocsRoute,

@@ -18,6 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 export { DataTablePagination } from './pagination'
 export { DataTableColumnHeader } from './column-header'
+export { BadgeCell } from './core/badge-cell'
+export { TruncatedCell } from './core/truncated-cell'
 export { DataTableFacetedFilter } from './faceted-filter'
 export { DataTableViewOptions } from './view-options'
 export { DataTableToolbar } from './toolbar'
