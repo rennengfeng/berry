@@ -213,7 +213,7 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
           return <span className='text-muted-foreground'>-</span>
 
         return (
-          <div className='flex max-w-[360px] flex-wrap gap-1.5'>
+          <div className='flex min-w-[220px] max-w-[420px] flex-col gap-1.5'>
             {groups.map((item) => {
               const ratio =
                 item && item !== 'auto' ? groupRatios[item] : undefined
@@ -222,7 +222,7 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
                   <Tooltip key={item}>
                     <TooltipTrigger
                       render={
-                        <span className='inline-flex items-center gap-1.5 text-xs' />
+                        <span className='inline-flex w-fit items-center gap-1.5 text-xs' />
                       }
                     >
                       <GroupBadge group='auto' />
@@ -245,7 +245,11 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
                   </Tooltip>
                 )
               }
-              return <GroupBadge key={item} group={item} ratio={ratio} />
+              return (
+                <div key={item} className='flex w-fit items-center gap-2'>
+                  <GroupBadge group={item} ratio={ratio} />
+                </div>
+              )
             })}
           </div>
         )
