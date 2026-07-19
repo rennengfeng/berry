@@ -28,6 +28,18 @@ import { useAuthStore } from '@/stores/auth-store'
 // Base URL: empty string for same-origin API requests
 const baseURL = ''
 
+function isPublicAuthPath(pathname: string): boolean {
+  return (
+    pathname === '/' ||
+    pathname === '/sign-in' ||
+    pathname === '/sign-up' ||
+    pathname === '/setup' ||
+    pathname.startsWith('/pricing') ||
+    pathname.startsWith('/rankings') ||
+    pathname.startsWith('/oauth/')
+  )
+}
+
 // Create axios instance with default config
 export const api = axios.create({
   baseURL,
@@ -97,11 +109,16 @@ api.interceptors.response.use(
 
       if (status === 401) {
         // Unauthorized: clear auth state and show toast
-        toast.error(i18next.t('Session expired!'))
         try {
           useAuthStore.getState().auth.reset()
         } catch {
           /* empty */
+        }
+        if (
+          typeof window === 'undefined' ||
+          !isPublicAuthPath(window.location.pathname)
+        ) {
+          toast.error(i18next.t('Session expired!'))
         }
       } else {
         // Other errors: show error message from response or default

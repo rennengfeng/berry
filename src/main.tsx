@@ -44,6 +44,18 @@ import './styles/index.css'
 // Ensure VChart theme is initialized before any chart mounts (prevents white default theme flash)
 // VChart theme is driven by our ThemeProvider (html.light/html.dark) via per-chart `theme` prop.
 
+function isPublicAuthPath(pathname: string): boolean {
+  return (
+    pathname === '/' ||
+    pathname === '/sign-in' ||
+    pathname === '/sign-up' ||
+    pathname === '/setup' ||
+    pathname.startsWith('/pricing') ||
+    pathname.startsWith('/rankings') ||
+    pathname.startsWith('/oauth/')
+  )
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -79,7 +91,10 @@ const queryClient = new QueryClient({
       if (error instanceof AxiosError) {
         if (error.response?.status === 401) {
           const currentPath = router.history.location.pathname
-          if (currentPath === '/sign-in') return
+          if (isPublicAuthPath(currentPath)) {
+            useAuthStore.getState().auth.reset()
+            return
+          }
           toast.error(i18next.t('Session expired!'))
           useAuthStore.getState().auth.reset()
           router.navigate({ to: '/sign-in', search: { redirect: currentPath } })

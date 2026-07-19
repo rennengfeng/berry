@@ -47,16 +47,18 @@ function getQuotaProgressColor(percentage: number): string {
   return '[&_[data-slot=progress-indicator]]:bg-emerald-500'
 }
 
-function useGroupRatios(): Record<string, number> {
+type GroupRatio = number | string
+
+function useGroupRatios(): Record<string, GroupRatio> {
   const { data } = useQuery({
     queryKey: ['user-self-groups'],
     queryFn: getUserGroups,
     staleTime: 5 * 60 * 1000,
     select: (res) => {
       if (!res.success || !res.data) return {}
-      const ratios: Record<string, number> = {}
+      const ratios: Record<string, GroupRatio> = {}
       for (const [group, info] of Object.entries(res.data)) {
-        if (typeof info.ratio === 'number') {
+        if (typeof info.ratio === 'number' || typeof info.ratio === 'string') {
           ratios[group] = info.ratio
         }
       }
@@ -65,6 +67,11 @@ function useGroupRatios(): Record<string, number> {
   })
 
   return data ?? {}
+}
+
+function formatGroupRatio(ratio: GroupRatio | undefined): string {
+  if (ratio === undefined || ratio === null || ratio === '') return '-'
+  return typeof ratio === 'number' ? `${ratio}x` : ratio
 }
 
 function splitGroups(group: string): string[] {
@@ -213,7 +220,7 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
           return <span className='text-muted-foreground'>-</span>
 
         return (
-          <div className='flex min-w-[220px] max-w-[420px] flex-col gap-1.5'>
+          <div className='grid min-w-[260px] max-w-[460px] grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1.5'>
             {groups.map((item) => {
               const ratio =
                 item && item !== 'auto' ? groupRatios[item] : undefined
@@ -222,18 +229,15 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
                   <Tooltip key={item}>
                     <TooltipTrigger
                       render={
-                        <span className='inline-flex w-fit items-center gap-1.5 text-xs' />
+                        <div className='contents text-xs' />
                       }
                     >
-                      <GroupBadge group='auto' />
-                      {apiKey.cross_group_retry && (
-                        <>
-                          <span className='text-muted-foreground/30'>·</span>
-                          <span className='text-muted-foreground/60'>
-                            {t('Cross-group')}
-                          </span>
-                        </>
-                      )}
+                      <div className='min-w-0'>
+                        <GroupBadge group='auto' />
+                      </div>
+                      <div className='text-muted-foreground whitespace-nowrap text-right text-xs'>
+                        {apiKey.cross_group_retry ? t('Cross-group') : '-'}
+                      </div>
                     </TooltipTrigger>
                     <TooltipContent>
                       <span className='text-xs'>
@@ -246,8 +250,15 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
                 )
               }
               return (
-                <div key={item} className='flex w-fit items-center gap-2'>
-                  <GroupBadge group={item} ratio={ratio} />
+                <div key={item} className='contents'>
+                  <div className='min-w-0'>
+                    <GroupBadge group={item} />
+                  </div>
+                  <div
+                    className='text-info whitespace-nowrap text-right font-mono text-xs tabular-nums'
+                  >
+                    {formatGroupRatio(ratio)}
+                  </div>
                 </div>
               )
             })}

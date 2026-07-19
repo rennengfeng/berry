@@ -4,12 +4,9 @@ import {
   Boxes,
   ChevronDown,
   ChevronRight,
-  ExternalLink,
-  FileText,
   Globe,
   Headphones,
   Lock,
-  Moon,
   Shield,
   Zap,
   DollarSign,
@@ -31,14 +28,14 @@ function useHomePageContent() {
   return useQuery({
     queryKey: ['home-page-content'],
     queryFn: async () => {
-      const res = await api.get('/api/home_page_content')
+      const res = await api.get('/api/home_page_content', {
+        skipErrorHandler: true,
+      } as Record<string, unknown>)
       return (res.data?.data as string) || ''
     },
     staleTime: 120_000,
   })
 }
-
-const NAV_LINKS: Array<{ label: string; to: string; external?: boolean; useDocsUrl?: boolean }> = []
 
 function LandingPage() {
   const { t, i18n } = useTranslation()
@@ -71,7 +68,9 @@ function LandingPage() {
   const { data: pricingData } = useQuery({
     queryKey: ['landing-pricing'],
     queryFn: async () => {
-      const res = await api.get('/api/pricing')
+      const res = await api.get('/api/pricing', {
+        skipErrorHandler: true,
+      } as Record<string, unknown>)
       return res.data?.data as { vendors?: Array<{ id: number; name: string; icon?: string }>; models?: Array<{ model_name: string; vendor_name?: string }> } | undefined
     },
     staleTime: 120_000,
