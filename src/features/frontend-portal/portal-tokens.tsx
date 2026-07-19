@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { api } from '@/lib/api'
+import { api, getUserGroups } from '@/lib/api'
 import { KeyRound, Search, Plus, CheckCircle, XCircle, Copy, Eye, EyeOff, Loader2, ArrowRightLeft, Power, PowerOff, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ApiKeysProvider, useApiKeys } from '@/features/keys/components/api-keys-provider'
@@ -10,6 +10,24 @@ import { CCSwitchDialog } from '@/features/keys/components/dialogs/cc-switch-dia
 import { deleteApiKey, updateApiKeyStatus } from '@/features/keys/api'
 import { quotaUnitsToDollars } from '@/lib/format'
 import type { ApiKey } from '@/features/keys/types'
+
+type GroupRatio = number | string
+
+function splitTokenGroups(group?: string | null): string[] {
+  return Array.from(
+    new Set(
+      (group || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  )
+}
+
+function formatGroupRatio(ratio: GroupRatio | undefined): string {
+  if (ratio === undefined || ratio === null || ratio === '') return '—'
+  return typeof ratio === 'number' ? `${ratio}x` : ratio
+}
 
 export function PortalTokens() {
   return (
@@ -30,7 +48,7 @@ function PortalTokensInner() {
   const { resolveRealKey, resolvedKeys, loadingKeys, markKeyCopied, copiedKeyId } = useApiKeys()
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['portal-tokens', page, search],
+    queryKey: ['portal-tokens', page, pageSize, search],
     queryFn: async () => {
       const params: Record<string, unknown> = { p: page, size: pageSize }
       if (search) params.keyword = search
@@ -38,6 +56,21 @@ function PortalTokensInner() {
       return res.data?.data as { items?: ApiKey[]; total?: number } | undefined
     },
     staleTime: 15_000,
+  })
+
+  const { data: groupRatios = {} } = useQuery({
+    queryKey: ['portal-user-groups-ratios'],
+    queryFn: async () => {
+      const res = await getUserGroups()
+      const ratios: Record<string, GroupRatio> = {}
+      for (const [group, info] of Object.entries(res.data ?? {})) {
+        if (typeof info.ratio === 'number' || typeof info.ratio === 'string') {
+          ratios[group] = info.ratio
+        }
+      }
+      return ratios
+    },
+    staleTime: 60_000,
   })
 
   const items = data?.items ?? []
@@ -206,6 +239,7 @@ function PortalTokensInner() {
                   <th className="px-3 py-2.5 text-center">{t('Status')}</th>
                   <th className="px-3 py-2.5 text-center">{t('Quota')}</th>
                   <th className="px-3 py-2.5 text-center">{t('Group')}</th>
+                  <th className="px-3 py-2.5 text-center">{t('Ratio')}</th>
                   <th className="px-3 py-2.5 text-center">{t('Key')}</th>
                   <th className="px-3 py-2.5 text-center">{t('Models')}</th>
                   <th className="px-3 py-2.5 text-center">{t('Actions')}</th>
@@ -218,6 +252,7 @@ function PortalTokensInner() {
                   const isLoadingKey = loadingKeys[token.id]
                   const isCopied = copiedKeyId === token.id
                   const isHidden = !fullKey || hiddenKeys[token.id]
+                  const groups = splitTokenGroups(token.group)
                   return (
                     <tr key={token.id} className="border-b border-white/5 text-white/70 transition hover:bg-white/[0.03]">
                       <td className="px-3 py-3 text-center">
@@ -232,10 +267,35 @@ function PortalTokensInner() {
                         {formatQuota(token)}
                       </td>
                       <td className="px-3 py-3 text-center">
-                        {token.group ? (
-                          <span className="inline-flex items-center rounded-md bg-purple-500/10 px-2 py-0.5 text-xs text-purple-300">
-                            {token.group}
-                          </span>
+                        {groups.length > 0 ? (
+                          <div className="flex flex-col items-center gap-1">
+                            {groups.map((group) => (
+                              <span
+                                key={group}
+                                className="inline-flex max-w-[180px] items-center rounded-md bg-purple-500/10 px-2 py-0.5 text-xs text-purple-300"
+                                title={group}
+                              >
+                                <span className="truncate">{group}</span>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-white/30">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {groups.length > 0 ? (
+                          <div className="flex flex-col items-center gap-1 font-mono text-xs tabular-nums text-cyan-300">
+                            {groups.map((group) => (
+                              <span key={group} className="leading-5">
+                                {group === 'auto'
+                                  ? token.cross_group_retry
+                                    ? t('Cross-group')
+                                    : '—'
+                                  : formatGroupRatio(groupRatios[group])}
+                              </span>
+                            ))}
+                          </div>
                         ) : (
                           <span className="text-xs text-white/30">—</span>
                         )}

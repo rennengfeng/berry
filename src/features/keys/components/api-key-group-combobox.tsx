@@ -16,10 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Check, ChevronsUpDown } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Check, ChevronsUpDown, Search, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { cn } from '@/lib/utils'
+
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -35,6 +35,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { cn } from '@/lib/utils'
 
 export type ApiKeyGroupOption = {
   value: string
@@ -47,14 +48,6 @@ type ApiKeyGroupComboboxProps = {
   options: ApiKeyGroupOption[]
   value?: string
   onValueChange: (value: string) => void
-  placeholder?: string
-  disabled?: boolean
-}
-
-type ApiKeyGroupMultiSelectProps = {
-  options: ApiKeyGroupOption[]
-  selected: string[]
-  onChange: (values: string[]) => void
   placeholder?: string
   disabled?: boolean
 }
@@ -213,123 +206,5 @@ export function ApiKeyGroupCombobox({
         </Command>
       </PopoverContent>
     </Popover>
-  )
-}
-
-export function ApiKeyGroupMultiSelect({
-  options,
-  selected,
-  onChange,
-  placeholder,
-  disabled,
-}: ApiKeyGroupMultiSelectProps) {
-  const { t } = useTranslation()
-  const [searchValue, setSearchValue] = useState('')
-
-  const filteredOptions = useMemo(() => {
-    const search = searchValue.trim().toLowerCase()
-    if (!search) return options
-
-    return options.filter((option) => {
-      const ratioText = String(option.ratio ?? '').toLowerCase()
-      return (
-        option.value.toLowerCase().includes(search) ||
-        option.label.toLowerCase().includes(search) ||
-        option.desc?.toLowerCase().includes(search) ||
-        ratioText.includes(search)
-      )
-    })
-  }, [options, searchValue])
-
-  const selectedOptions = selected
-    .map((value) => options.find((option) => option.value === value))
-    .filter(Boolean) as ApiKeyGroupOption[]
-
-  const toggleOption = (value: string) => {
-    if (disabled) return
-    if (selected.includes(value)) {
-      onChange(selected.filter((item) => item !== value))
-      return
-    }
-    onChange([...selected, value])
-  }
-
-  return (
-    <div className='space-y-2'>
-      <div className='border-input bg-background flex min-h-14 flex-wrap items-center gap-1.5 rounded-lg border px-3 py-2.5'>
-        {selectedOptions.length > 0 ? (
-          selectedOptions.map((option) => (
-            <button
-              key={option.value}
-              type='button'
-              disabled={disabled}
-              onClick={() => toggleOption(option.value)}
-              className='hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60'
-            >
-              <span className='truncate'>{option.label}</span>
-              <X className='size-3 shrink-0' />
-            </button>
-          ))
-        ) : (
-          <span className='text-muted-foreground text-sm'>
-            {placeholder || t('Select items...')}
-          </span>
-        )}
-      </div>
-      <div className='border-input bg-background rounded-lg border'>
-        <div className='border-b px-3 py-2'>
-          <div className='text-muted-foreground flex items-center gap-2 rounded-md border px-3 py-2 text-sm'>
-            <Search className='size-4 shrink-0' />
-            <input
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              placeholder={t('Search...')}
-              disabled={disabled}
-              className='min-w-0 flex-1 bg-transparent outline-none'
-            />
-          </div>
-        </div>
-        <div className='max-h-72 overflow-y-auto p-2'>
-          {filteredOptions.length === 0 ? (
-            <div className='text-muted-foreground px-2 py-6 text-center text-sm'>
-              {t('No group found.')}
-            </div>
-          ) : (
-            <div className='space-y-1'>
-              {filteredOptions.map((option) => {
-                const isSelected = selected.includes(option.value)
-                return (
-                  <button
-                    key={option.value}
-                    type='button'
-                    disabled={disabled}
-                    onClick={() => toggleOption(option.value)}
-                    className='hover:bg-muted/70 flex w-full items-start gap-3 rounded-lg border px-3 py-3 text-left transition-colors'
-                  >
-                    <Check
-                      className={cn(
-                        'mt-0.5 size-4 shrink-0',
-                        isSelected ? 'opacity-100' : 'opacity-0'
-                      )}
-                    />
-                    <span className='min-w-0 flex-1'>
-                      <span className='block truncate font-medium'>
-                        {option.label}
-                      </span>
-                      {option.desc && (
-                        <span className='text-muted-foreground block truncate text-xs'>
-                          {option.desc}
-                        </span>
-                      )}
-                    </span>
-                    <GroupRatioBadge ratio={option.ratio} />
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
   )
 }

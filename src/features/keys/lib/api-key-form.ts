@@ -16,9 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { z } from 'zod'
 import type { TFunction } from 'i18next'
+import { z } from 'zod'
+
 import { parseQuotaFromDollars, quotaUnitsToDollars } from '@/lib/format'
+
 import { DEFAULT_GROUP } from '../constants'
 import { type ApiKeyFormData, type ApiKey } from '../types'
 
@@ -35,7 +37,7 @@ export function getApiKeyFormSchema(t: TFunction) {
       unlimited_quota: z.boolean(),
       model_limits: z.array(z.string()),
       allow_ips: z.string().optional(),
-      groups: z.array(z.string()).min(1, t('Please select at least one group')),
+      group: z.string().optional(),
       cross_group_retry: z.boolean().optional(),
       tokenCount: z.number().min(1).optional(),
     })
@@ -70,7 +72,7 @@ export const API_KEY_FORM_DEFAULT_VALUES: ApiKeyFormValues = {
   unlimited_quota: true,
   model_limits: [],
   allow_ips: '',
-  groups: [DEFAULT_GROUP],
+  group: DEFAULT_GROUP,
   cross_group_retry: true,
   tokenCount: 1,
 }
@@ -80,7 +82,7 @@ export function getApiKeyFormDefaultValues(
 ): ApiKeyFormValues {
   return {
     ...API_KEY_FORM_DEFAULT_VALUES,
-    groups: [defaultUseAutoGroup ? 'auto' : DEFAULT_GROUP],
+    group: defaultUseAutoGroup ? 'auto' : DEFAULT_GROUP,
     cross_group_retry: defaultUseAutoGroup,
   }
 }
@@ -95,9 +97,6 @@ export function getApiKeyFormDefaultValues(
 export function transformFormDataToPayload(
   data: ApiKeyFormValues
 ): ApiKeyFormData {
-  const groups = Array.from(
-    new Set(data.groups.map((g) => g.trim()).filter(Boolean))
-  )
   return {
     name: data.name,
     remain_quota: data.unlimited_quota
@@ -110,10 +109,8 @@ export function transformFormDataToPayload(
     model_limits_enabled: data.model_limits.length > 0,
     model_limits: data.model_limits.join(','),
     allow_ips: data.allow_ips || '',
-    group: groups.join(','),
-    cross_group_retry: groups.includes('auto')
-      ? !!data.cross_group_retry
-      : false,
+    group: data.group || '',
+    cross_group_retry: data.group === 'auto' ? !!data.cross_group_retry : false,
   }
 }
 
@@ -123,12 +120,6 @@ export function transformFormDataToPayload(
 export function transformApiKeyToFormDefaults(
   apiKey: ApiKey
 ): ApiKeyFormValues {
-  const groups = apiKey.group
-    ? apiKey.group
-        .split(',')
-        .map((g) => g.trim())
-        .filter(Boolean)
-    : [DEFAULT_GROUP]
   return {
     name: apiKey.name,
     remain_quota_dollars: apiKey.unlimited_quota
@@ -143,7 +134,7 @@ export function transformApiKeyToFormDefaults(
       ? apiKey.model_limits.split(',').filter(Boolean)
       : [],
     allow_ips: apiKey.allow_ips || '',
-    groups: groups.length > 0 ? groups : [DEFAULT_GROUP],
+    group: apiKey.group || DEFAULT_GROUP,
     cross_group_retry: !!apiKey.cross_group_retry,
     tokenCount: 1,
   }
