@@ -67,6 +67,13 @@ function useGroupRatios(): Record<string, number> {
   return data ?? {}
 }
 
+function splitGroups(group: string): string[] {
+  return group
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
 export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
   const { t } = useTranslation()
   const groupRatios = useGroupRatios()
@@ -200,37 +207,48 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
       cell: ({ row }) => {
         const apiKey = row.original
         const group = row.getValue('group') as string
-        const ratio = group && group !== 'auto' ? groupRatios[group] : undefined
+        const groups = splitGroups(group)
 
-        if (group === 'auto') {
-          return (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span className='inline-flex items-center gap-1.5 text-xs' />
-                }
-              >
-                <GroupBadge group='auto' />
-                {apiKey.cross_group_retry && (
-                  <>
-                    <span className='text-muted-foreground/30'>·</span>
-                    <span className='text-muted-foreground/60'>
-                      {t('Cross-group')}
-                    </span>
-                  </>
-                )}
-              </TooltipTrigger>
-              <TooltipContent>
-                <span className='text-xs'>
-                  {t(
-                    'Automatically selects the best available group with circuit breaker mechanism'
-                  )}
-                </span>
-              </TooltipContent>
-            </Tooltip>
-          )
-        }
-        return <GroupBadge group={group} ratio={ratio} />
+        if (groups.length === 0)
+          return <span className='text-muted-foreground'>-</span>
+
+        return (
+          <div className='flex max-w-[360px] flex-wrap gap-1.5'>
+            {groups.map((item) => {
+              const ratio =
+                item && item !== 'auto' ? groupRatios[item] : undefined
+              if (item === 'auto') {
+                return (
+                  <Tooltip key={item}>
+                    <TooltipTrigger
+                      render={
+                        <span className='inline-flex items-center gap-1.5 text-xs' />
+                      }
+                    >
+                      <GroupBadge group='auto' />
+                      {apiKey.cross_group_retry && (
+                        <>
+                          <span className='text-muted-foreground/30'>·</span>
+                          <span className='text-muted-foreground/60'>
+                            {t('Cross-group')}
+                          </span>
+                        </>
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <span className='text-xs'>
+                        {t(
+                          'Automatically selects the best available group with circuit breaker mechanism'
+                        )}
+                      </span>
+                    </TooltipContent>
+                  </Tooltip>
+                )
+              }
+              return <GroupBadge key={item} group={item} ratio={ratio} />
+            })}
+          </div>
+        )
       },
       meta: { label: t('Group'), mobileHidden: true },
     },

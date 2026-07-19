@@ -73,7 +73,7 @@ import {
 } from '../lib'
 import { type ApiKey } from '../types'
 import {
-  ApiKeyGroupCombobox,
+  ApiKeyGroupMultiSelect,
   type ApiKeyGroupOption,
 } from './api-key-group-combobox'
 import { useApiKeys } from './api-keys-provider'
@@ -168,20 +168,27 @@ export function ApiKeysMutateDrawer({
         }
       })
     } else if (open && !isUpdate) {
-      form.reset(getApiKeyFormDefaultValues(defaultUseAutoGroup && backendHasAuto))
+      form.reset(
+        getApiKeyFormDefaultValues(defaultUseAutoGroup && backendHasAuto)
+      )
     }
   }, [open, isUpdate, currentRow, form, defaultUseAutoGroup, backendHasAuto])
 
-  // Correct group after groups load: if the form value is not in available groups, fall back
+  // Correct groups after groups load: if selected values are not available, fall back.
   useEffect(() => {
     if (groups.length === 0) return
-    const currentGroup = form.getValues('group')
-    if (currentGroup && !groups.some((g) => g.value === currentGroup)) {
-      const fallback = groups.find((g) => g.value === 'default')?.value ?? groups[0]?.value ?? ''
-      form.setValue('group', fallback)
-      if (currentGroup === 'auto') {
-        form.setValue('cross_group_retry', false)
-      }
+    const validValues = new Set(groups.map((g) => g.value))
+    const currentGroups = form.getValues('groups') || []
+    const nextGroups = currentGroups.filter((group) => validValues.has(group))
+    if (nextGroups.length !== currentGroups.length || nextGroups.length === 0) {
+      const fallback =
+        groups.find((g) => g.value === 'default')?.value ??
+        groups[0]?.value ??
+        ''
+      form.setValue('groups', nextGroups.length > 0 ? nextGroups : [fallback])
+    }
+    if (!form.getValues('groups').includes('auto')) {
+      form.setValue('cross_group_retry', false)
     }
   }, [groups, form])
 
@@ -265,7 +272,7 @@ export function ApiKeysMutateDrawer({
   const quotaPlaceholder = tokensOnly
     ? t('Enter quota in tokens')
     : t('Enter quota in {{currency}}', { currency: currencyLabel })
-  const selectedGroup = form.watch('group')
+  const selectedGroups = form.watch('groups') || []
   const unlimitedQuota = form.watch('unlimited_quota')
 
   return (
@@ -320,16 +327,16 @@ export function ApiKeysMutateDrawer({
 
               <FormField
                 control={form.control}
-                name='group'
+                name='groups'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Group')}</FormLabel>
+                    <FormLabel>{t('Groups')}</FormLabel>
                     <FormControl>
-                      <ApiKeyGroupCombobox
+                      <ApiKeyGroupMultiSelect
                         options={groups}
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        placeholder={t('Select a group')}
+                        selected={field.value}
+                        onChange={field.onChange}
+                        placeholder={t('Select groups')}
                       />
                     </FormControl>
                     <FormMessage />
@@ -337,7 +344,7 @@ export function ApiKeysMutateDrawer({
                 )}
               />
 
-              {selectedGroup === 'auto' && (
+              {selectedGroups.includes('auto') && (
                 <FormField
                   control={form.control}
                   name='cross_group_retry'

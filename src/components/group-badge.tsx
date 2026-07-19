@@ -26,10 +26,13 @@ type GroupBadgeProps = Omit<
 > & {
   group?: string | null
   label?: string
-  ratio?: number | null
+  ratio?: number | string | null
 }
 
-function getGroupRatioClassName(ratio: number): string {
+function getGroupRatioClassName(ratio: number | string): string {
+  if (typeof ratio !== 'number') {
+    return 'border-info/25 bg-info/10 text-info'
+  }
   if (ratio > 1) {
     return 'border-warning/25 bg-warning/10 text-warning'
   }
@@ -99,7 +102,7 @@ export function GroupBadge(props: GroupBadgeProps) {
         )}
       >
         <span className='size-1 rounded-full bg-current opacity-60' />
-        <span>{ratio}x</span>
+        <span>{typeof ratio === 'number' ? `${ratio}x` : ratio}</span>
       </span>
     </span>
   )
