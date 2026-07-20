@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Check, RefreshCw } from 'lucide-react'
+import { Check, ExternalLink, RefreshCw } from 'lucide-react'
 import { formatCurrencyFromUSD } from '@/lib/currency'
-import { api, getSelf } from '@/lib/api'
+import { getSelf } from '@/lib/api'
 import { formatQuota } from '@/lib/format'
-import { useAuthStore } from '@/stores/auth-store'
-import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
-import { toast } from 'sonner'
 import { DEFAULT_DISCOUNT_RATE } from '@/features/wallet/constants'
 import { PaymentConfirmDialog } from '@/features/wallet/components/dialogs/payment-confirm-dialog'
 import { TransferDialog } from '@/features/wallet/components/dialogs/transfer-dialog'
@@ -42,8 +39,6 @@ import type { PlanRecord } from '@/features/subscriptions/types'
 
 export function SubscriptionHub() {
   const { t } = useTranslation()
-  const authUser = useAuthStore((s) => s.auth.user)
-  const { status } = useStatus()
   const { currency } = useSystemConfig()
   const [user, setUser] = useState<UserWalletData | null>(null)
   const [userLoading, setUserLoading] = useState(true)
@@ -56,7 +51,7 @@ export function SubscriptionHub() {
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
   const [redemptionCode, setRedemptionCode] = useState('')
 
-  const { topupInfo, presetAmounts, loading: topupLoading } = useTopupInfo()
+  const { topupInfo, presetAmounts } = useTopupInfo()
   const {
     amount: paymentAmount,
     calculating,
@@ -94,18 +89,22 @@ export function SubscriptionHub() {
       if (response.success && response.data) {
         setUser(response.data as UserWalletData)
       }
-    } catch (error) {
-      console.error('Failed to fetch user data:', error)
+    } catch {
+      setUser(null)
     } finally {
       setUserLoading(false)
     }
   }, [])
 
-  useEffect(() => { fetchUser() }, [fetchUser])
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchUser()
+  }, [fetchUser])
 
   useEffect(() => {
     if (topupInfo && topupAmount === 0) {
       const minTopup = getMinTopupAmount(topupInfo)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTopupAmount(minTopup)
       void calculatePaymentAmount(minTopup, getDefaultPaymentType(topupInfo))
     }
@@ -196,11 +195,11 @@ export function SubscriptionHub() {
   const {
     records,
     total,
-    keyword,
     loading: billingLoading,
-    handleSearch,
     refresh: refreshBilling,
   } = useBillingHistory({ initialPageSize: 5 })
+
+  const currentTimestamp = subscriptionQuery.dataUpdatedAt / 1000
 
   return (
     <>
@@ -342,6 +341,20 @@ export function SubscriptionHub() {
                 {redeeming ? t('portal.page.topup.processing') : t('portal.page.topup.redeem')}
               </button>
             </div>
+            {topupInfo?.topup_link && (
+              <p className="mt-2 text-xs text-white/40">
+                {t('Need a redemption code?')}{' '}
+                <a
+                  href={topupInfo.topup_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-purple-400 transition hover:text-purple-300 hover:underline"
+                >
+                  {t('Get one here')}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </p>
+            )}
           </div>
         </div>
 
@@ -431,17 +444,18 @@ export function SubscriptionHub() {
 
               {allSubscriptions.length > 0 ? (
                 <div className="flex-1 space-y-3 overflow-y-auto no-scrollbar pr-1" style={{ maxHeight: '390px' }}>
-                  {allSubscriptions.map((sub: any) => {
+                  {allSubscriptions.map((sub) => {
                     const subscription = sub.subscription
                     if (!subscription) return null
                     const totalAmount = Number(subscription.amount_total || 0)
                     const usedAmount = Number(subscription.amount_used || 0)
-                    const remainAmount = totalAmount > 0 ? Math.max(0, totalAmount - usedAmount) : 0
-                    const now = Date.now() / 1000
-                    const isExpired = (subscription.end_time || 0) < now
+                    const isExpired = (subscription.end_time || 0) < currentTimestamp
                     const isCancelled = subscription.status === 'cancelled'
                     const isActive = subscription.status === 'active' && !isExpired
-                    const remainDays = Math.max(0, Math.ceil(((subscription.end_time || 0) - now) / 86400))
+                    const remainDays = Math.max(
+                      0,
+                      Math.ceil(((subscription.end_time || 0) - currentTimestamp) / 86400)
+                    )
                     const usagePercent = totalAmount > 0 ? Math.round((usedAmount / totalAmount) * 100) : 0
 
                     return (
