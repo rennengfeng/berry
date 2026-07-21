@@ -537,8 +537,8 @@ export function ModelSquare() {
                 )}
 
                 {/* Row 4: Price cards */}
-                <div className="mx-1 text-xs">
-                  <div className={`grid gap-2 ${priceColumns.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                <div className="mx-auto w-full text-xs">
+                  <div className={`grid w-full gap-1.5 ${priceColumns.length === 1 ? 'mx-auto max-w-48 grid-cols-1' : 'mx-auto max-w-96 grid-cols-2'}`}>
                     {priceColumns.map((column) => {
                       const cls =
                         column.tone === 'green'
@@ -553,15 +553,15 @@ export function ModelSquare() {
                       return (
                         <div
                           key={column.key}
-                          className={`rounded-lg border p-2.5 shadow-sm shadow-black/10 ${cls}`}
+                          className={`rounded-md border px-2 py-1.5 shadow-sm shadow-black/10 ${cls}`}
                         >
-                          <div className="text-[11px] font-medium uppercase text-current/60">
+                          <div className="text-[10px] font-medium uppercase leading-tight text-current/60">
                             {t(column.labelKey)}
                           </div>
-                          <div className="mt-1 break-words text-lg font-semibold leading-tight text-current">
+                          <div className="mt-0.5 break-words text-base font-semibold leading-tight text-current">
                             {column.site}
                           </div>
-                          <div className="mt-1 truncate text-[11px] text-white/35 line-through">
+                          <div className="mt-0.5 truncate text-[10px] leading-tight text-white/35 line-through">
                             {official}
                           </div>
                         </div>
