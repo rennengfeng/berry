@@ -1025,7 +1025,7 @@ export function OnlineChat() {
 
               {/* Image size (only in image mode) */}
               {chatMode === 'image' && (
-                <Select value={imageSize} onValueChange={setImageSize}>
+                <Select value={imageSize} onValueChange={(value) => setImageSize(value ?? '')}>
                   <SelectTrigger className="h-7 w-full text-xs">
                     <SelectValue />
                   </SelectTrigger>
@@ -1042,7 +1042,7 @@ export function OnlineChat() {
               {/* API key selector: the selected key's group is used for billing. */}
               <Select
                 value={selectedApiKeyId}
-                onValueChange={setSelectedApiKeyId}
+                onValueChange={(value) => setSelectedApiKeyId(value ?? '')}
                 disabled={isGenerating || apiKeyOptions.length === 0}
               >
                 <SelectTrigger className="h-7 w-full text-xs">
@@ -1058,7 +1058,7 @@ export function OnlineChat() {
               </Select>
 
               {/* Model selector */}
-              <Select value={activeModel} onValueChange={setSelectedModel} disabled={isGenerating}>
+              <Select value={activeModel} onValueChange={(value) => setSelectedModel(value ?? '')} disabled={isGenerating}>
                 <SelectTrigger className="h-7 w-full text-xs">
                   <SelectValue placeholder={t('Model')} />
                 </SelectTrigger>

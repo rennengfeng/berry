@@ -9,7 +9,6 @@ import { toast } from 'sonner'
 export function PortalAffiliate() {
   const { t } = useTranslation()
   const user = useAuthStore((s) => s.auth.user)
-  const [copied, setCopied] = useState(false)
   const [activeTab, setActiveTab] = useState(0)
 
   const { data: affCode } = useQuery({
@@ -31,9 +30,7 @@ export function PortalAffiliate() {
   const copyLink = () => {
     if (!inviteLink) return
     navigator.clipboard.writeText(inviteLink)
-    setCopied(true)
     toast.success(t('portal.page.affiliate.linkCopied'))
-    setTimeout(() => setCopied(false), 2000)
   }
 
   const statsCards = [

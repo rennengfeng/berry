@@ -28,8 +28,6 @@ const CHART_CONFIG = { mode: 'desktop-browser' as const }
 
 const DARK_THEME_OVERRIDES = {
   background: 'transparent',
-  title: { textStyle: { fill: 'hsl(var(--foreground))' }, subtextStyle: { fill: 'hsl(var(--muted-foreground))' } },
-  legends: { item: { label: { style: { fill: 'hsl(var(--foreground))' } } } },
   axes: [
     { orient: 'bottom' as const, label: { style: { fill: 'hsl(var(--muted-foreground))' } }, grid: { style: { stroke: 'hsl(var(--border))' } } },
     { orient: 'left' as const, label: { style: { fill: 'hsl(var(--muted-foreground))' } }, grid: { style: { stroke: 'hsl(var(--border))' } } },
@@ -116,12 +114,6 @@ function buildTrendBuckets(data: QuotaDataItem[], startTs: number, endTs: number
   return { quotaBuckets, tokenBuckets, countBuckets }
 }
 
-const TIME_INTERVALS: Record<string, number> = {
-  hour: 60,
-  day: 1440,
-  week: 10080,
-}
-
 const TIME_INTERVALS_SEC: Record<string, number> = {
   hour: 3600,
   day: 86400,
@@ -171,17 +163,19 @@ function processChartData(data: QuotaDataItem[], granularity: string): ChartData
   const showYear = isDataCrossYear(data.map((item) => Number(item.created_at)))
 
   data.forEach((item) => {
-    uniqueModels.add(item.model_name)
+    const modelName = item.model_name || 'unknown'
+    uniqueModels.add(modelName)
     totalQuota += Number(item.quota) || 0
     totalTimes += Number(item.count) || 0
   })
 
   const aggregatedData = new Map<string, { time: string; model: string; quota: number; count: number }>()
   data.forEach((item) => {
+    const modelName = item.model_name || 'unknown'
     const timeKey = timestamp2label(Number(item.created_at), granularity, showYear)
-    const key = `${timeKey}-${item.model_name}`
+    const key = `${timeKey}-${modelName}`
     if (!aggregatedData.has(key)) {
-      aggregatedData.set(key, { time: timeKey, model: item.model_name, quota: 0, count: 0 })
+      aggregatedData.set(key, { time: timeKey, model: modelName, quota: 0, count: 0 })
     }
     const existing = aggregatedData.get(key)!
     existing.quota += Number(item.quota) || 0
@@ -418,13 +412,13 @@ export function PortalDataBoard() {
     yField: 'Usage',
     seriesField: 'Model',
     stack: true,
-    legends: { visible: true, selectMode: 'single' as const, item: { shape: { style: { symbolType: 'circle' } } } },
-    title: { visible: true, text: t('Model Consumption Distribution'), subtext: `${t('Total')}：${formatQuota(chartData.totalQuota)}` },
     bar: { state: { hover: { stroke: '#000', lineWidth: 1 } } },
     tooltip: {
       mark: { content: [{ key: (datum: any) => datum['Model'], value: (datum: any) => formatQuota(datum['rawQuota'] || 0) }] },
     },
     color: { specified: chartData.modelColors },
+    legends: { visible: true, selectMode: 'single' as const, item: { shape: { style: { symbolType: 'circle' } } } },
+    title: { visible: true, text: t('Model Consumption Distribution'), subtext: `${t('Total')}：${formatQuota(chartData.totalQuota)}` },
     ...DARK_THEME_OVERRIDES,
   }), [chartData, t])
 
@@ -434,12 +428,12 @@ export function PortalDataBoard() {
     xField: 'Time',
     yField: 'Count',
     seriesField: 'Model',
-    legends: { visible: true, selectMode: 'single' as const, item: { shape: { style: { symbolType: 'circle' } } } },
-    title: { visible: true, text: t('Call Trend'), subtext: `${t('Total')}：${renderCompactNumber(chartData.totalTimes)}` },
     tooltip: {
       mark: { content: [{ key: (datum: any) => datum['Model'], value: (datum: any) => renderCompactNumber(datum['Count']) }] },
     },
     color: { specified: chartData.modelColors },
+    legends: { visible: true, selectMode: 'single' as const, item: { shape: { style: { symbolType: 'circle' } } } },
+    title: { visible: true, text: t('Call Trend'), subtext: `${t('Total')}：${renderCompactNumber(chartData.totalTimes)}` },
     ...DARK_THEME_OVERRIDES,
   }), [chartData, t])
 
@@ -449,11 +443,11 @@ export function PortalDataBoard() {
     xField: 'Model',
     yField: 'Count',
     seriesField: 'Model',
-    legends: { visible: true, selectMode: 'single' as const, item: { shape: { style: { symbolType: 'circle' } } } },
-    title: { visible: true, text: t('Model Call Ranking'), subtext: `${t('Total')}：${renderCompactNumber(chartData.totalTimes)}` },
     bar: { state: { hover: { stroke: '#000', lineWidth: 1 } } },
     tooltip: { mark: { content: [{ key: (datum: any) => datum['Model'], value: (datum: any) => renderCompactNumber(datum['Count']) }] } },
     color: { specified: chartData.modelColors },
+    legends: { visible: true, selectMode: 'single' as const, item: { shape: { style: { symbolType: 'circle' } } } },
+    title: { visible: true, text: t('Model Call Ranking'), subtext: `${t('Total')}：${renderCompactNumber(chartData.totalTimes)}` },
     ...DARK_THEME_OVERRIDES,
   }), [chartData, t])
 

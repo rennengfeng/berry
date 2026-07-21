@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { api } from '@/lib/api'
 import { formatQuota } from '@/lib/format'
-import { Search, RotateCcw, Activity, Zap, Clock, AlertTriangle, Download, RefreshCw, ChevronRight } from 'lucide-react'
+import { Search, Activity, Zap, Clock, AlertTriangle, Download, RefreshCw, ChevronRight } from 'lucide-react'
 import dayjs from 'dayjs'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 
@@ -78,10 +78,6 @@ export function PortalLogs() {
   const [keyFilter, setKeyFilter] = useState('')
   const [modelFilter, setModelFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [ipFilter, setIpFilter] = useState('')
-  const [minTokens, setMinTokens] = useState('')
-  const [maxTokens, setMaxTokens] = useState('')
-
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [expandedId, setExpandedId] = useState<number | null>(null)
@@ -124,14 +120,38 @@ export function PortalLogs() {
   const { data: modelList } = useQuery({
     queryKey: ['portal-log-filter-options', startDate.unix(), endDate.unix()],
     queryFn: async () => {
-      const res = await api.get('/api/log/self/filter-options', {
-        params: { start_timestamp: startDate.unix(), end_timestamp: endDate.unix() },
-      })
-      const payload = res.data?.data as { tokens?: string[]; models?: string[] } | undefined
-      return {
-        tokens: [...(payload?.tokens ?? [])].sort(),
-        models: [...(payload?.models ?? [])].sort(),
+      try {
+        const res = await api.get('/api/log/self/filter-options', {
+          params: { start_timestamp: startDate.unix(), end_timestamp: endDate.unix() },
+          skipErrorHandler: true,
+        } as Record<string, unknown>)
+        const payload = res.data?.data as { tokens?: string[]; models?: string[] } | undefined
+        if (payload) {
+          return {
+            tokens: [...(payload.tokens ?? [])].sort(),
+            models: [...(payload.models ?? [])].sort(),
+          }
+        }
+      } catch {
+        // fall through to list-based fallback
       }
+
+      const res = await api.get('/api/log/self', {
+        params: {
+          p: 1,
+          size: 100,
+          start_timestamp: startDate.unix(),
+          end_timestamp: endDate.unix(),
+        },
+      })
+      const items = res.data?.data?.items as LogItem[] | undefined
+      const modelSet = new Set<string>()
+      const tokenSet = new Set<string>()
+      for (const item of items ?? []) {
+        if (item.model_name) modelSet.add(item.model_name)
+        if (item.token_name) tokenSet.add(item.token_name)
+      }
+      return { models: Array.from(modelSet).sort(), tokens: Array.from(tokenSet).sort() }
     },
     staleTime: 60_000,
   })
@@ -145,7 +165,7 @@ export function PortalLogs() {
       }
       if (keyFilter) params.token_name = keyFilter
       if (modelFilter) params.model_name = modelFilter
-      if (statusFilter && statusFilter !== 'all') params.type = statusFilter === 'success' ? 0 : 1
+      params.type = statusFilter === 'error' ? 5 : 2
       const res = await api.get('/api/log/self/stat', { params })
       return res.data?.data as { quota?: number; rpm?: number; tpm?: number } | undefined
     },
@@ -192,7 +212,7 @@ export function PortalLogs() {
       }
       if (keyFilter) params.token_name = keyFilter
       if (modelFilter) params.model_name = modelFilter
-      if (statusFilter && statusFilter !== 'all') params.type = statusFilter === 'success' ? 0 : 1
+      params.type = statusFilter === 'error' ? 5 : 2
       const res = await api.get('/api/log/self', { params })
       return res.data?.data as { items?: LogItem[]; total?: number } | undefined
     },
@@ -202,16 +222,6 @@ export function PortalLogs() {
   const logs = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = Math.ceil(total / pageSize)
-
-  const reset = () => {
-    setKeyFilter('')
-    setModelFilter('')
-    setStatusFilter('')
-    setIpFilter('')
-    setMinTokens('')
-    setMaxTokens('')
-    setPage(1)
-  }
 
   const totalRequests = todayStatData?.reduce((s, d) => s + (d.request_count ?? d.count ?? 0), 0) ?? 0
   const totalTokens = todayStatData?.reduce((s, d) => s + (d.token ?? d.token_used ?? 0), 0) ?? 0
@@ -461,7 +471,7 @@ export function PortalLogs() {
               </thead>
               <tbody>
                 {logs.map((log) => {
-                  const isError = log.type === 1
+                  const isError = log.type === 5
                   const isExpanded = expandedId === log.id
                   const totalTokens = (log.prompt_tokens ?? 0) + (log.completion_tokens ?? 0)
                   const cost = (log.quota ?? 0) / 500000

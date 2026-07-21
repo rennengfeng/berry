@@ -38,7 +38,7 @@ export function UserHome() {
     return rows.reduce(
       (acc, item) => {
         acc.requests += Number(item.count) || 0
-        acc.tokens += Number(item.prompt_tokens) + Number(item.completion_tokens) || 0
+        acc.tokens += Number(item.token_used) || 0
         acc.quota += Number(item.quota) || 0
         return acc
       },

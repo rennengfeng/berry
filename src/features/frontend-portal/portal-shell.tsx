@@ -60,21 +60,6 @@ export function usePortalAppearance() {
       ? source.system_name.trim()
       : 'New API'
 
-  const presetShellClass =
-    preset === 'ocean'
-      ? themeMode === 'dark'
-        ? 'bg-[linear-gradient(180deg,rgba(3,7,18,0.98),rgba(12,24,45,0.95)),radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_30%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_28%)]'
-        : 'bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_30%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.14),transparent_28%)]'
-      : preset === 'sunset'
-        ? themeMode === 'dark'
-          ? 'bg-[linear-gradient(180deg,rgba(28,25,23,0.98),rgba(68,29,9,0.88)),radial-gradient(circle_at_top_right,rgba(251,146,60,0.20),transparent_28%)]'
-          : 'bg-[radial-gradient(circle_at_top_left,rgba(251,146,60,0.16),transparent_30%),radial-gradient(circle_at_top_right,rgba(244,63,94,0.14),transparent_28%)]'
-        : preset === 'forest'
-          ? themeMode === 'dark'
-            ? 'bg-[linear-gradient(180deg,rgba(3,12,9,0.98),rgba(20,40,24,0.92)),radial-gradient(circle_at_top_right,rgba(74,222,128,0.18),transparent_28%)]'
-            : 'bg-[radial-gradient(circle_at_top_left,rgba(74,222,128,0.16),transparent_30%),radial-gradient(circle_at_top_right,rgba(132,204,22,0.12),transparent_28%)]'
-          : ''
-
   const presetHeroClass =
     preset === 'ocean'
       ? themeMode === 'dark'

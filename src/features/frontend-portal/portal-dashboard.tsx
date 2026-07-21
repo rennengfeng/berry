@@ -4,7 +4,6 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useStatus } from "@/hooks/use-status";
 import { getSelf } from "@/lib/api";
 import { formatQuota, formatNumber } from "@/lib/format";
-import { getRoleLabel } from "@/lib/roles";
 import { BarChart3, Activity, Users, Bell, Globe, Code2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -239,14 +238,7 @@ export function PortalDashboard() {
   const baseUrl = normalizeBaseUrl(items[0]?.url || "");
   const apiExamples = baseUrl ? buildApiExamples(baseUrl) : [];
 
-  const initials = user?.username
-    ? user.username.slice(0, 2).toUpperCase()
-    : user?.display_name
-      ? user.display_name.slice(0, 2).toUpperCase()
-      : "U";
-
   const displayName = user?.display_name || user?.username || "User";
-  const roleLabel = getRoleLabel(user?.role ?? 1);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto no-scrollbar">

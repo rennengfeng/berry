@@ -384,7 +384,7 @@ export function SubscriptionHub() {
                       !noReset ? { label: `${t('Quota Reset')}: ${resetLabel}` } : null,
                       { label: `${t('Total Quota')}: ${totalAmount > 0 ? formatQuota(totalAmount) : t('Unlimited')}` },
                       limit > 0 ? { label: `${t('Purchase Limit')}: ${limit}` } : null,
-                      plan.upgrade_group ? { label: `${t('Upgrade Group')}: ${plan.upgrade_group}` } : null,
+                      'upgrade_group' in plan && plan.upgrade_group ? { label: `${t('Upgrade Group')}: ${plan.upgrade_group}` } : null,
                     ].filter(Boolean) as { label: string }[]
 
                     return (
@@ -569,10 +569,10 @@ export function SubscriptionHub() {
                         <td className="px-3 py-3 text-xs text-white/60">{getPaymentMethodName(record.payment_method)}</td>
                         <td className="px-3 py-3">
                           <span className={`inline-flex items-center gap-1 text-xs ${
-                            record.status === 1 ? 'text-emerald-400' : 'text-white/50'
+                            record.status === 'success' ? 'text-emerald-400' : 'text-white/50'
                           }`}>
                             <span className={`h-1.5 w-1.5 rounded-full ${
-                              record.status === 1 ? 'bg-emerald-400' : 'bg-white/30'
+                              record.status === 'success' ? 'bg-emerald-400' : 'bg-white/30'
                             }`} />
                             {statusCfg.label}
                           </span>

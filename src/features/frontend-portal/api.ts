@@ -44,6 +44,7 @@ import type {
 type RawPricingModel = {
   model_name: string
   description?: string
+  icon?: string
   vendor_id?: number
   vendor_name?: string
   vendor_icon?: string
@@ -121,7 +122,7 @@ export async function getFrontendModels(): Promise<FrontendModelsPayload> {
       vendor_id: m.vendor_id,
       vendor_name: resolvedVendorName,
       tags: m.tags,
-      icon: m.vendor_icon || (m.vendor_id ? vendorIconMap.get(m.vendor_id) : undefined),
+      icon: m.icon || m.vendor_icon || (m.vendor_id ? vendorIconMap.get(m.vendor_id) : undefined),
       quota_type: m.quota_type,
       model_ratio: m.model_ratio,
       completion_ratio: m.completion_ratio,
@@ -169,19 +170,10 @@ export async function getFrontendModels(): Promise<FrontendModelsPayload> {
 // Dashboard → FrontendDashboardPayload
 // ----------------------------------------------------------------------------
 
-type RawSelfStatItem = {
-  count?: number
-  quota?: number
-  prompt_tokens?: number
-  completion_tokens?: number
-}
-
 /**
- * Aggregate /api/user/self + /api/log/self/stat (today) + /api/notice +
+ * Aggregate /api/user/self + /api/data/self (today) + /api/notice +
  * /api/user/models + /api/uptime/status into the portal-shaped dashboard.
- * The numbers map to RPM/TPM as best-effort: there is no minute-level rate
- * endpoint upstream, so we surface today's totals divided per minute window
- * and let the consumer label them appropriately.
+ * /api/data/self returns per-bucket rows, which we sum for today's totals.
  */
 export async function getFrontendDashboard(): Promise<FrontendDashboardPayload> {
   const [user, todayStat, modelsCount, notice, statusGroups] = await Promise.all([
@@ -224,19 +216,28 @@ async function safeGetSelfStatToday(): Promise<{
     start.setHours(0, 0, 0, 0)
     const end = new Date()
     end.setHours(23, 59, 59, 999)
-    const res = await api.get('/api/log/self/stat', {
+    const res = await api.get('/api/data/self', {
       params: {
-        type: 0,
         start_timestamp: Math.floor(start.getTime() / 1000),
         end_timestamp: Math.floor(end.getTime() / 1000),
+        default_time: 'hour',
       },
-    })
-    const item = (res.data?.data ?? {}) as RawSelfStatItem
-    return {
-      requests: item.rpm ?? item.count ?? 0,
-      tokens: item.tpm ?? ((item.prompt_tokens ?? 0) + (item.completion_tokens ?? 0)),
-      quota: item.quota ?? 0,
-    }
+      skipErrorHandler: true,
+    } as Record<string, unknown>)
+    const rows = (res.data?.data ?? []) as Array<{
+      count?: number
+      token_used?: number
+      quota?: number
+    }>
+    return rows.reduce<{ requests: number; tokens: number; quota: number }>(
+      (acc, item) => {
+        acc.requests += Number(item.count) || 0
+        acc.tokens += Number(item.token_used) || 0
+        acc.quota += Number(item.quota) || 0
+        return acc
+      },
+      { requests: 0, tokens: 0, quota: 0 }
+    )
   } catch {
     return { requests: 0, tokens: 0, quota: 0 }
   }
@@ -244,7 +245,7 @@ async function safeGetSelfStatToday(): Promise<{
 
 async function safeGetUserModelCount(): Promise<number> {
   try {
-    const res = await api.get('/api/user/models')
+    const res = await api.get('/api/user/models', { skipErrorHandler: true } as Record<string, unknown>)
     const arr = res.data?.data
     return Array.isArray(arr) ? arr.length : 0
   } catch {
@@ -254,7 +255,7 @@ async function safeGetUserModelCount(): Promise<number> {
 
 async function safeGetNotice(): Promise<string | undefined> {
   try {
-    const res = await api.get('/api/notice')
+    const res = await api.get('/api/notice', { skipErrorHandler: true } as Record<string, unknown>)
     return typeof res.data?.data === 'string' ? res.data.data : undefined
   } catch {
     return undefined
@@ -263,7 +264,7 @@ async function safeGetNotice(): Promise<string | undefined> {
 
 async function safeGetUptimeStatus(): Promise<FrontendStatusGroup[]> {
   try {
-    const res = await api.get('/api/uptime/status')
+    const res = await api.get('/api/uptime/status', { skipErrorHandler: true } as Record<string, unknown>)
     const data = res.data?.data
     return Array.isArray(data) ? (data as FrontendStatusGroup[]) : []
   } catch {
