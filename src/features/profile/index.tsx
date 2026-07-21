@@ -25,6 +25,7 @@ import {
 } from '@/components/page-transition'
 import { CheckinCalendarCard } from './components/checkin-calendar-card'
 import { LanguagePreferencesCard } from './components/language-preferences-card'
+import { LoginSessionsCard } from './components/login-sessions-card'
 import { PasskeyCard } from './components/passkey-card'
 import { ProfileHeader } from './components/profile-header'
 import { ProfileSecurityCard } from './components/profile-security-card'
@@ -66,8 +67,7 @@ export function Profile() {
                   onProfileUpdate={refreshProfile}
                 />
                 <ProfileSecurityCard profile={profile} loading={loading} />
-                <PasskeyCard loading={loading} />
-                <TwoFACard loading={loading} />
+                <LoginSessionsCard />
               </div>
 
               <div className='space-y-4 sm:space-y-6 xl:sticky xl:top-6'>
@@ -79,6 +79,8 @@ export function Profile() {
                   />
                 )}
                 {canConfigureSidebar && <SidebarModulesCard />}
+                <PasskeyCard loading={loading} />
+                <TwoFACard loading={loading} />
               </div>
             </div>
           </CardStaggerItem>

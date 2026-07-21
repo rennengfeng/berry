@@ -21,8 +21,9 @@ import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore, type AuthUser } from '@/stores/auth-store'
-import { getSelf } from '@/lib/api'
+import { applyAuthBundle, getSelf, isAuthBundle } from '@/lib/api'
 import { wechatLoginByCode } from '@/features/auth/api'
+import { saveUserId } from '@/features/auth/lib/storage'
 
 function OAuthComponent() {
   const navigate = useNavigate()
@@ -37,7 +38,17 @@ function OAuthComponent() {
     ;(async () => {
       try {
         if (search?.provider === 'wechat' && search.code) {
-          await wechatLoginByCode(search.code)
+          const login = await wechatLoginByCode(search.code)
+          if (login?.success && isAuthBundle(login.data)) {
+            applyAuthBundle(login.data)
+            saveUserId(login.data.user.id)
+            const user = login.data.user
+            navigate({
+              to: (search?.redirect || (user.role >= 10 ? '/dashboard' : '/portal')) as never,
+              replace: true,
+            })
+            return
+          }
         }
         const res = await getSelf()
         if (res?.success) {

@@ -8,7 +8,7 @@ export const Route = createFileRoute('/portal')({
   beforeLoad: async () => {
     const { auth } = useAuthStore.getState()
 
-    if (!auth.user) {
+    if (!auth.user || !auth.accessToken) {
       try {
         const res = await getSelf()
         if (res?.success && res.data) {
@@ -26,7 +26,10 @@ export const Route = createFileRoute('/portal')({
       }
     }
 
-    const user = useAuthStore.getState().auth.user
+    const { user, accessToken } = useAuthStore.getState().auth
+    if (!user || !accessToken) {
+      throw redirect({ to: '/sign-in', search: { redirect: '/portal' } })
+    }
     if (user && user.role >= ROLE.ADMIN) {
       throw redirect({ to: '/dashboard' })
     }

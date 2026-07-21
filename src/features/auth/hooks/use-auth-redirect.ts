@@ -18,28 +18,30 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useNavigate } from '@tanstack/react-router'
 import i18n from 'i18next'
-import { useAuthStore } from '@/stores/auth-store'
-import { getSelf } from '@/lib/api'
+import {
+  getSavedLanguage,
+  sanitizeAuthRedirect,
+} from '@/features/auth/lib/auth-redirect'
+import { saveUserId } from '@/features/auth/lib/storage'
+import { applyAuthBundle, getSelf, isAuthBundle } from '@/lib/api'
 import { ROLE } from '@/lib/roles'
+import { useAuthStore, type AuthBundle } from '@/stores/auth-store'
 import type { User } from '@/features/users/types'
-import { saveUserId } from '../lib/storage'
 
-function getSavedLanguage(user: User): string | undefined {
-  const userData = user as Record<string, unknown>
-  if (typeof userData.language === 'string') {
-    return userData.language
-  }
+function targetForUser(user: { role?: number }, redirectTo?: string): string {
+  const isAdmin = (user.role ?? 0) >= ROLE.ADMIN
+  const defaultPath = isAdmin ? '/dashboard' : '/portal'
+  const sanitized =
+    typeof window !== 'undefined'
+      ? sanitizeAuthRedirect(redirectTo, window.location.origin)
+      : null
 
-  if (typeof userData.setting !== 'string') {
-    return undefined
+  if (!sanitized) return defaultPath
+  if (isAdmin && sanitized.startsWith('/portal')) return defaultPath
+  if (!isAdmin && (sanitized.startsWith('/dashboard') || sanitized.startsWith('/_authenticated'))) {
+    return defaultPath
   }
-
-  try {
-    const setting = JSON.parse(userData.setting) as { language?: unknown }
-    return typeof setting.language === 'string' ? setting.language : undefined
-  } catch {
-    return undefined
-  }
+  return sanitized
 }
 
 /**
@@ -49,36 +51,35 @@ export function useAuthRedirect() {
   const navigate = useNavigate()
   const { auth } = useAuthStore()
 
-  /**
-   * Handle successful login
-   * @param userData - Optional user data from login response
-   * @param redirectTo - Redirect path after login
-   */
   const handleLoginSuccess = async (
-    userData?: { id?: number } | null,
+    loginData?: AuthBundle | { id?: number; role?: number } | null,
     redirectTo?: string
   ) => {
-    // Save user ID if available
-    if (userData?.id) {
-      saveUserId(userData.id)
+    if (isAuthBundle(loginData)) {
+      applyAuthBundle(loginData)
+      saveUserId(loginData.user.id)
+      const savedLang = getSavedLanguage(loginData.user)
+      if (savedLang && savedLang !== i18n.language) {
+        await i18n.changeLanguage(savedLang)
+      }
+      navigate({ href: targetForUser(loginData.user, redirectTo), replace: true })
+      return
     }
 
-    // Fetch and set user data
+    if (loginData?.id) {
+      saveUserId(loginData.id)
+    }
+
     try {
       const self = await getSelf()
       if (self?.success && self.data) {
         const user = self.data as User
         auth.setUser(user)
+        if (user.id) saveUserId(user.id)
 
-        // Update user ID if not already set
-        if (user.id) {
-          saveUserId(user.id)
-        }
-
-        // Restore saved language preference
         const savedLang = getSavedLanguage(user)
         if (savedLang && savedLang !== i18n.language) {
-          i18n.changeLanguage(savedLang)
+          await i18n.changeLanguage(savedLang)
         }
       }
     } catch (error) {
@@ -86,33 +87,18 @@ export function useAuthRedirect() {
       console.error('Failed to fetch user data:', error)
     }
 
-    // Navigate to target page
     const user = useAuthStore.getState().auth.user
-    const isAdmin = user && user.role >= ROLE.ADMIN
-    const defaultPath = isAdmin ? '/dashboard' : '/portal'
-    const targetPath = redirectTo && !(isAdmin && redirectTo.startsWith('/portal'))
-      ? redirectTo
-      : defaultPath
-    navigate({ to: targetPath, replace: true })
+    navigate({ href: targetForUser(user ?? {}, redirectTo), replace: true })
   }
 
-  /**
-   * Redirect to 2FA page
-   */
   const redirectTo2FA = () => {
     navigate({ to: '/otp', replace: true })
   }
 
-  /**
-   * Redirect to login page
-   */
   const redirectToLogin = () => {
     navigate({ to: '/sign-in', replace: true })
   }
 
-  /**
-   * Redirect to register page
-   */
   const redirectToRegister = () => {
     navigate({ to: '/sign-up', replace: true })
   }

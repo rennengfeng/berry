@@ -32,7 +32,7 @@ export const Route = createFileRoute('/(auth)/sign-in')({
   beforeLoad: async ({ search }) => {
     const { auth } = useAuthStore.getState()
 
-    if (auth.user) {
+    if (auth.user && auth.accessToken) {
       const isAdmin = auth.user.role >= ROLE.ADMIN
       const defaultPath = isAdmin ? '/dashboard' : '/portal'
       const target = search?.redirect && !(isAdmin && search.redirect.startsWith('/portal'))

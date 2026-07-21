@@ -16,17 +16,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Mail, Shield, Send, Link2, Unlink } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SiGithub, SiWechat, SiLinux } from 'react-icons/si'
 import { toast } from 'sonner'
 import { IconDiscord } from '@/assets/brand-icons'
+import { createOAuthFlow } from '@/features/auth/api'
 import {
-  handleGitHubOAuth,
-  handleOIDCOAuth,
-  handleDiscordOAuth,
-  handleLinuxDOOAuth,
+  OAUTH_BIND_CALLBACK_MESSAGE,
+  OAUTH_BIND_RESULT_MESSAGE,
+} from '@/features/auth/constants'
+import { watchOAuthPopupClosed } from '@/features/auth/lib/oauth-bind-window'
+import type { CustomOAuthProviderInfo } from '@/features/auth/types'
+import { api } from '@/lib/api'
+import {
+  buildDiscordOAuthUrl,
+  buildGitHubOAuthUrl,
+  buildLinuxDOOAuthUrl,
+  buildOIDCOAuthUrl,
 } from '@/lib/oauth'
 import { useDialogs } from '@/hooks/use-dialog'
 import { useStatus } from '@/hooks/use-status'
@@ -34,7 +42,6 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { StatusBadge } from '@/components/status-badge'
-import { OAUTH_BIND_STORAGE_KEY } from '@/features/auth/constants'
 import {
   getSelfOAuthBindings,
   unbindCustomOAuth,
@@ -59,6 +66,22 @@ interface AccountBindingsTabProps {
 
 type DialogKey = 'email' | 'wechat' | 'telegram'
 
+interface PendingOAuthBinding {
+  provider: string
+  state: string
+  popup: Window
+  stopCloseWatcher: () => void
+}
+
+interface OAuthBindingCallback {
+  type: typeof OAUTH_BIND_CALLBACK_MESSAGE
+  provider: string
+  state: string
+  code?: string
+  error?: string
+  errorDescription?: string
+}
+
 export function AccountBindingsTab({
   profile,
   onUpdate,
@@ -71,9 +94,20 @@ export function AccountBindingsTab({
     null
   )
   const [unbinding, setUnbinding] = useState(false)
+  const pendingOAuthBinding = useRef<PendingOAuthBinding | null>(null)
+
+  const clearPendingOAuthBinding = useCallback(
+    (expected?: PendingOAuthBinding) => {
+      const pending = pendingOAuthBinding.current
+      if (!pending || (expected && pending !== expected)) return
+      pending.stopCloseWatcher()
+      pendingOAuthBinding.current = null
+    },
+    []
+  )
 
   const customProviders = status?.custom_oauth_providers as
-    | Array<{ id: string; name: string }>
+    | CustomOAuthProviderInfo[]
     | undefined
 
   const fetchCustomBindings = useCallback(async () => {
@@ -116,38 +150,135 @@ export function AccountBindingsTab({
     }
   }
 
-  const handleBindCustomOAuth = (provider: { id: string; name: string }) => {
-    const redirectUrl = `${window.location.origin}/oauth/${provider.id}?bind=true`
-    window.location.href = `/api/oauth/${provider.id}?redirect=${encodeURIComponent(redirectUrl)}`
+  const startOAuthBinding = useCallback(
+    async (provider: string, buildUrl: (state: string) => string) => {
+      const previous = pendingOAuthBinding.current
+      if (previous) {
+        clearPendingOAuthBinding(previous)
+        if (!previous.popup.closed) previous.popup.close()
+      }
+
+      const popup = window.open('', '_blank')
+      if (!popup) {
+        toast.error(t('OAuth pop-up was blocked'))
+        return
+      }
+
+      const pending: PendingOAuthBinding = {
+        provider,
+        state: '',
+        popup,
+        stopCloseWatcher: () => undefined,
+      }
+      pending.stopCloseWatcher = watchOAuthPopupClosed(popup, () =>
+        clearPendingOAuthBinding(pending)
+      )
+      pendingOAuthBinding.current = pending
+
+      try {
+        const state = await createOAuthFlow(provider, 'bind')
+        if (pendingOAuthBinding.current !== pending || popup.closed) return
+        pending.state = state
+        popup.location.replace(buildUrl(state))
+      } catch {
+        const isCurrent = pendingOAuthBinding.current === pending
+        clearPendingOAuthBinding(pending)
+        popup.close()
+        if (isCurrent) toast.error(t('Failed to initialize OAuth'))
+      }
+    },
+    [clearPendingOAuthBinding, t]
+  )
+
+  const handleBindCustomOAuth = async (provider: CustomOAuthProviderInfo) => {
+    await startOAuthBinding(provider.slug, (state) => {
+      const redirectUri = `${window.location.origin}/oauth/${provider.slug}`
+      const url = new URL(provider.authorization_endpoint)
+      url.searchParams.set('client_id', provider.client_id)
+      url.searchParams.set('redirect_uri', redirectUri)
+      url.searchParams.set('response_type', 'code')
+      url.searchParams.set('state', state)
+      if (provider.scopes) url.searchParams.set('scope', provider.scopes)
+      return url.toString()
+    })
   }
 
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== OAUTH_BIND_STORAGE_KEY || !event.newValue) return
+    const handleMessage = async (event: MessageEvent<unknown>) => {
+      if (event.origin !== window.location.origin) return
+      const message = event.data as Partial<OAuthBindingCallback> | null
+      const pending = pendingOAuthBinding.current
+      if (
+        !message ||
+        message.type !== OAUTH_BIND_CALLBACK_MESSAGE ||
+        !pending ||
+        message.provider !== pending.provider ||
+        message.state !== pending.state ||
+        event.source !== pending.popup
+      ) {
+        return
+      }
+
+      clearPendingOAuthBinding(pending)
+      let success = false
+      let resultMessage = t('OAuth failed')
       try {
-        const payload = JSON.parse(event.newValue) as {
-          status?: string
-          provider?: string
-          timestamp?: number
+        if (!message.code && !message.error) {
+          throw new Error(t('Missing code'))
         }
-        if (payload?.status === 'success') {
+        const params: Record<string, string> = { state: message.state }
+        if (message.code) params.code = message.code
+        if (message.error) params.error = message.error
+        if (message.errorDescription) {
+          params.error_description = message.errorDescription
+        }
+        const response = await api.get(`/api/oauth/${message.provider}`, {
+          params,
+          skipBusinessError: true,
+        })
+        success = Boolean(response.data?.success)
+        resultMessage = response.data?.message || resultMessage
+        if (success) {
+          toast.success(t('Binding successful!'))
           onUpdate()
+          await fetchCustomBindings()
+        } else {
+          toast.error(resultMessage)
         }
-      } catch {
-        // ignore malformed payloads
+      } catch (error: unknown) {
+        resultMessage =
+          (error as { response?: { data?: { message?: string } } }).response
+            ?.data?.message ||
+          (error instanceof Error ? error.message : resultMessage)
+        toast.error(resultMessage)
       }
-      try {
-        window.localStorage.removeItem(OAUTH_BIND_STORAGE_KEY)
-      } catch {
-        // ignore cleanup failure
-      }
+
+      pending.popup.postMessage(
+        {
+          type: OAUTH_BIND_RESULT_MESSAGE,
+          provider: message.provider,
+          state: message.state,
+          success,
+          message: resultMessage,
+        },
+        window.location.origin
+      )
     }
 
-    window.addEventListener('storage', handleStorage)
-    return () => window.removeEventListener('storage', handleStorage)
-  }, [onUpdate])
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [clearPendingOAuthBinding, fetchCustomBindings, onUpdate, t])
+
+  useEffect(
+    () => () => {
+      const pending = pendingOAuthBinding.current
+      clearPendingOAuthBinding(pending ?? undefined)
+      if (pending && !pending.popup.closed) pending.popup.close()
+    },
+    [clearPendingOAuthBinding]
+  )
 
   // Memoize bindings to prevent unnecessary recalculations
   const bindings: BindingItem[] = useMemo(() => {
@@ -187,7 +318,9 @@ export function AccountBindingsTab({
         isEnabled: status?.github_oauth || false,
         onBind: () => {
           if (status?.github_client_id) {
-            handleGitHubOAuth(status.github_client_id)
+            void startOAuthBinding('github', (state) =>
+              buildGitHubOAuthUrl(status.github_client_id!, state)
+            )
           }
         },
       },
@@ -204,7 +337,9 @@ export function AccountBindingsTab({
         isEnabled: status?.discord_oauth || false,
         onBind: () => {
           if (status?.discord_client_id) {
-            handleDiscordOAuth(status.discord_client_id)
+            void startOAuthBinding('discord', (state) =>
+              buildDiscordOAuthUrl(status.discord_client_id!, state)
+            )
           }
         },
       },
@@ -221,9 +356,12 @@ export function AccountBindingsTab({
         isEnabled: status?.oidc_enabled || false,
         onBind: () => {
           if (status?.oidc_authorization_endpoint && status?.oidc_client_id) {
-            handleOIDCOAuth(
-              status.oidc_authorization_endpoint,
-              status.oidc_client_id
+            void startOAuthBinding('oidc', (state) =>
+              buildOIDCOAuthUrl(
+                status.oidc_authorization_endpoint!,
+                status.oidc_client_id!,
+                state
+              )
             )
           }
         },
@@ -254,7 +392,9 @@ export function AccountBindingsTab({
         isEnabled: status?.linuxdo_oauth || false,
         onBind: () => {
           if (status?.linuxdo_client_id) {
-            handleLinuxDOOAuth(status.linuxdo_client_id)
+            void startOAuthBinding('linuxdo', (state) =>
+              buildLinuxDOOAuthUrl(status.linuxdo_client_id!, state)
+            )
           }
         },
       },
@@ -319,7 +459,7 @@ export function AccountBindingsTab({
           <div className='grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3'>
             {customProviders.map((provider) => {
               const binding = customBindings.find(
-                (b) => b.provider_id === provider.id
+                (b) => b.provider_id === String(provider.id)
               )
               const isBound = !!binding
               return (
@@ -413,6 +553,9 @@ export function AccountBindingsTab({
       {/* WeChat Bind Dialog */}
       <WeChatBindDialog
         open={dialogs.isOpen('wechat')}
+        qrCodeUrl={
+          typeof status?.wechat_qrcode === 'string' ? status.wechat_qrcode : ''
+        }
         onOpenChange={(open) =>
           open ? dialogs.open('wechat') : dialogs.close('wechat')
         }

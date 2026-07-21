@@ -17,12 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useRef, useEffect } from 'react'
-import type { AxiosRequestConfig } from 'axios'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { useAuthStore } from '@/stores/auth-store'
-import { api } from '@/lib/api'
-import { getOAuthState } from '../api'
+import { clearAuthentication } from '@/lib/api'
+import { getOAuthState, logout } from '../api'
 import {
   buildGitHubOAuthUrl,
   buildDiscordOAuthUrl,
@@ -30,10 +28,6 @@ import {
   buildLinuxDOOAuthUrl,
 } from '../lib/oauth'
 import type { SystemStatus, CustomOAuthProviderInfo } from '../types'
-
-type LogoutRequestConfig = AxiosRequestConfig & {
-  skipErrorHandler?: boolean
-}
 
 /**
  * Hook for managing OAuth login
@@ -44,7 +38,6 @@ export function useOAuthLogin(status: SystemStatus | null) {
   const [githubButtonText, setGithubButtonText] = useState('')
   const [githubButtonDisabled, setGithubButtonDisabled] = useState(false)
   const githubTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const { auth } = useAuthStore()
 
   useEffect(() => {
     setGithubButtonText(t('Continue with GitHub'))
@@ -58,17 +51,11 @@ export function useOAuthLogin(status: SystemStatus | null) {
 
   const resetSession = async () => {
     try {
-      auth.reset()
-    } catch (_error) {
-      // ignore store reset errors
-    }
-    try {
-      await api.get('/api/user/logout', {
-        skipErrorHandler: true,
-      } as LogoutRequestConfig)
+      await logout()
     } catch (_error) {
       // ignore logout errors
     }
+    clearAuthentication()
   }
 
   const handleGitHubLogin = async () => {
@@ -93,7 +80,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
 
     try {
       await resetSession()
-      const state = await getOAuthState()
+      const state = await getOAuthState('github')
       if (!state) {
         toast.error(t('Failed to initialize OAuth'))
         if (githubTimeoutRef.current) {
@@ -124,7 +111,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
     setIsLoading(true)
     try {
       await resetSession()
-      const state = await getOAuthState()
+      const state = await getOAuthState('discord')
       if (!state) {
         toast.error(t('Failed to initialize OAuth'))
         return
@@ -145,7 +132,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
     setIsLoading(true)
     try {
       await resetSession()
-      const state = await getOAuthState()
+      const state = await getOAuthState('oidc')
       if (!state) {
         toast.error(t('Failed to initialize OAuth'))
         return
@@ -170,7 +157,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
     setIsLoading(true)
     try {
       await resetSession()
-      const state = await getOAuthState()
+      const state = await getOAuthState('linuxdo')
       if (!state) {
         toast.error(t('Failed to initialize OAuth'))
         return
@@ -195,7 +182,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
     setIsLoading(true)
     try {
       await resetSession()
-      const state = await getOAuthState()
+      const state = await getOAuthState(provider.slug)
       if (!state) {
         toast.error(t('Failed to initialize OAuth'))
         return

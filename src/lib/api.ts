@@ -16,128 +16,255 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import axios from 'axios'
+import axios, { type AxiosRequestConfig } from 'axios'
 import i18next from 'i18next'
 import { toast } from 'sonner'
-import { useAuthStore } from '@/stores/auth-store'
+import {
+  useAuthStore,
+  type AuthBootstrapState,
+  type AuthBundle,
+  type AuthUser,
+  type LoginSession,
+} from '@/stores/auth-store'
 
-// ============================================================================
-// Axios Instance Configuration
-// ============================================================================
-
-// Base URL: empty string for same-origin API requests
-const baseURL = ''
-
-function isPublicAuthPath(pathname: string): boolean {
-  return (
-    pathname === '/' ||
-    pathname === '/sign-in' ||
-    pathname === '/sign-up' ||
-    pathname === '/setup' ||
-    pathname.startsWith('/pricing') ||
-    pathname.startsWith('/rankings') ||
-    pathname.startsWith('/oauth/')
-  )
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    skipBusinessError?: boolean
+    skipErrorHandler?: boolean
+    disableDuplicate?: boolean
+    skipAuthRefresh?: boolean
+    authRetry?: boolean
+    acceptAuthRotation?: boolean
+  }
 }
 
-// Create axios instance with default config
+export type ApiRequestConfig = AxiosRequestConfig
+
+export type RefreshOutcome =
+  | { kind: 'authenticated'; bundle: AuthBundle }
+  | { kind: 'anonymous' }
+  | { kind: 'transient_error'; error: unknown }
+  | { kind: 'out_of_sync'; code?: string }
+
+export interface AuthTokenRotation {
+  access_token: string
+  token_type: string
+  access_expires_at: number
+  session: LoginSession
+}
+
+export class AuthRotationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AuthRotationError'
+  }
+}
+
+const baseURL = ''
+
 export const api = axios.create({
   baseURL,
-  withCredentials: true, // Include cookies in cross-origin requests
+  withCredentials: true,
   headers: {
-    'Cache-Control': 'no-store', // Prevent caching
+    'Cache-Control': 'no-store',
   },
 })
 
-// ============================================================================
-// Request Deduplication
-// ============================================================================
+const authClient = axios.create({
+  baseURL,
+  withCredentials: true,
+  headers: {
+    'Cache-Control': 'no-store',
+  },
+})
 
-// Deduplicate concurrent GET requests to the same URL
-// Prevents multiple identical requests from being sent simultaneously
 const inFlightGet = new Map<string, Promise<unknown>>()
 const originalGet = api.get.bind(api)
 
-api.get = ((url: string, config = {}) => {
-  const disableDuplicate = (config as unknown as Record<string, unknown>)
-    ?.disableDuplicate
-  if (disableDuplicate) return originalGet(url, config)
+api.get = ((url: string, config: ApiRequestConfig = {}) => {
+  if (config.disableDuplicate) return originalGet(url, config)
 
-  const params = (config as unknown as Record<string, unknown>)?.params
-    ? JSON.stringify((config as unknown as Record<string, unknown>).params)
-    : '{}'
-  const key = `${url}?${params}`
+  const params = config.params ? JSON.stringify(config.params) : '{}'
+  const sessionSID = useAuthStore.getState().auth.session?.sid || 'anonymous'
+  const key = `${sessionSID}:${url}?${params}`
+  const existingRequest = inFlightGet.get(key)
+  if (existingRequest) return existingRequest
 
-  // Return existing in-flight request if available
-  if (inFlightGet.has(key)) return inFlightGet.get(key)!
-
-  // Create new request and clean up after completion
-  const req = originalGet(url, config).finally(() => inFlightGet.delete(key))
-  inFlightGet.set(key, req)
-  return req
+  const request = originalGet(url, config).finally(() => {
+    inFlightGet.delete(key)
+  })
+  inFlightGet.set(key, request)
+  return request
 }) as typeof api.get
 
-// ============================================================================
-// Response Interceptor
-// ============================================================================
+let refreshPromise: Promise<RefreshOutcome> | null = null
 
-// Handle business logic errors and HTTP errors globally
-api.interceptors.response.use(
-  (response) => {
-    const skipBusiness = (response.config as unknown as Record<string, unknown>)
-      ?.skipBusinessError
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object'
+}
 
-    // Unified business response format: { success, message, data }
-    if (
-      !skipBusiness &&
-      response &&
-      response.data &&
-      typeof response.data.success === 'boolean'
-    ) {
-      if (!response.data.success) {
-        // Show error toast for business failures
-        const msg = response.data.message || 'Request failed'
-        toast.error(msg)
-      }
-    }
-    return response
-  },
-  (error) => {
-    const skip = error?.config?.skipErrorHandler
-    if (!skip) {
-      const status = error?.response?.status
+function isAuthUser(value: unknown): value is AuthUser {
+  if (!isRecord(value)) return false
+  return (
+    Number.isInteger(value.id) &&
+    Number(value.id) > 0 &&
+    typeof value.username === 'string' &&
+    typeof value.role === 'number'
+  )
+}
 
-      if (status === 401) {
-        // Unauthorized: clear auth state and show toast
-        try {
-          useAuthStore.getState().auth.reset()
-        } catch {
-          /* empty */
-        }
-        if (
-          typeof window === 'undefined' ||
-          !isPublicAuthPath(window.location.pathname)
-        ) {
-          toast.error(i18next.t('Session expired!'))
-        }
-      } else {
-        // Other errors: show error message from response or default
-        const msg =
-          error?.response?.data?.message || error?.message || 'Request error'
-        toast.error(msg)
-      }
-    }
-    return Promise.reject(error)
+function isLoginSession(value: unknown): value is LoginSession {
+  if (!isRecord(value)) return false
+  return (
+    typeof value.sid === 'string' &&
+    value.sid.length > 0 &&
+    typeof value.current === 'boolean' &&
+    typeof value.login_method === 'string' &&
+    typeof value.ip === 'string' &&
+    typeof value.user_agent === 'string' &&
+    typeof value.created_at === 'number' &&
+    typeof value.last_active_at === 'number' &&
+    typeof value.expires_at === 'number'
+  )
+}
+
+function hasValidTokenFields(value: Record<string, unknown>): boolean {
+  return (
+    typeof value.access_token === 'string' &&
+    value.access_token.length > 0 &&
+    typeof value.token_type === 'string' &&
+    value.token_type.length > 0 &&
+    typeof value.access_expires_at === 'number' &&
+    Number.isFinite(value.access_expires_at) &&
+    value.access_expires_at > 0
+  )
+}
+
+export function isAuthBundle(value: unknown): value is AuthBundle {
+  if (!isRecord(value)) return false
+  return (
+    hasValidTokenFields(value) &&
+    isAuthUser(value.user) &&
+    isLoginSession(value.session)
+  )
+}
+
+function isAuthTokenRotation(value: unknown): value is AuthTokenRotation {
+  return (
+    isRecord(value) &&
+    hasValidTokenFields(value) &&
+    isLoginSession(value.session) &&
+    value.session.current
+  )
+}
+
+export function applyAuthBundle(bundle: AuthBundle): void {
+  useAuthStore.getState().auth.setBundle(bundle)
+}
+
+export function applyAuthRotation(value: unknown): void {
+  if (!isAuthTokenRotation(value)) {
+    throw new AuthRotationError('Invalid authentication rotation response')
   }
-)
 
-// ============================================================================
-// Common Headers Utility
-// ============================================================================
+  const auth = useAuthStore.getState().auth
+  if (!auth.user || !auth.session) {
+    throw new AuthRotationError('Authentication rotation has no active session')
+  }
+  if (value.session.sid !== auth.session.sid) {
+    throw new AuthRotationError('Authentication rotation session mismatch')
+  }
 
-/**
- * Get user ID from localStorage
- */
+  applyAuthBundle({
+    access_token: value.access_token,
+    token_type: value.token_type,
+    access_expires_at: value.access_expires_at,
+    session: value.session,
+    user: auth.user,
+  })
+}
+
+export function clearAuthentication(
+  _synchronizeTabs = true,
+  bootstrapState: AuthBootstrapState = 'complete'
+): void {
+  useAuthStore.getState().auth.reset(bootstrapState)
+}
+
+export function clearAuthenticatedClientState(queryClient?: {
+  clear: () => void
+}): void {
+  clearAuthentication()
+  queryClient?.clear()
+}
+
+async function requestRefresh(): Promise<RefreshOutcome> {
+  const expectedSID = useAuthStore.getState().auth.session?.sid
+  try {
+    const response = await authClient.post('/api/user/auth/refresh', undefined, {
+      headers: expectedSID ? { 'X-Auth-Session': expectedSID } : undefined,
+    })
+    const payload = response.data
+    if (payload?.success === true && isAuthBundle(payload.data)) {
+      applyAuthBundle(payload.data)
+      return { kind: 'authenticated', bundle: payload.data }
+    }
+    clearAuthentication(false)
+    return { kind: 'out_of_sync', code: payload?.code }
+  } catch (error: unknown) {
+    if (!axios.isAxiosError(error)) {
+      useAuthStore.getState().auth.setBootstrapState('idle')
+      return { kind: 'transient_error', error }
+    }
+    if (error.response?.status === 401) {
+      clearAuthentication(true)
+      return { kind: 'anonymous' }
+    }
+    if (error.response?.status === 409) {
+      clearAuthentication(false)
+      return {
+        kind: 'out_of_sync',
+        code:
+          typeof error.response.data?.code === 'string'
+            ? error.response.data.code
+            : undefined,
+      }
+    }
+    useAuthStore.getState().auth.setBootstrapState('idle')
+    return { kind: 'transient_error', error }
+  }
+}
+
+export function refreshAuthentication(): Promise<RefreshOutcome> {
+  if (!refreshPromise) {
+    refreshPromise = requestRefresh().finally(() => {
+      refreshPromise = null
+    })
+  }
+  return refreshPromise
+}
+
+export async function bootstrapAuthentication(): Promise<RefreshOutcome> {
+  const auth = useAuthStore.getState().auth
+  const now = Math.floor(Date.now() / 1000)
+  if (auth.user && auth.accessToken && auth.accessExpiresAt && auth.accessExpiresAt > now) {
+    auth.setBootstrapState('complete')
+    return {
+      kind: 'authenticated',
+      bundle: {
+        access_token: auth.accessToken,
+        token_type: 'Bearer',
+        access_expires_at: auth.accessExpiresAt,
+        user: auth.user,
+        session: auth.session!,
+      },
+    }
+  }
+
+  auth.setBootstrapState('checking')
+  return refreshAuthentication()
+}
+
 function getUserId(): string | null {
   try {
     if (typeof window !== 'undefined') {
@@ -149,9 +276,6 @@ function getUserId(): string | null {
   return null
 }
 
-/**
- * Get common request headers (for both axios and SSE requests)
- */
 export function getCommonHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -162,41 +286,123 @@ export function getCommonHeaders(): Record<string, string> {
     headers['New-Api-User'] = uid
   }
 
+  const accessToken = useAuthStore.getState().auth.accessToken
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`
+  }
+
   return headers
 }
 
-// ============================================================================
-// Request Interceptor
-// ============================================================================
+export async function getFreshAuthHeaders(): Promise<Record<string, string>> {
+  const auth = useAuthStore.getState().auth
+  const refreshBefore = Math.floor(Date.now() / 1000) + 60
+  if (
+    auth.accessToken &&
+    auth.accessExpiresAt &&
+    auth.accessExpiresAt > refreshBefore
+  ) {
+    return getCommonHeaders()
+  }
 
-// Attach user ID header for all requests
+  const outcome = await refreshAuthentication()
+  if (outcome.kind === 'authenticated') return getCommonHeaders()
+  throw new Error(i18next.t('Session expired!'))
+}
+
+function redirectToSignIn(): void {
+  if (
+    typeof window !== 'undefined' &&
+    window.location.pathname !== '/sign-in'
+  ) {
+    window.location.replace('/sign-in')
+  }
+}
+
+function responseMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    return (
+      error.response?.data?.message ||
+      error.message ||
+      i18next.t('Request failed')
+    )
+  }
+  return error instanceof Error ? error.message : i18next.t('Request failed')
+}
+
+api.interceptors.response.use(
+  (response) => {
+    if (response.config.acceptAuthRotation && response.data?.success === true) {
+      applyAuthRotation(response.data.data)
+    }
+
+    if (
+      !response.config.skipBusinessError &&
+      typeof response.data?.success === 'boolean' &&
+      !response.data.success
+    ) {
+      toast.error(response.data.message || i18next.t('Request failed'))
+    }
+    return response
+  },
+  async (error) => {
+    const config = error?.config as ApiRequestConfig | undefined
+    const skipErrorHandler = config?.skipErrorHandler
+    const status = error?.response?.status
+
+    if (status === 401) {
+      if (config && !config.skipAuthRefresh && !config.authRetry) {
+        config.authRetry = true
+        const outcome = await refreshAuthentication()
+        if (outcome.kind === 'authenticated') {
+          const token = useAuthStore.getState().auth.accessToken
+          if (token) {
+            config.headers = {
+              ...config.headers,
+              Authorization: `Bearer ${token}`,
+            }
+          }
+          return api.request(config)
+        }
+
+        if (outcome.kind === 'anonymous' || outcome.kind === 'out_of_sync') {
+          if (!skipErrorHandler) toast.error(i18next.t('Session expired!'))
+          redirectToSignIn()
+        }
+      } else if (config?.authRetry) {
+        clearAuthentication(false)
+        if (!skipErrorHandler) toast.error(i18next.t('Session expired!'))
+        redirectToSignIn()
+      } else if (!skipErrorHandler) {
+        toast.error(i18next.t('Session expired!'))
+      }
+    } else if (!skipErrorHandler) {
+      toast.error(responseMessage(error))
+    }
+    return Promise.reject(error)
+  }
+)
+
 api.interceptors.request.use((config) => {
   const uid = getUserId()
   if (uid) {
-    // Custom header for user identification
-    ;(config.headers as Record<string, string>)['New-Api-User'] = uid
+    config.headers['New-Api-User'] = uid
+  }
+
+  const accessToken = useAuthStore.getState().auth.accessToken
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`
   }
   return config
 })
 
-// ============================================================================
-// Common API Functions
-// ============================================================================
-
-// ----------------------------------------------------------------------------
-// User APIs
-// ----------------------------------------------------------------------------
-
-// Get current user info
 export async function getSelf() {
   const res = await api.get('/api/user/self', {
-    // Avoid global 401 toast during guards/preloads
     skipErrorHandler: true,
-  } as Record<string, unknown>)
+  })
   return res.data
 }
 
-// Get user available models
 export async function getUserModels(): Promise<{
   success: boolean
   message?: string
@@ -206,7 +412,6 @@ export async function getUserModels(): Promise<{
   return res.data
 }
 
-// Get user groups with descriptions and ratios
 export async function getUserGroups(): Promise<{
   success: boolean
   message?: string
@@ -216,17 +421,11 @@ export async function getUserGroups(): Promise<{
   return res.data
 }
 
-// ----------------------------------------------------------------------------
-// System APIs
-// ----------------------------------------------------------------------------
-
-// Get system status
 export async function getStatus() {
   const res = await api.get('/api/status')
   return res.data?.data as Record<string, unknown>
 }
 
-// Get system notice
 export async function getNotice(): Promise<{
   success: boolean
   message?: string
@@ -236,36 +435,39 @@ export async function getNotice(): Promise<{
   return res.data
 }
 
-// ----------------------------------------------------------------------------
-// 2FA Management APIs
-// ----------------------------------------------------------------------------
-
-// Get 2FA status
 export async function get2FAStatus() {
   const res = await api.get('/api/user/2fa/status')
   return res.data
 }
 
-// Setup 2FA
 export async function setup2FA() {
   const res = await api.post('/api/user/2fa/setup')
   return res.data
 }
 
-// Enable 2FA with verification code
 export async function enable2FA(code: string) {
-  const res = await api.post('/api/user/2fa/enable', { code })
+  const res = await api.post(
+    '/api/user/2fa/enable',
+    { code },
+    { acceptAuthRotation: true }
+  )
   return res.data
 }
 
-// Disable 2FA with verification code
 export async function disable2FA(code: string) {
-  const res = await api.post('/api/user/2fa/disable', { code })
+  const res = await api.post(
+    '/api/user/2fa/disable',
+    { code },
+    { acceptAuthRotation: true }
+  )
   return res.data
 }
 
-// Regenerate 2FA backup codes
 export async function regenerate2FABackupCodes(code: string) {
-  const res = await api.post('/api/user/2fa/backup_codes', { code })
+  const res = await api.post(
+    '/api/user/2fa/backup_codes',
+    { code },
+    { acceptAuthRotation: true }
+  )
   return res.data
 }

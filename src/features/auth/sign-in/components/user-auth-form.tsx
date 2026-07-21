@@ -60,6 +60,8 @@ import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
 import { beginPasskeyLogin, finishPasskeyLogin } from '@/features/auth/passkey'
 import type { AuthFormProps } from '@/features/auth/types'
+import { isAuthBundle } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth-store'
 
 export function UserAuthForm({
   className,
@@ -89,6 +91,9 @@ export function UserAuthForm({
     validateTurnstile,
   } = useTurnstile()
   const { handleLoginSuccess, redirectTo2FA } = useAuthRedirect()
+  const setPending2FAFlowToken = useAuthStore(
+    (state) => state.auth.setPending2FAFlowToken
+  )
 
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
@@ -152,12 +157,20 @@ export function UserAuthForm({
       })
 
       if (res.success) {
-        if (res.data?.require_2fa) {
+        if (res.data && 'require_2fa' in res.data && res.data.require_2fa) {
+          if (!res.data.flow_token) {
+            throw new Error(t('Login flow expired. Please sign in again.'))
+          }
+          setPending2FAFlowToken(res.data.flow_token)
           redirectTo2FA()
           return
         }
 
-        await handleLoginSuccess(res.data as { id?: number } | null, redirectTo)
+        if (isAuthBundle(res.data)) {
+          await handleLoginSuccess(res.data, redirectTo)
+        } else {
+          await handleLoginSuccess(res.data as { id?: number } | null, redirectTo)
+        }
         toast.success(t('Welcome back!'))
       }
     } catch (_error) {
@@ -194,7 +207,11 @@ export function UserAuthForm({
     try {
       const res = await wechatLoginByCode(wechatCode)
       if (res?.success) {
-        await handleLoginSuccess(res.data as { id?: number } | null, redirectTo)
+        if (isAuthBundle(res.data)) {
+          await handleLoginSuccess(res.data, redirectTo)
+        } else {
+          await handleLoginSuccess(res.data as { id?: number } | null, redirectTo)
+        }
         toast.success(t('Signed in via WeChat'))
         handleWeChatDialogChange(false)
       } else {
@@ -233,6 +250,10 @@ export function UserAuthForm({
       const publicKey = prepareCredentialRequestOptions(
         begin.data?.options ?? begin.data
       )
+      const flowToken = begin.data?.flow_token
+      if (!flowToken) {
+        throw new Error(t('Login flow expired. Please sign in again.'))
+      }
 
       const credential = (await navigator.credentials.get({
         publicKey,
@@ -248,7 +269,7 @@ export function UserAuthForm({
         throw new Error(t('Invalid Passkey response'))
       }
 
-      const finish = await finishPasskeyLogin(assertion)
+      const finish = await finishPasskeyLogin(flowToken, assertion)
       if (!finish.success) {
         throw new Error(finish.message || t('Failed to complete Passkey login'))
       }
@@ -257,10 +278,14 @@ export function UserAuthForm({
         throw new Error(t('Missing user data from Passkey login response'))
       }
 
-      await handleLoginSuccess(
-        finish.data as { id?: number } | null,
-        redirectTo
-      )
+      if (isAuthBundle(finish.data)) {
+        await handleLoginSuccess(finish.data, redirectTo)
+      } else {
+        await handleLoginSuccess(
+          finish.data as { id?: number } | null,
+          redirectTo
+        )
+      }
       toast.success(t('Signed in with Passkey'))
     } catch (error: unknown) {
       if (error instanceof DOMException && error.name === 'NotAllowedError') {

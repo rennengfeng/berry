@@ -27,7 +27,7 @@ import { ROLE } from '@/lib/roles'
  */
 export function requireAdmin(fallback: string = '/portal') {
   const { auth } = useAuthStore.getState()
-  if (!auth.user || auth.user.role < ROLE.ADMIN) {
+  if (!auth.user || !auth.accessToken || auth.user.role < ROLE.ADMIN) {
     throw redirect({ to: fallback })
   }
 }
@@ -38,7 +38,7 @@ export function requireAdmin(fallback: string = '/portal') {
  */
 export function requireAdminBlock() {
   const { auth } = useAuthStore.getState()
-  if (!auth.user) {
+  if (!auth.user || !auth.accessToken) {
     throw redirect({ to: '/sign-in' })
   }
   if (auth.user.role < ROLE.ADMIN) {

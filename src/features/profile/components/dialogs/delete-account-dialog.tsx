@@ -21,8 +21,8 @@ import { useNavigate } from '@tanstack/react-router'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { useAuthStore } from '@/stores/auth-store'
-import { api } from '@/lib/api'
+import { logout } from '@/features/auth/api'
+import { clearAuthentication } from '@/lib/api'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -54,7 +54,6 @@ export function DeleteAccountDialog({
 }: DeleteAccountDialogProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { reset } = useAuthStore((state) => state.auth)
   const [loading, setLoading] = useState(false)
   const [confirmation, setConfirmation] = useState('')
 
@@ -73,18 +72,17 @@ export function DeleteAccountDialog({
 
         // Logout and redirect
         try {
-          await api.get('/api/user/logout')
+          await logout()
         } catch {
           // Ignore logout errors
         }
 
-        reset()
-        localStorage.removeItem('user')
+        clearAuthentication()
         navigate({ to: '/sign-in' })
       } else {
         toast.error(response.message || t('Failed to delete account'))
       }
-    } catch (_error) {
+    } catch {
       toast.error(t('Failed to delete account'))
     } finally {
       setLoading(false)
