@@ -73,7 +73,7 @@ export default defineConfig(({ envMode }) => {
       minify: isProd,
       target: 'web',
       distPath: {
-        root: '../default/dist',
+        root: 'dist',
       },
       cleanDistPath: isProd,
       // Rely on Rsbuild default legalComments ("linked" → per-chunk *.LICENSE.txt) in all modes.

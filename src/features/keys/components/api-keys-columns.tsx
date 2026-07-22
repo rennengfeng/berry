@@ -19,10 +19,9 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { type ColumnDef } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
-
-import { BadgeCell, TruncatedCell } from '@/components/data-table'
-import { GroupBadge } from '@/components/group-badge'
-import { StatusBadge } from '@/components/status-badge'
+import { getUserGroups } from '@/lib/api'
+import { formatQuota, formatTimestampToDate } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
 import {
@@ -30,10 +29,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { getUserGroups } from '@/lib/api'
-import { formatQuota, formatTimestampToDate } from '@/lib/format'
-import { cn } from '@/lib/utils'
-
+import { BadgeCell } from '@/components/data-table'
+import { GroupBadge } from '@/components/group-badge'
+import { StatusBadge } from '@/components/status-badge'
 import { API_KEY_STATUSES } from '../constants'
 import { type ApiKey } from '../types'
 import {
@@ -49,16 +47,25 @@ function getQuotaProgressColor(percentage: number): string {
   return '[&_[data-slot=progress-indicator]]:bg-emerald-500'
 }
 
-function useGroupRatios(): Record<string, number> {
+type GroupRatio = number | string
+
+function splitGroups(group: string): string[] {
+  return group
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function useGroupRatios(): Record<string, GroupRatio> {
   const { data } = useQuery({
     queryKey: ['user-groups'],
     queryFn: getUserGroups,
     staleTime: 0,
     select: (res) => {
       if (!res.success || !res.data) return {}
-      const ratios: Record<string, number> = {}
+      const ratios: Record<string, GroupRatio> = {}
       for (const [group, info] of Object.entries(res.data)) {
-        if (typeof info.ratio === 'number') {
+        if (typeof info.ratio === 'number' || typeof info.ratio === 'string') {
           ratios[group] = info.ratio
         }
       }
@@ -195,44 +202,49 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
       cell: ({ row }) => {
         const apiKey = row.original
         const group = row.getValue('group') as string
-        const ratio = group && group !== 'auto' ? groupRatios[group] : undefined
+        const groups = splitGroups(group)
 
-        if (group === 'auto') {
-          return (
-            <Tooltip>
-              <TooltipTrigger
-                render={<BadgeCell className='gap-1.5 text-xs' />}
-              >
-                <GroupBadge group='auto' />
-                {apiKey.cross_group_retry && (
-                  <StatusBadge
-                    label={t('Cross-group')}
-                    variant='info'
-                    copyable={false}
-                  />
-                )}
-              </TooltipTrigger>
-              <TooltipContent>
-                <span className='text-xs'>
-                  {t(
-                    'Automatically selects the best available group with circuit breaker mechanism'
-                  )}
-                </span>
-              </TooltipContent>
-            </Tooltip>
-          )
-        }
+        if (groups.length === 0)
+          return <span className='text-muted-foreground'>-</span>
+
         return (
-          <TruncatedCell
-            className='-ml-1.5'
-            tooltipContent={group || '-'}
-            tooltipClassName='break-all'
-          >
-            <GroupBadge group={group} ratio={ratio} />
-          </TruncatedCell>
+          <div className='flex max-w-[360px] min-w-[180px] flex-col gap-1.5'>
+            {groups.map((item) => {
+              const ratio =
+                item && item !== 'auto' ? groupRatios[item] : undefined
+
+              if (item === 'auto') {
+                return (
+                  <Tooltip key={item}>
+                    <TooltipTrigger
+                      render={<BadgeCell className='gap-1.5 text-xs' />}
+                    >
+                      <GroupBadge group='auto' />
+                      {apiKey.cross_group_retry && (
+                        <StatusBadge
+                          label={t('Cross-group')}
+                          variant='info'
+                          copyable={false}
+                        />
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <span className='text-xs'>
+                        {t(
+                          'Automatically selects the best available group with circuit breaker mechanism'
+                        )}
+                      </span>
+                    </TooltipContent>
+                  </Tooltip>
+                )
+              }
+
+              return <GroupBadge key={item} group={item} ratio={ratio} />
+            })}
+          </div>
         )
       },
-      size: 160,
+      size: 220,
       meta: { mobileHidden: true },
     },
     {

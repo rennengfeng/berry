@@ -17,9 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
-
 import { cn } from '@/lib/utils'
-
 import { StatusBadge, type StatusBadgeProps } from './status-badge'
 
 type GroupBadgeProps = Omit<
@@ -28,10 +26,13 @@ type GroupBadgeProps = Omit<
 > & {
   group?: string | null
   label?: string
-  ratio?: number | null
+  ratio?: number | string | null
 }
 
-function getGroupRatioClassName(ratio: number): string {
+function getGroupRatioClassName(ratio: number | string): string {
+  if (typeof ratio !== 'number') {
+    return 'bg-info/10 text-info'
+  }
   if (ratio > 1) {
     return 'bg-warning/10 text-warning'
   }
@@ -102,7 +103,7 @@ export function GroupBadge(props: GroupBadgeProps) {
           getGroupRatioClassName(ratio)
         )}
       >
-        <span>{ratio}x</span>
+        <span>{typeof ratio === 'number' ? `${ratio}x` : ratio}</span>
       </span>
     </span>
   )
