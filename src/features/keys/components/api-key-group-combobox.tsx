@@ -16,10 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Check, ChevronsUpDown } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { Check, ChevronsUpDown, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -35,7 +35,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { cn } from '@/lib/utils'
 
 export type ApiKeyGroupOption = {
   value: string
@@ -48,6 +47,14 @@ type ApiKeyGroupComboboxProps = {
   options: ApiKeyGroupOption[]
   value?: string
   onValueChange: (value: string) => void
+  placeholder?: string
+  disabled?: boolean
+}
+
+type ApiKeyGroupMultiSelectProps = {
+  options: ApiKeyGroupOption[]
+  selected: string[]
+  onChange: (values: string[]) => void
   placeholder?: string
   disabled?: boolean
 }
@@ -206,5 +213,110 @@ export function ApiKeyGroupCombobox({
         </Command>
       </PopoverContent>
     </Popover>
+  )
+}
+
+export function ApiKeyGroupMultiSelect({
+  options,
+  selected,
+  onChange,
+  placeholder,
+  disabled,
+}: ApiKeyGroupMultiSelectProps) {
+  const { t } = useTranslation()
+  const [searchValue, setSearchValue] = useState('')
+
+  const filteredOptions = useMemo(() => {
+    const search = searchValue.trim().toLowerCase()
+    if (!search) return options
+
+    return options.filter((option) => {
+      const ratioText = String(option.ratio ?? '').toLowerCase()
+      return (
+        option.value.toLowerCase().includes(search) ||
+        option.label.toLowerCase().includes(search) ||
+        option.desc?.toLowerCase().includes(search) ||
+        ratioText.includes(search)
+      )
+    })
+  }, [options, searchValue])
+
+  const toggleOption = (value: string) => {
+    if (disabled) return
+
+    if (selected.includes(value)) {
+      onChange(selected.filter((item) => item !== value))
+      return
+    }
+
+    onChange([...selected, value])
+  }
+
+  return (
+    <div className='border-input bg-background rounded-lg border'>
+      <div className='border-b px-3 py-2'>
+        <div className='text-muted-foreground flex items-center gap-2 rounded-md border px-3 py-2 text-sm'>
+          <Search className='size-4 shrink-0' />
+          <input
+            value={searchValue}
+            onChange={(event) => setSearchValue(event.target.value)}
+            placeholder={placeholder || t('Search...')}
+            disabled={disabled}
+            className='min-w-0 flex-1 bg-transparent outline-none disabled:cursor-not-allowed'
+          />
+        </div>
+      </div>
+
+      <div className='max-h-64 overflow-y-auto p-2'>
+        {filteredOptions.length === 0 ? (
+          <div className='text-muted-foreground px-2 py-6 text-center text-sm'>
+            {t('No group found.')}
+          </div>
+        ) : (
+          <div className='grid grid-cols-1 gap-2 sm:grid-cols-2'>
+            {filteredOptions.map((option) => {
+              const isSelected = selected.includes(option.value)
+
+              return (
+                <button
+                  key={option.value}
+                  type='button'
+                  disabled={disabled}
+                  onClick={() => toggleOption(option.value)}
+                  className={cn(
+                    'group flex min-h-16 items-start gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+                    isSelected
+                      ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                      : 'border-border bg-muted/20 hover:border-primary/45 hover:bg-muted/45'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors',
+                      isSelected
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-muted-foreground/30 group-hover:border-primary/60 text-transparent'
+                    )}
+                  >
+                    <Check className='size-3' />
+                  </span>
+                  <span className='min-w-0 flex-1'>
+                    <span className='block truncate text-sm font-medium'>
+                      {option.label}
+                    </span>
+                    {option.desc && option.desc !== option.label && (
+                      <span className='text-muted-foreground mt-0.5 line-clamp-2 block text-xs leading-4'>
+                        {option.desc}
+                      </span>
+                    )}
+                  </span>
+                  <GroupRatioBadge ratio={option.ratio} />
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }

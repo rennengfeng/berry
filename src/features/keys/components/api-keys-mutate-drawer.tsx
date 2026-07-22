@@ -74,7 +74,10 @@ import {
   transformApiKeyToFormDefaults,
 } from '../lib'
 import { type ApiKey } from '../types'
-import { type ApiKeyGroupOption } from './api-key-group-combobox'
+import {
+  ApiKeyGroupMultiSelect,
+  type ApiKeyGroupOption,
+} from './api-key-group-combobox'
 import { useApiKeys } from './api-keys-provider'
 
 type ApiKeyMutateDrawerProps = {
@@ -120,13 +123,6 @@ export function ApiKeysMutateDrawer({
       ratio: info.ratio,
     })
   )
-  const groupOptions = groups.map((group) => ({
-    value: group.value,
-    label:
-      group.desc && group.desc !== group.value
-        ? `${group.label} - ${group.desc}`
-        : group.label,
-  }))
   const schema = getApiKeyFormSchema(t)
 
   const form = useForm<ApiKeyFormValues>({
@@ -305,8 +301,8 @@ export function ApiKeysMutateDrawer({
                   <FormItem>
                     <FormLabel>{t('Groups')}</FormLabel>
                     <FormControl>
-                      <MultiSelect
-                        options={groupOptions}
+                      <ApiKeyGroupMultiSelect
+                        options={groups}
                         selected={field.value ?? []}
                         onChange={field.onChange}
                         placeholder={t('Select groups')}
