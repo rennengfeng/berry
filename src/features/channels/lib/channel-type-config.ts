@@ -134,9 +134,9 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       baseUrl: 'Default: https://api.replicate.com',
     },
   },
-  59: {
-    id: 59,
-    name: CHANNEL_TYPES[59],
+  10001: {
+    id: 10001,
+    name: CHANNEL_TYPES[10001],
     icon: 'qwen',
     defaultBaseUrl: 'https://dashscope.aliyuncs.com',
     hints: {
