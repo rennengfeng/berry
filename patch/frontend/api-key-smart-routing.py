@@ -22,6 +22,7 @@ SMART_ROUTING_I18N = {
     "Manual routing": "Manual routing",
     "No group selected": "No group selected",
     "No groups selected. Smart routing will use all groups available to this account.": "No groups selected. Smart routing will use all groups available to this account.",
+    "Off": "Off",
     "Price first": "Price first",
     "Prioritizes faster first-token response": "Prioritizes faster first-token response",
     "Prioritizes lower-cost groups": "Prioritizes lower-cost groups",
@@ -42,14 +43,19 @@ SMART_ROUTING_I18N = {
 SMART_ROUTING_ZH = {
     "All available groups": "全部可用分组",
     "Balances price, speed, and success rate": "综合平衡价格、速度和成功率",
+    "Compares TTFT for the current model in each candidate group first. Cold start uses 200 virtual samples at 3000ms.": "优先比较当前模型在各候选分组中的首字响应时间。冷启动时使用 200 个 3000ms 的虚拟样本。",
+    "Compares success rate for the current model in each candidate group first. Cold start uses 200 virtual samples at 95% success.": "优先比较当前模型在各候选分组中的成功率。冷启动时使用 200 个 95% 成功率的虚拟样本。",
+    "Compares the estimated cost for the current model in each candidate group first, then uses success rate and TTFT as tie breakers.": "优先比较当前模型在各候选分组中的预估成本，再用成功率和首字响应时间作为平局判断。",
     "Manual routing": "手动路由",
     "No group selected": "未选择分组",
     "No groups selected. Smart routing will use all groups available to this account.": "未选择分组时，智能路由会使用当前账户可用的全部普通分组。",
+    "Off": "关闭",
     "Price first": "价格优先",
     "Prioritizes faster first-token response": "优先选择首字响应更快的分组",
     "Prioritizes lower-cost groups": "优先选择成本更低的分组",
     "Prioritizes recently stable groups": "优先选择近期更稳定的分组",
     "Route": "路由",
+    "Scores the current model across candidate groups using price, TTFT, and success rate. If no groups are selected, all usable groups are candidates.": "按价格、首字响应时间和成功率给当前模型的候选分组评分。未选择分组时，所有可用普通分组都会作为候选。",
     "Select one or more groups. Manual routing tries them in order when failures occur.": "请选择一个或多个分组。手动路由会在失败时按顺序尝试。",
     "Smart auto": "智能自动",
     "Smart routing": "智能路由",
@@ -100,13 +106,22 @@ def patch_locale_file(path: Path) -> None:
     if not path.exists():
         return
     data = json.loads(path.read_text(encoding="utf-8"))
+    namespace = data.setdefault("translation", {})
+    if not isinstance(namespace, dict):
+        return
     translations = dict(SMART_ROUTING_I18N)
     if path.name == "zh.json":
         translations.update(SMART_ROUTING_ZH)
     changed = False
     for key, value in translations.items():
-        if key not in data:
-            data[key] = value
+        if data.pop(key, None) is not None:
+            changed = True
+        if path.name == "zh.json":
+            if namespace.get(key) != value:
+                namespace[key] = value
+                changed = True
+        elif key not in namespace:
+            namespace[key] = value
             changed = True
     if changed:
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -147,6 +147,24 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
       meta: { mobileBadge: true },
     },
     {
+      accessorKey: 'routing_strategy',
+      header: t('Smart routing'),
+      cell: ({ row }) => {
+        const strategy = row.original.routing_strategy || ''
+
+        return (
+          <StatusBadge
+            label={strategy ? t(getRoutingLabel(strategy)) : t('Off')}
+            variant={strategy ? 'info' : 'neutral'}
+            copyable={false}
+            className='-ml-1.5'
+          />
+        )
+      },
+      size: 150,
+      meta: { mobileHidden: true },
+    },
+    {
       id: 'key',
       accessorKey: 'key',
       header: t('API Key'),
@@ -260,24 +278,6 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
         )
       },
       size: 220,
-      meta: { mobileHidden: true },
-    },
-    {
-      accessorKey: 'routing_strategy',
-      header: t('Route'),
-      cell: ({ row }) => {
-        const strategy = row.original.routing_strategy || ''
-
-        return (
-          <StatusBadge
-            label={t(getRoutingLabel(strategy))}
-            variant={strategy ? 'info' : 'neutral'}
-            copyable={false}
-            className='-ml-1.5'
-          />
-        )
-      },
-      size: 140,
       meta: { mobileHidden: true },
     },
     {

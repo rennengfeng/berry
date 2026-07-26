@@ -512,4 +512,5 @@ export const STATIC_I18N_KEYS = [
   'Success rate first',
   'Turn smart routing off to edit groups, then turn it back on to route intelligently within those groups.',
   '{{count}} group(s) selected',
+  'Off',
 ] as const
