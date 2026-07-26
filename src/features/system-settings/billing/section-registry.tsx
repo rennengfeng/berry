@@ -21,7 +21,6 @@ import { CheckinSettingsSection } from '../general/checkin-settings-section'
 import { PricingSection } from '../general/pricing-section'
 import { QuotaSettingsSection } from '../general/quota-settings-section'
 import { PaymentSettingsSection } from '../integrations/payment-settings-section'
-import { DashScopePricingSettings } from '../models/dashscope-pricing-settings'
 import { RatioSettingsCard } from '../models/ratio-settings-card'
 import type { BillingSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
@@ -131,16 +130,6 @@ const BILLING_SECTIONS = [
         groupDefaults={getGroupDefaults(settings)}
         toolPricesDefault={settings['tool_price_setting.prices']}
         visibleTabs={['groups']}
-      />
-    ),
-  },
-  {
-    id: 'dashscope-native-pricing',
-    titleKey: 'DashScope Native Pricing',
-    descriptionKey: 'Configure Ali SDK / DashScope Native official-unit pricing',
-    build: (settings: BillingSettings) => (
-      <DashScopePricingSettings
-        defaultValue={settings['billing_setting.dashscope_native_pricing']}
       />
     ),
   },

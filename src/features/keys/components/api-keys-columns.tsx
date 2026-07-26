@@ -33,7 +33,7 @@ import { BadgeCell } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { API_KEY_STATUSES } from '../constants'
-import { type ApiKey, type ApiKeyRoutingStrategy } from '../types'
+import { type ApiKey } from '../types'
 import {
   ApiKeyCell,
   ModelLimitsCell,
@@ -74,21 +74,6 @@ function useGroupRatios(): Record<string, GroupRatio> {
   })
 
   return data ?? {}
-}
-
-function getRoutingLabel(strategy: ApiKeyRoutingStrategy) {
-  switch (strategy) {
-    case 'auto':
-      return 'Smart auto'
-    case 'price':
-      return 'Price first'
-    case 'speed':
-      return 'Speed first'
-    case 'success_rate':
-      return 'Success rate first'
-    default:
-      return 'Manual routing'
-  }
 }
 
 export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
@@ -145,24 +130,6 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
       filterFn: (row, id, value) => value.includes(String(row.getValue(id))),
       size: 120,
       meta: { mobileBadge: true },
-    },
-    {
-      accessorKey: 'routing_strategy',
-      header: t('Smart routing'),
-      cell: ({ row }) => {
-        const strategy = row.original.routing_strategy || ''
-
-        return (
-          <StatusBadge
-            label={strategy ? t(getRoutingLabel(strategy)) : t('Off')}
-            variant={strategy ? 'info' : 'neutral'}
-            copyable={false}
-            className='-ml-1.5'
-          />
-        )
-      },
-      size: 150,
-      meta: { mobileHidden: true },
     },
     {
       id: 'key',

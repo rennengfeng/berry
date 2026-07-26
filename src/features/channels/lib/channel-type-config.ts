@@ -134,18 +134,6 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       baseUrl: 'Default: https://api.replicate.com',
     },
   },
-  10001: {
-    id: 10001,
-    name: CHANNEL_TYPES[10001],
-    icon: 'qwen',
-    defaultBaseUrl: 'https://dashscope.aliyuncs.com',
-    hints: {
-      baseUrl: 'Default: https://dashscope.aliyuncs.com',
-      key: 'DashScope API key',
-      models: 'DashScope native model IDs, e.g. happyhorse-1.1-r2v',
-      other: 'Configure billing_setting.dashscope_native_pricing before use',
-    },
-  },
 }
 
 /**

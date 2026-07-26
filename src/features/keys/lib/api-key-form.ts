@@ -20,11 +20,7 @@ import { z } from 'zod'
 import type { TFunction } from 'i18next'
 import { parseQuotaFromDollars, quotaUnitsToDollars } from '@/lib/format'
 import { DEFAULT_GROUP } from '../constants'
-import {
-  apiKeyRoutingStrategies,
-  type ApiKeyFormData,
-  type ApiKey,
-} from '../types'
+import { type ApiKeyFormData, type ApiKey } from '../types'
 
 // ============================================================================
 // Form Schema
@@ -39,20 +35,11 @@ export function getApiKeyFormSchema(t: TFunction) {
       unlimited_quota: z.boolean(),
       model_limits: z.array(z.string()),
       allow_ips: z.string().optional(),
-      routing_strategy: z.enum(apiKeyRoutingStrategies),
-      groups: z.array(z.string()),
+      groups: z.array(z.string()).min(1, t('Please select at least one group')),
       cross_group_retry: z.boolean().optional(),
       tokenCount: z.number().min(1).optional(),
     })
     .superRefine((data, ctx) => {
-      if (!data.routing_strategy && data.groups.length === 0) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['groups'],
-          message: t('Please select at least one group'),
-        })
-      }
-
       if (data.unlimited_quota) {
         return
       }
@@ -83,7 +70,6 @@ export const API_KEY_FORM_DEFAULT_VALUES: ApiKeyFormValues = {
   unlimited_quota: true,
   model_limits: [],
   allow_ips: '',
-  routing_strategy: 'auto',
   groups: [],
   cross_group_retry: false,
   tokenCount: 1,
@@ -94,7 +80,6 @@ export function getApiKeyFormDefaultValues(
 ): ApiKeyFormValues {
   return {
     ...API_KEY_FORM_DEFAULT_VALUES,
-    routing_strategy: 'auto',
     groups: [],
     cross_group_retry: false,
   }
@@ -126,7 +111,6 @@ export function transformFormDataToPayload(
     model_limits_enabled: data.model_limits.length > 0,
     model_limits: data.model_limits.join(','),
     allow_ips: data.allow_ips || '',
-    routing_strategy: data.routing_strategy,
     group: groups.join(','),
     cross_group_retry: groups.includes('auto')
       ? !!data.cross_group_retry
@@ -145,7 +129,7 @@ export function transformApiKeyToFormDefaults(
         .split(',')
         .map((group) => group.trim())
         .filter(Boolean)
-    : []
+    : [DEFAULT_GROUP]
 
   return {
     name: apiKey.name,
@@ -161,8 +145,7 @@ export function transformApiKeyToFormDefaults(
       ? apiKey.model_limits.split(',').filter(Boolean)
       : [],
     allow_ips: apiKey.allow_ips || '',
-    groups: groups.length > 0 ? groups : DEFAULT_GROUP ? [DEFAULT_GROUP] : [],
-    routing_strategy: apiKey.routing_strategy || '',
+    groups: groups.length > 0 ? groups : [DEFAULT_GROUP],
     cross_group_retry: !!apiKey.cross_group_retry,
     tokenCount: 1,
   }

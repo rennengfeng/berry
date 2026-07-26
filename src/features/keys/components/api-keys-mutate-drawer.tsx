@@ -20,18 +20,7 @@ import { useEffect, useState } from 'react'
 import { useForm, type SubmitErrorHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery } from '@tanstack/react-query'
-import {
-  ChevronDown,
-  CircleHelp,
-  DollarSign,
-  Gauge,
-  KeyRound,
-  Settings2,
-  ShieldCheck,
-  Sparkles,
-  WalletCards,
-  type LucideIcon,
-} from 'lucide-react'
+import { ChevronDown, KeyRound, Settings2, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { getUserModels, getUserGroups } from '@/lib/api'
@@ -64,11 +53,6 @@ import {
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { DateTimePicker } from '@/components/datetime-picker'
 import {
   SideDrawerSection,
@@ -90,7 +74,6 @@ import {
   transformApiKeyToFormDefaults,
 } from '../lib'
 import { type ApiKey } from '../types'
-import type { ApiKeyRoutingStrategy } from '../types'
 import {
   ApiKeyGroupMultiSelect,
   type ApiKeyGroupOption,
@@ -101,116 +84,6 @@ type ApiKeyMutateDrawerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   currentRow?: ApiKey
-}
-
-type RoutingOption = {
-  value: Exclude<ApiKeyRoutingStrategy, ''>
-  title: string
-  description: string
-  tooltip: string
-  icon: LucideIcon
-  className: string
-}
-
-const ROUTING_OPTIONS: RoutingOption[] = [
-  {
-    value: 'auto',
-    title: 'Smart auto',
-    description: 'Balances price, speed, and success rate',
-    tooltip:
-      'Scores the current model across candidate groups using price, TTFT, and success rate. If no groups are selected, all usable groups are candidates.',
-    icon: Sparkles,
-    className:
-      'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50',
-  },
-  {
-    value: 'price',
-    title: 'Price first',
-    description: 'Prioritizes lower-cost groups',
-    tooltip:
-      'Compares the estimated cost for the current model in each candidate group first, then uses success rate and TTFT as tie breakers.',
-    icon: DollarSign,
-    className:
-      'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/50',
-  },
-  {
-    value: 'speed',
-    title: 'Speed first',
-    description: 'Prioritizes faster first-token response',
-    tooltip:
-      'Compares TTFT for the current model in each candidate group first. Cold start uses 200 virtual samples at 3000ms.',
-    icon: Gauge,
-    className:
-      'bg-orange-50 text-orange-600 border-orange-100 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-900/50',
-  },
-  {
-    value: 'success_rate',
-    title: 'Success rate first',
-    description: 'Prioritizes recently stable groups',
-    tooltip:
-      'Compares success rate for the current model in each candidate group first. Cold start uses 200 virtual samples at 95% success.',
-    icon: ShieldCheck,
-    className:
-      'bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/50',
-  },
-]
-
-function RoutingStrategyCard({
-  option,
-  selected,
-  onSelect,
-}: {
-  option: RoutingOption
-  selected: boolean
-  onSelect: () => void
-}) {
-  const { t } = useTranslation()
-  const Icon = option.icon
-
-  return (
-    <button
-      type='button'
-      onClick={onSelect}
-      className={cn(
-        'border-border bg-muted/20 hover:border-primary/45 hover:bg-muted/45 flex min-h-20 items-start gap-3 rounded-lg border px-3 py-3 text-left transition-colors',
-        selected && 'border-primary bg-primary/10 text-foreground shadow-sm'
-      )}
-    >
-      <span
-        className={cn(
-          'flex size-8 shrink-0 items-center justify-center rounded-md border',
-          option.className
-        )}
-      >
-        <Icon className='size-4' />
-      </span>
-      <span className='min-w-0 flex-1'>
-        <span className='flex min-w-0 items-center gap-1.5'>
-          <span className='truncate text-sm font-medium'>
-            {t(option.title)}
-          </span>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span
-                  className='text-muted-foreground hover:text-foreground inline-flex size-4 shrink-0 items-center justify-center'
-                  onClick={(event) => event.stopPropagation()}
-                />
-              }
-            >
-              <CircleHelp className='size-3.5' />
-            </TooltipTrigger>
-            <TooltipContent side='top' className='max-w-xs text-xs'>
-              {t(option.tooltip)}
-            </TooltipContent>
-          </Tooltip>
-        </span>
-        <span className='text-muted-foreground mt-1 line-clamp-2 block text-xs leading-4'>
-          {t(option.description)}
-        </span>
-      </span>
-    </button>
-  )
 }
 
 export function ApiKeysMutateDrawer({
@@ -274,19 +147,13 @@ export function ApiKeysMutateDrawer({
   useEffect(() => {
     if (groups.length === 0) return
     const validValues = new Set(groups.map((g) => g.value))
-    const routingEnabled = !!form.getValues('routing_strategy')
     const currentGroups = form.getValues('groups') || []
     const nextGroups = currentGroups.filter((group) => validValues.has(group))
 
-    if (
-      nextGroups.length !== currentGroups.length ||
-      (!routingEnabled && nextGroups.length === 0)
-    ) {
+    if (nextGroups.length !== currentGroups.length || nextGroups.length === 0) {
       const fallback = groups[0]?.value ?? ''
-      if (fallback && !routingEnabled) {
+      if (fallback) {
         form.setValue('groups', nextGroups.length > 0 ? nextGroups : [fallback])
-      } else {
-        form.setValue('groups', nextGroups)
       }
     }
 
@@ -376,8 +243,6 @@ export function ApiKeysMutateDrawer({
     ? t('Enter quota in tokens')
     : t('Enter quota in {{currency}}', { currency: currencyLabel })
   const selectedGroups = form.watch('groups') || []
-  const routingStrategy = form.watch('routing_strategy')
-  const routingEnabled = !!routingStrategy
   const unlimitedQuota = form.watch('unlimited_quota')
 
   return (
@@ -431,87 +296,16 @@ export function ApiKeysMutateDrawer({
 
               <FormField
                 control={form.control}
-                name='routing_strategy'
-                render={({ field }) => (
-                  <FormItem className='space-y-3'>
-                    <div className={sideDrawerSwitchItemClassName()}>
-                      <div className='flex flex-col gap-0.5'>
-                        <FormLabel className='text-sm'>
-                          {t('Smart routing')}
-                        </FormLabel>
-                        <FormDescription className='text-xs'>
-                          {routingEnabled
-                            ? selectedGroups.length > 0
-                              ? t(
-                                  'Smart routing will choose among the selected groups.'
-                                )
-                              : t(
-                                  'No groups selected. Smart routing will use all groups available to this account.'
-                                )
-                            : t(
-                                'Smart routing is off. Requests follow the manual group order below.'
-                              )}
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={!!field.value}
-                          onCheckedChange={(checked) =>
-                            field.onChange(checked ? 'auto' : '')
-                          }
-                        />
-                      </FormControl>
-                    </div>
-                    {routingEnabled && (
-                      <div className='grid gap-2 sm:grid-cols-2'>
-                        {ROUTING_OPTIONS.map((option) => (
-                          <RoutingStrategyCard
-                            key={option.value}
-                            option={option}
-                            selected={field.value === option.value}
-                            onSelect={() => field.onChange(option.value)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                    <FormDescription className='bg-muted/35 rounded-lg border px-3 py-2 text-xs'>
-                      {routingEnabled
-                        ? t(
-                            'Turn smart routing off to edit groups, then turn it back on to route intelligently within those groups.'
-                          )
-                        : t(
-                            'Select one or more groups. Manual routing tries them in order when failures occur.'
-                          )}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
                 name='groups'
                 render={({ field }) => (
                   <FormItem>
-                    <div className='flex items-center justify-between gap-3'>
-                      <FormLabel>{t('Groups')}</FormLabel>
-                      <span className='text-muted-foreground text-xs'>
-                        {field.value?.length
-                          ? t('{{count}} group(s) selected', {
-                              count: field.value.length,
-                            })
-                          : routingEnabled
-                            ? t('All available groups')
-                            : t('No group selected')}
-                      </span>
-                    </div>
+                    <FormLabel>{t('Groups')}</FormLabel>
                     <FormControl>
                       <ApiKeyGroupMultiSelect
                         options={groups}
                         selected={field.value ?? []}
                         onChange={field.onChange}
                         placeholder={t('Select groups')}
-                        disabled={routingEnabled}
                       />
                     </FormControl>
                     <FormMessage />

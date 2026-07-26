@@ -18,16 +18,6 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { z } from 'zod'
 
-export const apiKeyRoutingStrategies = [
-  '',
-  'auto',
-  'price',
-  'speed',
-  'success_rate',
-] as const
-
-export type ApiKeyRoutingStrategy = (typeof apiKeyRoutingStrategies)[number]
-
 // ============================================================================
 // API Key Schema & Types
 // ============================================================================
@@ -44,11 +34,6 @@ export const apiKeySchema = z.object({
   created_time: z.number(),
   accessed_time: z.number(),
   group: z.string().nullish().default(''),
-  routing_strategy: z
-    .enum(apiKeyRoutingStrategies)
-    .catch('')
-    .optional()
-    .default(''),
   cross_group_retry: z
     .preprocess((v) => {
       if (v === 1) return true
@@ -106,7 +91,6 @@ export interface ApiKeyFormData {
   model_limits: string
   allow_ips: string
   group: string
-  routing_strategy: ApiKeyRoutingStrategy
   cross_group_retry: boolean
 }
 
@@ -115,4 +99,8 @@ export interface ApiKeyFormData {
 // ============================================================================
 
 export type ApiKeysDialogType =
-  'create' | 'update' | 'delete' | 'batch-delete' | 'cc-switch'
+  | 'create'
+  | 'update'
+  | 'delete'
+  | 'batch-delete'
+  | 'cc-switch'
