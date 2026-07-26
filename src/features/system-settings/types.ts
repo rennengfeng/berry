@@ -167,6 +167,7 @@ export type ModelSettings = {
   'billing_setting.billing_mode': string
   'billing_setting.billing_unit': string
   'billing_setting.billing_expr': string
+  'billing_setting.dashscope_native_pricing': string
   'tool_price_setting.prices': string
   TopupGroupRatio: string
   GroupRatio: string
@@ -211,6 +212,7 @@ export type BillingSettings = {
   'billing_setting.billing_mode': string
   'billing_setting.billing_unit': string
   'billing_setting.billing_expr': string
+  'billing_setting.dashscope_native_pricing': string
   'tool_price_setting.prices': string
   TopupGroupRatio: string
   GroupRatio: string

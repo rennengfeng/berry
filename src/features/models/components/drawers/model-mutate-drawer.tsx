@@ -177,6 +177,7 @@ export function ModelMutateDrawer({
       'billing_setting.billing_mode': '{}',
       'billing_setting.billing_unit': '{}',
       'billing_setting.billing_expr': '{}',
+      'billing_setting.dashscope_native_pricing': '{}',
       'tool_price_setting.prices': '{}',
       TopupGroupRatio: '',
       GroupRatio: '',
