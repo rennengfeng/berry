@@ -29,6 +29,21 @@ function formatGroupRatio(ratio: GroupRatio | undefined): string {
   return typeof ratio === 'number' ? `${ratio}x` : ratio
 }
 
+function getRoutingStrategyMeta(strategy?: ApiKey['routing_strategy'] | null) {
+  switch (strategy) {
+    case 'auto':
+      return { label: 'Smart auto', cls: 'bg-cyan-500/10 text-cyan-300' }
+    case 'price':
+      return { label: 'Price first', cls: 'bg-emerald-500/10 text-emerald-300' }
+    case 'speed':
+      return { label: 'Speed first', cls: 'bg-blue-500/10 text-blue-300' }
+    case 'success_rate':
+      return { label: 'Success rate first', cls: 'bg-amber-500/10 text-amber-300' }
+    default:
+      return { label: 'Off', cls: 'bg-white/5 text-white/40' }
+  }
+}
+
 export function PortalTokens() {
   return (
     <ApiKeysProvider>
@@ -237,6 +252,7 @@ function PortalTokensInner() {
                 <tr className="border-b border-white/8 text-xs text-white/40">
                   <th className="px-3 py-2.5 text-center">{t('Name')}</th>
                   <th className="px-3 py-2.5 text-center">{t('Status')}</th>
+                  <th className="px-3 py-2.5 text-center">{t('Smart routing')}</th>
                   <th className="px-3 py-2.5 text-center">{t('Quota')}</th>
                   <th className="px-3 py-2.5 text-center">{t('Group')}</th>
                   <th className="px-3 py-2.5 text-center">{t('Ratio')}</th>
@@ -253,6 +269,7 @@ function PortalTokensInner() {
                   const isCopied = copiedKeyId === token.id
                   const isHidden = !fullKey || hiddenKeys[token.id]
                   const groups = splitTokenGroups(token.group)
+                  const routingStrategy = getRoutingStrategyMeta(token.routing_strategy)
                   return (
                     <tr key={token.id} className="border-b border-white/5 text-white/70 transition hover:bg-white/[0.03]">
                       <td className="px-3 py-3 text-center">
@@ -261,6 +278,11 @@ function PortalTokensInner() {
                       <td className="px-3 py-3 text-center">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${status.cls}`}>
                           {status.text}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${routingStrategy.cls}`}>
+                          {t(routingStrategy.label)}
                         </span>
                       </td>
                       <td className="px-3 py-3 text-center text-xs text-white/60">
