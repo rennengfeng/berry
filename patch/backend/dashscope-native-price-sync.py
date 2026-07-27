@@ -160,7 +160,6 @@ func convertDashScopeNativeOfficialPricingData(channel *model.Channel) (map[stri
 	if len(modelNames) == 0 {
 		return nil, fmt.Errorf("DashScope Native channel has no models to sync")
 	}
-	billingModeMap := make(map[string]any)
 	nativePricingMap := make(map[string]any)
 	for _, modelName := range modelNames {
 		modelName = strings.TrimSpace(modelName)
@@ -171,14 +170,12 @@ func convertDashScopeNativeOfficialPricingData(channel *model.Channel) (map[stri
 		if !ok {
 			continue
 		}
-		billingModeMap[modelName] = billing_setting.BillingModeDashScopeNative
 		nativePricingMap[modelName] = compactJSONSyncValue(spec)
 	}
 	if len(nativePricingMap) == 0 {
 		return nil, fmt.Errorf("no built-in DashScope Native official prices matched this channel's models")
 	}
 	return map[string]any{
-		billing_setting.BillingModeField:            billingModeMap,
 		billing_setting.DashScopeNativePricingField: nativePricingMap,
 	}, nil
 }
