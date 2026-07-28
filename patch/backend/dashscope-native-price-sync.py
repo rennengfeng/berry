@@ -39,17 +39,94 @@ def insert_after(rel: str, anchor: str, snippet: str, marker: str, label: str) -
     write(rel, text.replace(anchor, anchor + snippet, 1))
 
 
-def patch_dto() -> None:
-    insert_after(
-        "dto/ratio_sync.go",
-        '\tEndpoint string `json:"endpoint"`\n',
-        '\tType     int    `json:"type,omitempty"`\n',
-        'json:"type,omitempty"',
-        "upstream dto channel type",
+def find_upstream_dto_file() -> str | None:
+    preferred = ROOT / "dto" / "ratio_sync.go"
+    if preferred.exists():
+        return "dto/ratio_sync.go"
+    for path in ROOT.rglob("*.go"):
+        rel = path.relative_to(ROOT).as_posix()
+        if rel.startswith(("web/", "vendor/")):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if "type UpstreamDTO struct" in text and 'json:"endpoint"' in text:
+            return rel
+    return None
+
+
+def patch_dto() -> bool:
+    rel = find_upstream_dto_file()
+    if rel is None:
+        rel = "dto/ratio_sync.go"
+        path = ROOT / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            '''package dto
+
+type UpstreamDTO struct {
+\tID       int    `json:"id,omitempty"`
+\tName     string `json:"name" binding:"required"`
+\tBaseURL  string `json:"base_url" binding:"required"`
+\tEndpoint string `json:"endpoint"`
+\tType     int    `json:"type,omitempty"`
+}
+
+type UpstreamRequest struct {
+\tChannelIDs []int64       `json:"channel_ids"`
+\tUpstreams  []UpstreamDTO `json:"upstreams"`
+\tTimeout    int           `json:"timeout"`
+}
+
+type TestResult struct {
+\tName   string `json:"name"`
+\tStatus string `json:"status"`
+\tError  string `json:"error,omitempty"`
+}
+
+type DifferenceItem struct {
+\tCurrent    interface{}            `json:"current"`
+\tUpstreams  map[string]interface{} `json:"upstreams"`
+\tConfidence map[string]bool        `json:"confidence"`
+}
+
+type SyncableChannel struct {
+\tID      int    `json:"id"`
+\tName    string `json:"name"`
+\tBaseURL string `json:"base_url"`
+\tStatus  int    `json:"status"`
+\tType    int    `json:"type"`
+}
+''',
+            encoding="utf-8",
+        )
+        return True
+    text = read(rel)
+    if 'json:"type,omitempty"' in text:
+        return True
+    if '\tEndpoint string `json:"endpoint"`\n' not in text:
+        if '\tBaseURL  string `json:"base_url" binding:"required"`\n' not in text:
+            raise SystemExit(f"DashScope Native price sync patch failed: UpstreamDTO field anchor not found in {rel}")
+        text = text.replace(
+            '\tBaseURL  string `json:"base_url" binding:"required"`\n',
+            '\tBaseURL  string `json:"base_url" binding:"required"`\n\tEndpoint string `json:"endpoint"`\n\tType     int    `json:"type,omitempty"`\n',
+            1,
+        )
+        write(rel, text)
+        return True
+    write(
+        rel,
+        text.replace(
+            '\tEndpoint string `json:"endpoint"`\n',
+            '\tEndpoint string `json:"endpoint"`\n\tType     int    `json:"type,omitempty"`\n',
+            1,
+        ),
     )
+    return True
 
 
-def patch_ratio_sync() -> None:
+def patch_ratio_sync(dto_has_type: bool) -> None:
     text = read("controller/ratio_sync.go")
     if "billing_setting.DashScopeNativePricingField," not in text:
         text = text.replace(
@@ -185,16 +262,17 @@ func convertDashScopeNativeOfficialPricingData(channel *model.Channel) (map[stri
         "DashScope Native official pricing helpers",
     )
 
-    replace_once(
-        "controller/ratio_sync.go",
-        '''\t\t\t\tupstreams = append(upstreams, dto.UpstreamDTO{
+    if dto_has_type:
+        replace_once(
+            "controller/ratio_sync.go",
+            '''\t\t\t\tupstreams = append(upstreams, dto.UpstreamDTO{
 \t\t\t\t\tID:       ch.Id,
 \t\t\t\t\tName:     ch.Name,
 \t\t\t\t\tBaseURL:  strings.TrimRight(base, "/"),
 \t\t\t\t\tEndpoint: "",
 \t\t\t\t})
 ''',
-        '''\t\t\t\tupstreams = append(upstreams, dto.UpstreamDTO{
+            '''\t\t\t\tupstreams = append(upstreams, dto.UpstreamDTO{
 \t\t\t\t\tID:       ch.Id,
 \t\t\t\t\tName:     ch.Name,
 \t\t\t\t\tBaseURL:  strings.TrimRight(base, "/"),
@@ -202,22 +280,37 @@ func convertDashScopeNativeOfficialPricingData(channel *model.Channel) (map[stri
 \t\t\t\t\tType:     ch.Type,
 \t\t\t\t})
 ''',
-        "syncable upstream channel type",
-    )
+            "syncable upstream channel type",
+        )
 
-    replace_once(
-        "controller/ratio_sync.go",
-        '''\t\t\tisOpenRouter := chItem.Endpoint == "openrouter"
+    text = read("controller/ratio_sync.go")
+    if "isDashScopeNativePricing :=" not in text:
+        if '''\t\t\tisOpenRouter := chItem.Endpoint == "openrouter"
+
+\t\t\tendpoint := chItem.Endpoint
+''' in text:
+            text = text.replace(
+                '''\t\t\tisOpenRouter := chItem.Endpoint == "openrouter"
 
 \t\t\tendpoint := chItem.Endpoint
 ''',
-        '''\t\t\tisOpenRouter := chItem.Endpoint == "openrouter"
+                '''\t\t\tisOpenRouter := chItem.Endpoint == "openrouter"
 \t\t\tisDashScopeNativePricing := chItem.Endpoint == "dashscope_native"
 
 \t\t\tendpoint := chItem.Endpoint
 ''',
-        "DashScope Native pricing detector",
-    )
+                1,
+            )
+        else:
+            text, count = re.subn(
+                r'(\n\s*isOpenRouter := chItem\.Endpoint == "openrouter"\n)',
+                r'\1			isDashScopeNativePricing := chItem.Endpoint == "dashscope_native"\n',
+                text,
+                count=1,
+            )
+            if count != 1:
+                raise SystemExit("DashScope Native price sync patch failed: DashScope Native pricing detector anchor not found in controller/ratio_sync.go")
+        write("controller/ratio_sync.go", text)
 
     insert_after(
         "controller/ratio_sync.go",
@@ -264,8 +357,8 @@ func convertDashScopeNativeOfficialPricingData(channel *model.Channel) (map[stri
 
 
 def main() -> None:
-    patch_dto()
-    patch_ratio_sync()
+    dto_has_type = patch_dto()
+    patch_ratio_sync(dto_has_type)
     print("applied DashScope Native price sync backend patch")
 
 

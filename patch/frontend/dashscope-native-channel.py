@@ -115,7 +115,7 @@ def patch_price_sync(root: Path) -> None:
             types_path,
             "  | 'billing_expr'\n",
             "  | 'dashscope_native_pricing'\n",
-            "dashscope_native_pricing",
+            "  | 'dashscope_native_pricing'\n",
             "ratio type",
         )
         insert_after(
@@ -125,6 +125,12 @@ def patch_price_sync(root: Path) -> None:
             "type?: number",
             "upstream config type",
         )
+        text = types_path.read_text(encoding="utf-8")
+        text = text.replace(
+            "  current: number | string | null\n  upstreams: Record<string, number | string | 'same'>\n",
+            "  current: number | string | Record<string, unknown> | null\n  upstreams: Record<string, number | string | Record<string, unknown> | 'same'>\n",
+        )
+        types_path.write_text(text, encoding="utf-8")
 
     constants_path = root / "src" / "features" / "system-settings" / "models" / "constants.ts"
     if constants_path.exists():
