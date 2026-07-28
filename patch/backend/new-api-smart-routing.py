@@ -16,8 +16,14 @@ def read(rel: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def exists(rel: str) -> bool:
+    return (ROOT / rel).exists()
+
+
 def write(rel: str, text: str) -> None:
-    (ROOT / rel).write_text(text, encoding="utf-8")
+    path = ROOT / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
 
 
 def replace_once(rel: str, old: str, new: str, label: str) -> None:
@@ -59,30 +65,36 @@ def regex_replace(rel: str, pattern: str, repl: str, marker: str, label: str) ->
     write(rel, new_text)
 
 
-def patch_context_keys() -> None:
-    insert_after(
-        "constant/context_key.go",
-        '\tContextKeyTokenCrossGroupRetry   ContextKey = "token_cross_group_retry"\n',
-        '\tContextKeyTokenRoutingStrategy   ContextKey = "token_routing_strategy"\n'
-        '\tContextKeyRequestedGroup         ContextKey = "requested_group"\n'
-        '\tContextKeySmartRouteTriedGroups  ContextKey = "smart_route_tried_groups"\n',
-        "ContextKeyTokenRoutingStrategy",
-        "context keys",
-    )
+def insert_token_model_helpers() -> None:
+    text = read("model/token.go")
+    if "func NormalizeTokenRoutingStrategy" in text:
+        return
+    snippet = """
 
+func NormalizeTokenGroupList(groups []string) []string {
+\tnormalized := make([]string, 0, len(groups))
+\tseen := make(map[string]bool, len(groups))
+\tfor _, group := range groups {
+\t\tgroup = strings.TrimSpace(group)
+\t\tif group == "" || seen[group] {
+\t\t\tcontinue
+\t\t}
+\t\tseen[group] = true
+\t\tnormalized = append(normalized, group)
+\t}
+\treturn normalized
+}
 
-def patch_token_model() -> None:
-    insert_after(
-        "model/token.go",
-        '\tGroup              string         `json:"group" gorm:"default:\'\'"`\n',
-        '\tRoutingStrategy    string         `json:"routing_strategy" gorm:"type:varchar(32);default:\'\'"`\n',
-        "RoutingStrategy    string",
-        "token routing_strategy field",
-    )
-    insert_after(
-        "model/token.go",
-        "func JoinTokenGroups(groups []string) string {\n\treturn strings.Join(NormalizeTokenGroupList(groups), \",\")\n}\n",
-        """
+func SplitTokenGroups(group string) []string {
+\tif strings.TrimSpace(group) == "" {
+\t\treturn nil
+\t}
+\treturn NormalizeTokenGroupList(strings.Split(group, ","))
+}
+
+func JoinTokenGroups(groups []string) string {
+\treturn strings.Join(NormalizeTokenGroupList(groups), ",")
+\t}
 
 const (
 \tTokenRoutingManual      = ""
@@ -107,10 +119,46 @@ func (token *Token) GetRoutingStrategy() string {
 \t}
 \treturn NormalizeTokenRoutingStrategy(token.RoutingStrategy)
 }
-""",
-        "NormalizeTokenRoutingStrategy",
-        "token routing strategy helpers",
+"""
+    anchors = [
+        "func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {\n",
+        "func SearchUserTokens(userId int, keyword string, token string, offset int, limit int) (tokens []*Token, total int64, err error) {\n",
+    ]
+    for anchor in anchors:
+        if anchor in text:
+            write("model/token.go", text.replace(anchor, snippet + "\n" + anchor, 1))
+            return
+    raise SystemExit("smart routing patch failed: token routing strategy helpers anchor not found in model/token.go")
+
+
+def patch_context_keys() -> None:
+    insert_after(
+        "constant/context_key.go",
+        '\tContextKeyTokenGroup             ContextKey = "token_group"\n',
+        '\tContextKeyTokenAllowedGroups     ContextKey = "token_allowed_groups"\n',
+        "ContextKeyTokenAllowedGroups",
+        "token allowed groups context key",
     )
+    insert_after(
+        "constant/context_key.go",
+        '\tContextKeyTokenCrossGroupRetry   ContextKey = "token_cross_group_retry"\n',
+        '\tContextKeyTokenRoutingStrategy   ContextKey = "token_routing_strategy"\n'
+        '\tContextKeyRequestedGroup         ContextKey = "requested_group"\n'
+        '\tContextKeySmartRouteTriedGroups  ContextKey = "smart_route_tried_groups"\n',
+        "ContextKeyTokenRoutingStrategy",
+        "context keys",
+    )
+
+
+def patch_token_model() -> None:
+    insert_after(
+        "model/token.go",
+        '\tGroup              string         `json:"group" gorm:"default:\'\'"`\n',
+        '\tRoutingStrategy    string         `json:"routing_strategy" gorm:"type:varchar(32);default:\'\'"`\n',
+        "RoutingStrategy    string",
+        "token routing_strategy field",
+    )
+    insert_token_model_helpers()
     replace_once(
         "model/token.go",
         '\t\t"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry").Updates(token).Error',
@@ -120,38 +168,79 @@ func (token *Token) GetRoutingStrategy() string {
 
 
 def patch_token_controller() -> None:
-    replace_once(
-        "controller/token.go",
-        "\ttokenGroups := model.SplitTokenGroups(token.Group)\n\ttokenGroup := model.JoinTokenGroups(tokenGroups)\n\tcleanToken := model.Token{",
-        "\ttokenGroups := model.SplitTokenGroups(token.Group)\n\ttokenGroup := model.JoinTokenGroups(tokenGroups)\n\troutingStrategy := model.NormalizeTokenRoutingStrategy(token.RoutingStrategy)\n\tcleanToken := model.Token{",
-        "add token routing normalization",
-    )
-    insert_after(
-        "controller/token.go",
-        "\t\tGroup:              tokenGroup,\n",
-        "\t\tRoutingStrategy:    routingStrategy,\n",
-        "RoutingStrategy:    routingStrategy",
-        "add token routing create field",
-    )
-    insert_after(
-        "controller/token.go",
-        "\t\tcleanToken.Group = model.JoinTokenGroups(tokenGroups)\n",
-        "\t\tcleanToken.RoutingStrategy = model.NormalizeTokenRoutingStrategy(token.RoutingStrategy)\n",
-        "cleanToken.RoutingStrategy",
-        "add token routing update field",
-    )
+    text = read("controller/token.go")
+    if "routingStrategy := model.NormalizeTokenRoutingStrategy(token.RoutingStrategy)\n\tcleanToken := model.Token{" not in text:
+        if "\ttokenGroups := model.SplitTokenGroups(token.Group)\n\ttokenGroup := model.JoinTokenGroups(tokenGroups)\n\tcleanToken := model.Token{" in text:
+            text = text.replace(
+                "\ttokenGroups := model.SplitTokenGroups(token.Group)\n\ttokenGroup := model.JoinTokenGroups(tokenGroups)\n\tcleanToken := model.Token{",
+                "\ttokenGroups := model.SplitTokenGroups(token.Group)\n\ttokenGroup := model.JoinTokenGroups(tokenGroups)\n\troutingStrategy := model.NormalizeTokenRoutingStrategy(token.RoutingStrategy)\n\tcleanToken := model.Token{",
+                1,
+            )
+        elif "\tcleanToken := model.Token{" in text:
+            text = text.replace(
+                "\tcleanToken := model.Token{",
+                "\ttokenGroups := model.SplitTokenGroups(token.Group)\n\ttokenGroup := model.JoinTokenGroups(tokenGroups)\n\troutingStrategy := model.NormalizeTokenRoutingStrategy(token.RoutingStrategy)\n\tcleanToken := model.Token{",
+                1,
+            )
+        else:
+            raise SystemExit("smart routing patch failed: add token routing normalization anchor not found in controller/token.go")
+        write("controller/token.go", text)
+    text = read("controller/token.go")
+    if "\t\tRoutingStrategy:    routingStrategy,\n" not in text:
+        if "\t\tGroup:              tokenGroup,\n" in text:
+            text = text.replace(
+                "\t\tGroup:              tokenGroup,\n",
+                "\t\tGroup:              tokenGroup,\n\t\tRoutingStrategy:    routingStrategy,\n",
+                1,
+            )
+        elif "\t\tGroup:              token.Group,\n" in text:
+            text = text.replace(
+                "\t\tGroup:              token.Group,\n",
+                "\t\tGroup:              tokenGroup,\n\t\tRoutingStrategy:    routingStrategy,\n",
+                1,
+            )
+        else:
+            raise SystemExit("smart routing patch failed: add token routing create field anchor not found in controller/token.go")
+        write("controller/token.go", text)
+    text = read("controller/token.go")
+    if "cleanToken.RoutingStrategy = model.NormalizeTokenRoutingStrategy(token.RoutingStrategy)" not in text:
+        if "\t\tcleanToken.Group = model.JoinTokenGroups(tokenGroups)\n" in text:
+            text = text.replace(
+                "\t\tcleanToken.Group = model.JoinTokenGroups(tokenGroups)\n",
+                "\t\tcleanToken.Group = model.JoinTokenGroups(tokenGroups)\n\t\tcleanToken.RoutingStrategy = model.NormalizeTokenRoutingStrategy(token.RoutingStrategy)\n",
+                1,
+            )
+        elif "\t\tcleanToken.Group = token.Group\n" in text:
+            text = text.replace(
+                "\t\tcleanToken.Group = token.Group\n",
+                "\t\ttokenGroups := model.SplitTokenGroups(token.Group)\n\t\tcleanToken.Group = model.JoinTokenGroups(tokenGroups)\n\t\tcleanToken.RoutingStrategy = model.NormalizeTokenRoutingStrategy(token.RoutingStrategy)\n",
+                1,
+            )
+        else:
+            raise SystemExit("smart routing patch failed: add token routing update field anchor not found in controller/token.go")
+        write("controller/token.go", text)
 
 
 def patch_auth() -> None:
-    insert_after(
-        "middleware/auth.go",
-        '\t\tcommon.SetContextKey(c, constant.ContextKeyTokenAllowedGroups, tokenGroups)\n',
-        '\t}\n\troutingStrategy := token.GetRoutingStrategy()\n'
-        '\tcommon.SetContextKey(c, constant.ContextKeyTokenRoutingStrategy, routingStrategy)\n',
-        "ContextKeyTokenRoutingStrategy",
-        "token routing context",
-    )
     text = read("middleware/auth.go")
+    if "ContextKeyTokenRoutingStrategy" not in text:
+        if "\tcommon.SetContextKey(c, constant.ContextKeyTokenGroup, token.Group)\n\tcommon.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, token.CrossGroupRetry)\n" in text:
+            text = text.replace(
+                "\tcommon.SetContextKey(c, constant.ContextKeyTokenGroup, token.Group)\n\tcommon.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, token.CrossGroupRetry)\n",
+                "\ttokenGroups := model.SplitTokenGroups(token.Group)\n\ttokenGroup := model.JoinTokenGroups(tokenGroups)\n\tcommon.SetContextKey(c, constant.ContextKeyTokenGroup, tokenGroup)\n\tif len(tokenGroups) > 0 {\n\t\tcommon.SetContextKey(c, constant.ContextKeyTokenAllowedGroups, tokenGroups)\n\t}\n\troutingStrategy := token.GetRoutingStrategy()\n\tcommon.SetContextKey(c, constant.ContextKeyTokenRoutingStrategy, routingStrategy)\n\tcommon.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, token.CrossGroupRetry)\n",
+                1,
+            )
+            write("middleware/auth.go", text)
+        else:
+            insert_after(
+                "middleware/auth.go",
+                '\t\tcommon.SetContextKey(c, constant.ContextKeyTokenAllowedGroups, tokenGroups)\n',
+                '\t}\n\troutingStrategy := token.GetRoutingStrategy()\n'
+                '\tcommon.SetContextKey(c, constant.ContextKeyTokenRoutingStrategy, routingStrategy)\n',
+                "ContextKeyTokenRoutingStrategy",
+                "token routing context",
+            )
+            text = read("middleware/auth.go")
     broken = (
         "\tif len(tokenGroups) > 0 {\n"
         "\t\tcommon.SetContextKey(c, constant.ContextKeyTokenAllowedGroups, tokenGroups)\n"
@@ -170,15 +259,30 @@ def patch_auth() -> None:
 
 
 def patch_distributor() -> None:
-    insert_after(
-        "middleware/distributor.go",
-        "\tcommon.SetContextKey(c, constant.ContextKeyUsingGroup, requestedGroup)\n\tcommon.SetContextKey(c, constant.ContextKeyTokenGroup, requestedGroup)\n",
-        "\tcommon.SetContextKey(c, constant.ContextKeyRequestedGroup, requestedGroup)\n"
-        "\tcommon.SetContextKey(c, constant.ContextKeyTokenRoutingStrategy, \"\")\n",
-        "ContextKeyRequestedGroup",
-        "requested group context",
-    )
     text = read("middleware/distributor.go")
+    if "ContextKeyRequestedGroup" not in text:
+        if "\t\t\t\tusingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)\n" in text:
+            text = text.replace(
+                "\t\t\t\tusingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)\n",
+                "\t\t\t\tusingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)\n\t\t\t\tcommon.SetContextKey(c, constant.ContextKeyRequestedGroup, \"\")\n",
+                1,
+            )
+            text = text.replace(
+                "\t\t\t\t\t\tusingGroup = playgroundRequest.Group\n\t\t\t\t\t\tcommon.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)\n",
+                "\t\t\t\t\t\tusingGroup = playgroundRequest.Group\n\t\t\t\t\t\tcommon.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)\n\t\t\t\t\t\tcommon.SetContextKey(c, constant.ContextKeyRequestedGroup, usingGroup)\n",
+                1,
+            )
+            write("middleware/distributor.go", text)
+        else:
+            insert_after(
+                "middleware/distributor.go",
+                "\tcommon.SetContextKey(c, constant.ContextKeyUsingGroup, requestedGroup)\n\tcommon.SetContextKey(c, constant.ContextKeyTokenGroup, requestedGroup)\n",
+                "\tcommon.SetContextKey(c, constant.ContextKeyRequestedGroup, requestedGroup)\n"
+                "\tcommon.SetContextKey(c, constant.ContextKeyTokenRoutingStrategy, \"\")\n",
+                "ContextKeyRequestedGroup",
+                "requested group context",
+            )
+            text = read("middleware/distributor.go")
     marker = "routeHasMultipleCandidates"
     if marker not in text:
         old = '\t\t\t\tif preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {\n'
@@ -210,6 +314,19 @@ def patch_relay() -> None:
 
 
 def patch_model_list() -> None:
+    text = read("controller/model.go")
+    if "ContextKeyTokenRoutingStrategy) != \"\" && len(tokenAllowedGroups) == 0" in text:
+        return
+
+    if "\t\tvar models []string\n\t\tif tokenGroup == \"auto\" {\n" in text:
+        text = text.replace(
+            "\t\tvar models []string\n\t\tif tokenGroup == \"auto\" {\n",
+            "\t\tvar models []string\n\t\ttokenAllowedGroups := common.GetContextKeyStringSlice(c, constant.ContextKeyTokenAllowedGroups)\n\t\tif common.GetContextKeyString(c, constant.ContextKeyTokenRoutingStrategy) != \"\" && len(tokenAllowedGroups) == 0 {\n\t\t\tfor groupName := range service.GetUserUsableGroups(userGroup) {\n\t\t\t\tif groupName != \"\" && groupName != \"auto\" {\n\t\t\t\t\ttokenAllowedGroups = append(tokenAllowedGroups, groupName)\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif len(tokenAllowedGroups) > 0 {\n\t\t\tfor _, allowedGroup := range tokenAllowedGroups {\n\t\t\t\tgroupModels := model.GetGroupEnabledModels(allowedGroup)\n\t\t\t\tfor _, g := range groupModels {\n\t\t\t\t\tif !common.StringsContains(models, g) {\n\t\t\t\t\t\tmodels = append(models, g)\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t} else if tokenGroup == \"auto\" {\n",
+            1,
+        )
+        write("controller/model.go", text)
+        return
+
     insert_after(
         "controller/model.go",
         "\tif len(tokenAllowedGroups) > 0 {\n",
@@ -231,7 +348,91 @@ def patch_model_list() -> None:
         write("controller/model.go", text)
 
 
+def ensure_perf_metric_model_file() -> None:
+    if exists("model/perf_metric.go"):
+        return
+    write(
+        "model/perf_metric.go",
+        """package model
+
+import (
+\t"time"
+
+\t"gorm.io/gorm"
+\t"gorm.io/gorm/clause"
+)
+
+// PerfMetric stores aggregated relay performance metrics for smart routing.
+type PerfMetric struct {
+\tId             int    `json:"id" gorm:"primaryKey"`
+\tModelName      string `json:"model_name" gorm:"size:128;uniqueIndex:idx_perf_model_group_bucket,priority:1"`
+\tGroup          string `json:"group" gorm:"column:group;size:64;uniqueIndex:idx_perf_model_group_bucket,priority:2"`
+\tBucketTs       int64  `json:"bucket_ts" gorm:"uniqueIndex:idx_perf_model_group_bucket,priority:3;index:idx_perf_bucket_ts"`
+\tRequestCount   int64  `json:"-" gorm:"default:0"`
+\tSuccessCount   int64  `json:"-" gorm:"default:0"`
+\tTotalLatencyMs int64  `json:"-" gorm:"default:0"`
+\tTtftSumMs      int64  `json:"-" gorm:"default:0"`
+\tTtftCount      int64  `json:"-" gorm:"default:0"`
+\tOutputTokens   int64  `json:"-" gorm:"default:0"`
+\tGenerationMs   int64  `json:"-" gorm:"default:0"`
+}
+
+func (PerfMetric) TableName() string {
+\treturn "perf_metrics"
+}
+
+func UpsertPerfMetric(metric *PerfMetric) error {
+\tif metric == nil || metric.RequestCount == 0 {
+\t\treturn nil
+\t}
+\treturn DB.Clauses(clause.OnConflict{
+\t\tColumns: []clause.Column{
+\t\t\t{Name: "model_name"},
+\t\t\t{Name: "group"},
+\t\t\t{Name: "bucket_ts"},
+\t\t},
+\t\tDoUpdates: clause.Assignments(map[string]interface{}{
+\t\t\t"request_count":    gorm.Expr("perf_metrics.request_count + ?", metric.RequestCount),
+\t\t\t"success_count":    gorm.Expr("perf_metrics.success_count + ?", metric.SuccessCount),
+\t\t\t"total_latency_ms": gorm.Expr("perf_metrics.total_latency_ms + ?", metric.TotalLatencyMs),
+\t\t\t"ttft_sum_ms":      gorm.Expr("perf_metrics.ttft_sum_ms + ?", metric.TtftSumMs),
+\t\t\t"ttft_count":       gorm.Expr("perf_metrics.ttft_count + ?", metric.TtftCount),
+\t\t\t"output_tokens":    gorm.Expr("perf_metrics.output_tokens + ?", metric.OutputTokens),
+\t\t\t"generation_ms":    gorm.Expr("perf_metrics.generation_ms + ?", metric.GenerationMs),
+\t\t}),
+\t}).Create(metric).Error
+}
+
+func GetPerfMetrics(modelName string, group string, startTs int64, endTs int64) ([]PerfMetric, error) {
+\tvar metrics []PerfMetric
+\tquery := DB.Model(&PerfMetric{}).
+\t\tWhere("model_name = ? AND bucket_ts >= ? AND bucket_ts <= ?", modelName, startTs, endTs)
+\tif group != "" {
+\t\tquery = query.Where(commonGroupCol+" = ?", group)
+\t}
+\terr := query.Order("bucket_ts ASC").Find(&metrics).Error
+\treturn metrics, err
+}
+
+func DeletePerfMetricsBefore(cutoffTs int64) error {
+\tif cutoffTs <= 0 {
+\t\treturn nil
+\t}
+\treturn DB.Where("bucket_ts < ?", cutoffTs).Delete(&PerfMetric{}).Error
+}
+
+func PerfMetricStartTime(hours int) int64 {
+\tif hours <= 0 {
+\t\thours = 24
+\t}
+\treturn time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
+}
+""",
+    )
+
+
 def patch_channel_perf_model() -> None:
+    ensure_perf_metric_model_file()
     insert_after(
         "model/perf_metric.go",
         """func GetPerfMetrics(modelName string, group string, startTs int64, endTs int64) ([]PerfMetric, error) {
@@ -312,23 +513,51 @@ func DeleteChannelPerfMetricsBefore(cutoffTs int64) error {
         "type ChannelPerfMetric struct",
         "channel perf metric model",
     )
-    insert_after(
-        "model/main.go",
-        "\t\t&PerfMetric{},\n",
-        "\t\t&ChannelPerfMetric{},\n",
-        "&ChannelPerfMetric{}",
-        "channel perf metric automigrate",
-    )
-    insert_after(
-        "model/main.go",
-        '\t\t{&PerfMetric{}, "PerfMetric"},\n',
-        '\t\t{&ChannelPerfMetric{}, "ChannelPerfMetric"},\n',
-        '"ChannelPerfMetric"',
-        "channel perf metric fast migration",
-    )
+    text = read("model/main.go")
+    if "&ChannelPerfMetric{}" not in text:
+        if "\t\t&PerfMetric{},\n" in text:
+            text = text.replace(
+                "\t\t&PerfMetric{},\n",
+                "\t\t&PerfMetric{},\n\t\t&ChannelPerfMetric{},\n",
+                1,
+            )
+        elif "\t\t&Ability{},\n" in text:
+            text = text.replace(
+                "\t\t&Ability{},\n",
+                "\t\t&Ability{},\n\t\t&PerfMetric{},\n\t\t&ChannelPerfMetric{},\n",
+                1,
+            )
+        else:
+            raise SystemExit("smart routing patch failed: channel perf metric automigrate anchor not found in model/main.go")
+        write("model/main.go", text)
+    text = read("model/main.go")
+    if '"ChannelPerfMetric"' not in text:
+        if '\t\t{&PerfMetric{}, "PerfMetric"},\n' in text:
+            text = text.replace(
+                '\t\t{&PerfMetric{}, "PerfMetric"},\n',
+                '\t\t{&PerfMetric{}, "PerfMetric"},\n\t\t{&ChannelPerfMetric{}, "ChannelPerfMetric"},\n',
+                1,
+            )
+        elif '\t\t{&Ability{}, "Ability"},\n' in text:
+            text = text.replace(
+                '\t\t{&Ability{}, "Ability"},\n',
+                '\t\t{&Ability{}, "Ability"},\n\t\t{&PerfMetric{}, "PerfMetric"},\n\t\t{&ChannelPerfMetric{}, "ChannelPerfMetric"},\n',
+                1,
+            )
+        else:
+            raise SystemExit("smart routing patch failed: channel perf metric fast migration anchor not found in model/main.go")
+        write("model/main.go", text)
 
 
 def patch_channel_perf_runtime() -> None:
+    required = [
+        "pkg/perf_metrics/types.go",
+        "pkg/perf_metrics/metrics.go",
+        "pkg/perf_metrics/flush.go",
+    ]
+    if not all(exists(rel) for rel in required):
+        print("skip smart routing perf runtime patch: pkg/perf_metrics not found in this NewAPI source")
+        return
     replace_once(
         "pkg/perf_metrics/types.go",
         "type Sample struct {\n\tModel        string\n\tGroup        string\n",
@@ -466,10 +695,7 @@ func deleteOldEmptyChannelBucket(k channelBucketKey, rawKey any) {
 
 
 def patch_channel_smart_model_selection() -> None:
-    insert_after(
-        "model/channel_cache.go",
-        "var channel2advancedCustomConfig map[int]*dto.AdvancedCustomConfig\nvar channelSyncLock sync.RWMutex\n",
-        """
+    channel_smart_helpers = """
 var channelSmartScoreCache sync.Map
 
 const (
@@ -560,10 +786,24 @@ func channelSmartRoutingEffectiveWeight(baseWeight int, modelName string, group 
 \t}
 \treturn effective
 }
-""",
-        "channelSmartScoreCache",
-        "channel smart score helpers",
-    )
+"""
+    text = read("model/channel_cache.go")
+    if "channelSmartScoreCache" not in text:
+        if "var channel2advancedCustomConfig map[int]*dto.AdvancedCustomConfig\nvar channelSyncLock sync.RWMutex\n" in text:
+            text = text.replace(
+                "var channel2advancedCustomConfig map[int]*dto.AdvancedCustomConfig\nvar channelSyncLock sync.RWMutex\n",
+                "var channel2advancedCustomConfig map[int]*dto.AdvancedCustomConfig\nvar channelSyncLock sync.RWMutex\n" + channel_smart_helpers,
+                1,
+            )
+        elif "var channelSyncLock sync.RWMutex\n" in text:
+            text = text.replace(
+                "var channelSyncLock sync.RWMutex\n",
+                "var channelSyncLock sync.RWMutex\n" + channel_smart_helpers,
+                1,
+            )
+        else:
+            raise SystemExit("smart routing patch failed: channel smart score helpers anchor not found in model/channel_cache.go")
+        write("model/channel_cache.go", text)
     replace_once(
         "model/channel_cache.go",
         """\t// get the priority for the given retry number
@@ -701,6 +941,7 @@ func channelSmartRoutingEffectiveWeight(baseWeight int, modelName string, group 
 
 
 def patch_channel_select() -> None:
+    supports_request_path = "RequestPath" in read("service/channel_select.go")
     patch_import("service/channel_select.go", '"math"', '"errors"', "channel_select math")
     patch_import("service/channel_select.go", '"sort"', '"math"', "channel_select sort")
     patch_import("service/channel_select.go", '"strings"', '"sort"', "channel_select strings")
@@ -998,6 +1239,8 @@ func getManualOrderedGroupChannel(param *RetryParam, groups []string) (*model.Ch
 	return nil, groups[startGroupIndex], nil
 }
 '''
+    if not supports_request_path:
+        helpers = helpers.replace(", param.RequestPath", "")
     insert_after(
         "service/channel_select.go",
         "}\n\nfunc (p *RetryParam) ResetRetryNextTry() {\n\tp.resetNextTry = true\n}\n",
@@ -1078,6 +1321,8 @@ func getManualOrderedGroupChannel(param *RetryParam, groups []string) (*model.Ch
 	return channel, selectGroup, nil
 }
 '''
+    if not supports_request_path:
+        new_func = new_func.replace(", param.RequestPath", "")
     regex_replace(
         "service/channel_select.go",
         r"func CacheGetRandomSatisfiedChannel\(param \*RetryParam\) \(\*model\.Channel, string, error\) \{.*\}\s*$",
@@ -1108,7 +1353,9 @@ def gofmt_files() -> None:
         "pkg/perf_metrics/flush.go",
         "service/channel_select.go",
     ]
-    subprocess.run([gofmt, "-w", *files], cwd=ROOT, check=True)
+    files = [rel for rel in files if exists(rel)]
+    if files:
+        subprocess.run([gofmt, "-w", *files], cwd=ROOT, check=True)
 
 
 def main() -> None:
