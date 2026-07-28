@@ -69,7 +69,9 @@ def insert_token_model_helpers() -> None:
     text = read("model/token.go")
     if "func NormalizeTokenRoutingStrategy" in text:
         return
-    snippet = """
+    snippets = []
+    if "func NormalizeTokenGroupList" not in text:
+        snippets.append("""
 
 func NormalizeTokenGroupList(groups []string) []string {
 \tnormalized := make([]string, 0, len(groups))
@@ -95,6 +97,8 @@ func SplitTokenGroups(group string) []string {
 func JoinTokenGroups(groups []string) string {
 \treturn strings.Join(NormalizeTokenGroupList(groups), ",")
 \t}
+""")
+    snippets.append("""
 
 const (
 \tTokenRoutingManual      = ""
@@ -119,7 +123,8 @@ func (token *Token) GetRoutingStrategy() string {
 \t}
 \treturn NormalizeTokenRoutingStrategy(token.RoutingStrategy)
 }
-"""
+""")
+    snippet = "\n".join(snippets)
     anchors = [
         "func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {\n",
         "func SearchUserTokens(userId int, keyword string, token string, offset int, limit int) (tokens []*Token, total int64, err error) {\n",

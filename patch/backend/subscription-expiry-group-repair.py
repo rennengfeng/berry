@@ -231,6 +231,15 @@ def gofmt_files() -> None:
 
 
 def main() -> None:
+    subscription_text = read("model/subscription.go")
+    required_markers = [
+        "DowngradeGroup",
+        "func lockForUpdate(",
+        "func refreshSubscriptionUserGroupCache(",
+    ]
+    if not all(marker in subscription_text for marker in required_markers):
+        print("skip subscription expiry group repair backend patch: subscription downgrade helpers not found in this NewAPI source")
+        return
     patch_subscription_model()
     patch_subscription_task()
     gofmt_files()
