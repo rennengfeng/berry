@@ -353,14 +353,21 @@ export function ModelSquare() {
   const { data: perfData } = useQuery({
     queryKey: ['portal-perf-metrics-summary'],
     queryFn: async () => {
-      const res = await api.get('/api/perf-metrics/summary')
-      return res.data?.data?.models as
-        | Array<{
-            model_name: string
-            success_rate: number
-            avg_latency_ms: number
-          }>
-        | undefined
+      try {
+        const res = await api.get('/api/perf-metrics/summary', {
+          skipErrorHandler: true,
+          disableDuplicate: true,
+        })
+        return res.data?.data?.models as
+          | Array<{
+              model_name: string
+              success_rate: number
+              avg_latency_ms: number
+            }>
+          | undefined
+      } catch {
+        return []
+      }
     },
     staleTime: 60_000,
   })

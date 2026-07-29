@@ -44,8 +44,15 @@ export function ModelMonitor() {
   const { data: perfData, isLoading: perfLoading } = useQuery({
     queryKey: ['portal-perf-metrics-summary'],
     queryFn: async () => {
-      const res = await api.get('/api/perf-metrics/summary')
-      return res.data?.data?.models as PerfModelSummary[] | undefined
+      try {
+        const res = await api.get('/api/perf-metrics/summary', {
+          skipErrorHandler: true,
+          disableDuplicate: true,
+        })
+        return res.data?.data?.models as PerfModelSummary[] | undefined
+      } catch {
+        return []
+      }
     },
     staleTime: 60_000,
   })

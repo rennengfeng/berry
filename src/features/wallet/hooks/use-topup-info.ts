@@ -35,6 +35,10 @@ import type {
 // Topup Info Hook
 // ============================================================================
 
+function normalizeTopupLink(data: unknown): string | undefined {
+  return typeof data === 'string' && data.trim() ? data.trim() : undefined
+}
+
 function parseJsonArray(data: unknown): unknown[] {
   if (Array.isArray(data)) {
     return data
@@ -178,17 +182,27 @@ export function useTopupInfo() {
         return
       }
 
+      const rawTopupInfo = response.data as TopupInfo & Record<string, unknown>
       const processedData: TopupInfo = {
-        ...response.data,
-        pay_methods: parsePaymentMethods(
-          response.data.pay_methods,
-          response.data.stripe_min_topup
+        ...rawTopupInfo,
+        topup_link: normalizeTopupLink(
+          rawTopupInfo.topup_link ??
+            rawTopupInfo.TopUpLink ??
+            rawTopupInfo.topupLink ??
+            rawTopupInfo.top_up_link ??
+            rawTopupInfo.recharge_link ??
+            rawTopupInfo.PayAddress ??
+            rawTopupInfo.pay_address
         ),
-        amount_options: parseAmountOptions(response.data.amount_options),
-        discount: parseDiscountMap(response.data.discount),
-        creem_products: parseCreemProducts(response.data.creem_products),
+        pay_methods: parsePaymentMethods(
+          rawTopupInfo.pay_methods,
+          rawTopupInfo.stripe_min_topup
+        ),
+        amount_options: parseAmountOptions(rawTopupInfo.amount_options),
+        discount: parseDiscountMap(rawTopupInfo.discount),
+        creem_products: parseCreemProducts(rawTopupInfo.creem_products),
         waffo_pay_methods: parseWaffoPayMethods(
-          response.data.waffo_pay_methods
+          rawTopupInfo.waffo_pay_methods
         ),
       }
 

@@ -37,6 +37,20 @@ import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/
 import { formatDuration, formatResetPeriod } from '@/features/subscriptions/lib'
 import type { PlanRecord } from '@/features/subscriptions/types'
 
+function normalizePortalTopupLink(info: unknown): string | undefined {
+  if (!info || typeof info !== 'object') return undefined
+  const data = info as Record<string, unknown>
+  const value =
+    data.topup_link ??
+    data.TopUpLink ??
+    data.topupLink ??
+    data.top_up_link ??
+    data.recharge_link ??
+    data.PayAddress ??
+    data.pay_address
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
 export function SubscriptionHub() {
   const { t } = useTranslation()
   const { currency } = useSystemConfig()
@@ -52,6 +66,7 @@ export function SubscriptionHub() {
   const [redemptionCode, setRedemptionCode] = useState('')
 
   const { topupInfo, presetAmounts } = useTopupInfo()
+  const topupLink = normalizePortalTopupLink(topupInfo)
   const {
     amount: paymentAmount,
     calculating,
@@ -341,11 +356,11 @@ export function SubscriptionHub() {
                 {redeeming ? t('portal.page.topup.processing') : t('portal.page.topup.redeem')}
               </button>
             </div>
-            {topupInfo?.topup_link && (
+            {topupLink && (
               <p className="mt-2 text-xs text-white/40">
                 {t('Need a redemption code?')}{' '}
                 <a
-                  href={topupInfo.topup_link}
+                  href={topupLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-purple-400 transition hover:text-purple-300 hover:underline"
