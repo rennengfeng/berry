@@ -320,7 +320,53 @@ def patch_relay() -> None:
 
 def patch_model_list() -> None:
     text = read("controller/model.go")
-    if "ContextKeyTokenRoutingStrategy) != \"\" && len(tokenAllowedGroups) == 0" in text:
+    if "tokenAllowedGroups := common.GetContextKeyStringSlice(c, constant.ContextKeyTokenAllowedGroups)" in text:
+        return
+
+    latest_anchor = "\n\tif tokenGroup == \"auto\" {\n"
+    if "func getModelListGroups(c *gin.Context) (modelListGroups, error) {" in text and latest_anchor in text:
+        snippet = """
+\ttokenAllowedGroups := common.GetContextKeyStringSlice(c, constant.ContextKeyTokenAllowedGroups)
+\tif common.GetContextKeyString(c, constant.ContextKeyTokenRoutingStrategy) != "" && len(tokenAllowedGroups) == 0 {
+\t\tif tokenGroup != "" && tokenGroup != "auto" {
+\t\t\ttokenAllowedGroups = []string{tokenGroup}
+\t\t} else {
+\t\t\tfor groupName := range service.GetUserUsableGroups(userGroup) {
+\t\t\t\tgroupName = strings.TrimSpace(groupName)
+\t\t\t\tif groupName != "" && groupName != "auto" {
+\t\t\t\t\ttokenAllowedGroups = append(tokenAllowedGroups, groupName)
+\t\t\t\t}
+\t\t\t}
+\t\t\tif len(tokenAllowedGroups) == 0 && strings.TrimSpace(userGroup) != "" {
+\t\t\t\ttokenAllowedGroups = []string{userGroup}
+\t\t\t}
+\t\t}
+\t}
+\tif len(tokenAllowedGroups) > 0 {
+\t\townerGroups := make([]string, 0, len(tokenAllowedGroups))
+\t\tseenGroups := make(map[string]struct{}, len(tokenAllowedGroups))
+\t\tfor _, groupName := range tokenAllowedGroups {
+\t\t\tgroupName = strings.TrimSpace(groupName)
+\t\t\tif groupName == "" || groupName == "auto" {
+\t\t\t\tcontinue
+\t\t\t}
+\t\t\tif _, ok := seenGroups[groupName]; ok {
+\t\t\t\tcontinue
+\t\t\t}
+\t\t\tseenGroups[groupName] = struct{}{}
+\t\t\townerGroups = append(ownerGroups, groupName)
+\t\t}
+\t\tif len(ownerGroups) > 0 {
+\t\t\treturn modelListGroups{
+\t\t\t\tuserGroup:   userGroup,
+\t\t\t\ttokenGroup:  tokenGroup,
+\t\t\t\townerGroups: ownerGroups,
+\t\t\t}, nil
+\t\t}
+\t}
+"""
+        text = text.replace(latest_anchor, "\n" + snippet + latest_anchor.lstrip("\n"), 1)
+        write("controller/model.go", text)
         return
 
     if "\t\tvar models []string\n\t\tif tokenGroup == \"auto\" {\n" in text:

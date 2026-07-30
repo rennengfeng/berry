@@ -27,11 +27,20 @@ def write_if_exists(root: Path, rel: str, text: str) -> None:
 
 
 def patch_api_bootstrap(root: Path) -> None:
+    auth_session_path = root / "src" / "lib" / "auth-session.ts"
+    if auth_session_path.exists():
+        auth_session_text = auth_session_path.read_text(encoding="utf-8")
+        if (
+            "export async function bootstrapAuthentication(): Promise<RefreshOutcome> {"
+            in auth_session_text
+            and "hasStaleSession" in auth_session_text
+        ):
+            return
+
     path = root / "src" / "lib" / "api.ts"
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8")
-    pattern = r"export async function bootstrapAuthentication\(\): Promise<RefreshOutcome> \{.*?\n\}"
     replacement = """export async function bootstrapAuthentication(): Promise<RefreshOutcome> {
   const auth = useAuthStore.getState().auth
   const now = Math.floor(Date.now() / 1000)
@@ -62,10 +71,26 @@ def patch_api_bootstrap(root: Path) -> None:
   auth.setBootstrapState('checking')
   return refreshAuthentication()
 }"""
-    new_text, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
-    if count != 1:
+    start = text.find("export async function bootstrapAuthentication(): Promise<RefreshOutcome> {")
+    if start < 0:
+        if auth_session_path.exists() and "bootstrapAuthentication" in auth_session_text:
+            return
         raise SystemExit("cookie session auth patch failed: bootstrapAuthentication anchor not found")
-    path.write_text(new_text, encoding="utf-8")
+    depth = 0
+    end = -1
+    for index in range(text.find("{", start), len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                end = index + 1
+                break
+    if end < 0:
+        raise SystemExit("cookie session auth patch failed: bootstrapAuthentication function is unterminated")
+    if text[start:end] != replacement:
+        path.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
 
 
 root = frontend_root()

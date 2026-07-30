@@ -40,9 +40,10 @@ def insert_after(rel: str, anchor: str, snippet: str, marker: str, label: str) -
 
 
 def find_upstream_dto_file() -> str | None:
-    preferred = ROOT / "dto" / "ratio_sync.go"
-    if preferred.exists():
-        return "dto/ratio_sync.go"
+    for preferred_rel in ("relaykit/dto/ratio_sync.go", "dto/ratio_sync.go"):
+        preferred = ROOT / preferred_rel
+        if preferred.exists():
+            return preferred_rel
     for path in ROOT.rglob("*.go"):
         rel = path.relative_to(ROOT).as_posix()
         if rel.startswith(("web/", "vendor/")):
@@ -59,49 +60,7 @@ def find_upstream_dto_file() -> str | None:
 def patch_dto() -> bool:
     rel = find_upstream_dto_file()
     if rel is None:
-        rel = "dto/ratio_sync.go"
-        path = ROOT / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            '''package dto
-
-type UpstreamDTO struct {
-\tID       int    `json:"id,omitempty"`
-\tName     string `json:"name" binding:"required"`
-\tBaseURL  string `json:"base_url" binding:"required"`
-\tEndpoint string `json:"endpoint"`
-\tType     int    `json:"type,omitempty"`
-}
-
-type UpstreamRequest struct {
-\tChannelIDs []int64       `json:"channel_ids"`
-\tUpstreams  []UpstreamDTO `json:"upstreams"`
-\tTimeout    int           `json:"timeout"`
-}
-
-type TestResult struct {
-\tName   string `json:"name"`
-\tStatus string `json:"status"`
-\tError  string `json:"error,omitempty"`
-}
-
-type DifferenceItem struct {
-\tCurrent    interface{}            `json:"current"`
-\tUpstreams  map[string]interface{} `json:"upstreams"`
-\tConfidence map[string]bool        `json:"confidence"`
-}
-
-type SyncableChannel struct {
-\tID      int    `json:"id"`
-\tName    string `json:"name"`
-\tBaseURL string `json:"base_url"`
-\tStatus  int    `json:"status"`
-\tType    int    `json:"type"`
-}
-''',
-            encoding="utf-8",
-        )
-        return True
+        raise SystemExit("DashScope Native price sync patch failed: UpstreamDTO source not found; expected relaykit/dto/ratio_sync.go in official latest source")
     text = read(rel)
     if 'json:"type,omitempty"' in text:
         return True
