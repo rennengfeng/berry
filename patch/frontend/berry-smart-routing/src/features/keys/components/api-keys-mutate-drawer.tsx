@@ -290,7 +290,10 @@ export function ApiKeysMutateDrawer({
       }
     }
 
-    if (!(form.getValues('groups') || []).includes('auto')) {
+    if (
+      !routingEnabled &&
+      (form.getValues('groups') || []).length < 2
+    ) {
       form.setValue('cross_group_retry', false)
     }
   }, [groups, form])
@@ -519,7 +522,7 @@ export function ApiKeysMutateDrawer({
                 )}
               />
 
-              {selectedGroups.includes('auto') && (
+              {(routingEnabled || selectedGroups.length > 1) && (
                 <FormField
                   control={form.control}
                   name='cross_group_retry'

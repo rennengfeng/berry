@@ -746,6 +746,12 @@ func deleteOldEmptyChannelBucket(k channelBucketKey, rawKey any) {
 
 
 def patch_channel_smart_model_selection() -> None:
+    patch_import(
+        "model/ability.go",
+        '"github.com/QuantumNous/new-api/logger"',
+        '"github.com/QuantumNous/new-api/constant"',
+        "ability logger",
+    )
     channel_smart_helpers = """
 var channelSmartScoreCache sync.Map
 
@@ -891,9 +897,14 @@ func channelSmartRoutingEffectiveWeight(baseWeight int, modelName string, group 
 \t\tif rawSumWeight == 0 {
 \t\t\tbaseWeight = 100
 \t\t}
-\t\teffectiveWeight := channelSmartRoutingEffectiveWeight(baseWeight, model, group, channel.Id)
+\t\tsmartScore := channelSmartRoutingScore(model, group, channel.Id)
+\t\teffectiveWeight := int(float64(baseWeight) * smartScore)
+\t\tif effectiveWeight < 1 {
+\t\t\teffectiveWeight = 1
+\t\t}
 \t\teffectiveWeights[channel.Id] = effectiveWeight
 \t\tsumWeight += effectiveWeight
+\t\tlogger.LogDebug(nil, "Channel smart routing candidate: group=%s model=%s channel_id=%d channel_name=%s priority=%d base_weight=%d smart_score=%f effective_weight=%d", group, model, channel.Id, channel.Name, targetPriority, baseWeight, smartScore, effectiveWeight)
 \t}
 """,
         "channel cache smart effective weights",
@@ -938,6 +949,7 @@ func channelSmartRoutingEffectiveWeight(baseWeight int, modelName string, group 
 \tfor _, channel := range targetChannels {
 \t\trandomWeight -= effectiveWeights[channel.Id] * smoothingFactor
 \t\tif randomWeight < 0 {
+\t\t\tlogger.LogDebug(nil, "Channel smart routing selected: group=%s model=%s channel_id=%d channel_name=%s priority=%d effective_weight=%d", group, model, channel.Id, channel.Name, targetPriority, effectiveWeights[channel.Id])
 \t\t\treturn channel, nil
 \t\t}
 \t}
@@ -970,9 +982,14 @@ func channelSmartRoutingEffectiveWeight(baseWeight int, modelName string, group 
 \t\teffectiveWeights := make(map[int]int, len(abilities))
 \t\tfor _, ability_ := range abilities {
 \t\t\tbaseWeight := int(ability_.Weight) + 10
-\t\t\teffectiveWeight := channelSmartRoutingEffectiveWeight(baseWeight, model, group, ability_.ChannelId)
+\t\t\tsmartScore := channelSmartRoutingScore(model, group, ability_.ChannelId)
+\t\t\teffectiveWeight := int(float64(baseWeight) * smartScore)
+\t\t\tif effectiveWeight < 1 {
+\t\t\t\teffectiveWeight = 1
+\t\t\t}
 \t\t\teffectiveWeights[ability_.ChannelId] = effectiveWeight
 \t\t\tweightSum += effectiveWeight
+\t\t\tlogger.LogDebug(nil, "Channel smart routing candidate: group=%s model=%s channel_id=%d base_weight=%d smart_score=%f effective_weight=%d", group, model, ability_.ChannelId, baseWeight, smartScore, effectiveWeight)
 \t\t}
 \t\tif weightSum <= 0 {
 \t\t\treturn nil, errors.New("channel smart routing effective weight is zero")
@@ -982,6 +999,7 @@ func channelSmartRoutingEffectiveWeight(baseWeight int, modelName string, group 
 \t\t\tweight -= effectiveWeights[ability_.ChannelId]
 \t\t\tif weight <= 0 {
 \t\t\t\tchannel.Id = ability_.ChannelId
+\t\t\t\tlogger.LogDebug(nil, "Channel smart routing selected: group=%s model=%s channel_id=%d effective_weight=%d", group, model, ability_.ChannelId, effectiveWeights[ability_.ChannelId])
 \t\t\t\tbreak
 \t\t\t}
 \t\t}
@@ -1129,6 +1147,13 @@ func smartRoutingNormalizeHigher(value float64, minValue float64, maxValue float
 	return (value - minValue) / (maxValue - minValue)
 }
 
+func smartRoutingGroupsForLog(groups []string) string {
+	if len(groups) == 0 {
+		return "-"
+	}
+	return strings.Join(groups, ",")
+}
+
 func smartRoutingRank(ctx *gin.Context, strategy string, modelName string, groups []string) []smartRoutingCandidate {
 	userGroup := common.GetContextKeyString(ctx, constant.ContextKeyUserGroup)
 	candidates := make([]smartRoutingCandidate, 0, len(groups))
@@ -1193,6 +1218,9 @@ func smartRoutingRank(ctx *gin.Context, strategy string, modelName string, group
 			return a.sourceRank < b.sourceRank
 		}
 	})
+	for _, candidate := range candidates {
+		logger.LogDebug(ctx, "Smart routing candidate group: %s strategy=%s model=%s score=%f price=%f ttft=%f success=%f", candidate.group, strategy, modelName, candidate.score, candidate.price, candidate.ttftMs, candidate.success)
+	}
 	return candidates
 }
 
@@ -1228,13 +1256,18 @@ func applySelectedRouteGroup(ctx *gin.Context, group string) {
 func getSmartRoutedChannel(param *RetryParam, strategy string) (*model.Channel, string, error) {
 	groups := smartRoutingCandidateGroups(param.Ctx, param.ModelName)
 	if len(groups) == 0 {
+		logger.LogDebug(param.Ctx, "Smart routing no usable candidate groups: strategy=%s model=%s tokenGroup=%s", strategy, param.ModelName, param.TokenGroup)
 		return nil, param.TokenGroup, nil
 	}
 	candidates := smartRoutingRank(param.Ctx, strategy, param.ModelName, groups)
+	crossGroupRetry := common.GetContextKeyBool(param.Ctx, constant.ContextKeyTokenCrossGroupRetry)
 	tried := smartRoutingTriedGroups(param.Ctx)
+	if !crossGroupRetry {
+		tried = map[string]bool{}
+	}
 	for pass := 0; pass < 2; pass++ {
 		for _, candidate := range candidates {
-			if pass == 0 && tried[candidate.group] {
+			if crossGroupRetry && pass == 0 && tried[candidate.group] {
 				continue
 			}
 			channel, err := model.GetRandomSatisfiedChannel(candidate.group, param.ModelName, 0, param.RequestPath)
@@ -1242,12 +1275,18 @@ func getSmartRoutedChannel(param *RetryParam, strategy string) (*model.Channel, 
 				return nil, candidate.group, err
 			}
 			if channel == nil {
+				logger.LogDebug(param.Ctx, "Smart routing candidate group has no available channel: %s strategy=%s model=%s pass=%d", candidate.group, strategy, param.ModelName, pass)
 				continue
 			}
 			applySelectedRouteGroup(param.Ctx, candidate.group)
-			smartRoutingMarkTried(param.Ctx, candidate.group)
-			logger.LogDebug(param.Ctx, "Smart routing selected group: %s strategy=%s model=%s price=%f ttft=%f success=%f", candidate.group, strategy, param.ModelName, candidate.price, candidate.ttftMs, candidate.success)
+			if crossGroupRetry {
+				smartRoutingMarkTried(param.Ctx, candidate.group)
+			}
+			logger.LogDebug(param.Ctx, "Smart routing selected group: %s channel_id=%d channel_name=%s strategy=%s model=%s score=%f price=%f ttft=%f success=%f crossGroupRetry=%t", candidate.group, channel.Id, channel.Name, strategy, param.ModelName, candidate.score, candidate.price, candidate.ttftMs, candidate.success, crossGroupRetry)
 			return channel, candidate.group, nil
+		}
+		if !crossGroupRetry {
+			break
 		}
 		tried = map[string]bool{}
 	}
@@ -1255,9 +1294,15 @@ func getSmartRoutedChannel(param *RetryParam, strategy string) (*model.Channel, 
 }
 
 func getManualOrderedGroupChannel(param *RetryParam, groups []string) (*model.Channel, string, error) {
+	allowedGroups := append([]string(nil), groups...)
 	groups = smartRoutingFilterGroups(param.ModelName, groups)
 	if len(groups) == 0 {
+		logger.LogDebug(param.Ctx, "Manual ordered routing no usable groups: model=%s allowed=%s", param.ModelName, smartRoutingGroupsForLog(allowedGroups))
 		return nil, param.TokenGroup, nil
+	}
+	crossGroupRetry := common.GetContextKeyBool(param.Ctx, constant.ContextKeyTokenCrossGroupRetry)
+	if !crossGroupRetry && len(groups) > 1 {
+		groups = groups[:1]
 	}
 	retry := param.GetRetry()
 	perGroupBudget := (common.RetryTimes + 1 + len(groups) - 1) / len(groups)
@@ -1268,6 +1313,7 @@ func getManualOrderedGroupChannel(param *RetryParam, groups []string) (*model.Ch
 	if startGroupIndex >= len(groups) {
 		startGroupIndex = len(groups) - 1
 	}
+	logger.LogDebug(param.Ctx, "Manual ordered routing candidates: model=%s allowed=%s usable=%s retry=%d perGroupBudget=%d startGroupIndex=%d retryTimes=%d crossGroupRetry=%t", param.ModelName, smartRoutingGroupsForLog(allowedGroups), smartRoutingGroupsForLog(groups), retry, perGroupBudget, startGroupIndex, common.RetryTimes, crossGroupRetry)
 	for i := startGroupIndex; i < len(groups); i++ {
 		priorityRetry := 0
 		if i == startGroupIndex {
@@ -1281,10 +1327,11 @@ func getManualOrderedGroupChannel(param *RetryParam, groups []string) (*model.Ch
 			return nil, groups[i], err
 		}
 		if channel == nil {
+			logger.LogDebug(param.Ctx, "Manual ordered routing group has no available channel: %s model=%s retry=%d priorityRetry=%d", groups[i], param.ModelName, retry, priorityRetry)
 			continue
 		}
 		applySelectedRouteGroup(param.Ctx, groups[i])
-		logger.LogDebug(param.Ctx, "Manual ordered routing selected group: %s model=%s retry=%d priorityRetry=%d", groups[i], param.ModelName, retry, priorityRetry)
+		logger.LogDebug(param.Ctx, "Manual ordered routing selected group: %s channel_id=%d channel_name=%s model=%s retry=%d priorityRetry=%d", groups[i], channel.Id, channel.Name, param.ModelName, retry, priorityRetry)
 		return channel, groups[i], nil
 	}
 	return nil, groups[startGroupIndex], nil

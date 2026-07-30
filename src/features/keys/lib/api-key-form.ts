@@ -112,9 +112,7 @@ export function transformFormDataToPayload(
     model_limits: data.model_limits.join(','),
     allow_ips: data.allow_ips || '',
     group: groups.join(','),
-    cross_group_retry: groups.includes('auto')
-      ? !!data.cross_group_retry
-      : false,
+    cross_group_retry: !!data.cross_group_retry,
   }
 }
 

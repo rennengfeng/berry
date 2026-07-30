@@ -253,13 +253,6 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
                       render={<BadgeCell className='gap-1.5 text-xs' />}
                     >
                       <GroupBadge group='auto' />
-                      {apiKey.cross_group_retry && (
-                        <StatusBadge
-                          label={t('Cross-group')}
-                          variant='info'
-                          copyable={false}
-                        />
-                      )}
                     </TooltipTrigger>
                     <TooltipContent>
                       <span className='text-xs'>
@@ -274,6 +267,13 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
 
               return <GroupBadge key={item} group={item} ratio={ratio} />
             })}
+            {apiKey.cross_group_retry && (
+              <StatusBadge
+                label={t('Cross-group')}
+                variant='info'
+                copyable={false}
+              />
+            )}
           </div>
         )
       },

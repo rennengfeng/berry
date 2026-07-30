@@ -128,9 +128,7 @@ export function transformFormDataToPayload(
     allow_ips: data.allow_ips || '',
     routing_strategy: data.routing_strategy,
     group: groups.join(','),
-    cross_group_retry: groups.includes('auto')
-      ? !!data.cross_group_retry
-      : false,
+    cross_group_retry: !!data.cross_group_retry,
   }
 }
 
