@@ -40,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SettingsSection } from '../components/settings-section'
 import {
@@ -93,11 +94,15 @@ type PricingRow = {
 }
 
 type SyncRow = {
+  id: string
   model: string
+  field: 'dashscope_native_pricing' | 'billing_mode'
+  fieldLabel: string
   current: string
   upstream: string
   source: string
-  spec: NativePricingSpec
+  spec?: NativePricingSpec
+  mode?: string
 }
 
 type DashScopeNativePricingProps = {
@@ -124,11 +129,31 @@ const DEFAULT_PRICING: Record<string, NativePricingSpec> = {
     unit: 'character',
     price: 1.5 / 7.3 / 10000,
   },
+  'cosyvoice-v3.5-flash': {
+    unit: 'character',
+    price: 0.8 / 7.3 / 10000,
+  },
   'qwen-image-2.0': {
     unit: 'image',
     price: 0.2 / 7.3,
   },
+  'qwen-image-2.0-2026-03-03': {
+    unit: 'image',
+    price: 0.2 / 7.3,
+  },
   'qwen-image-2.0-pro': {
+    unit: 'image',
+    price: 0.5 / 7.3,
+  },
+  'qwen-image-2.0-pro-2026-06-22': {
+    unit: 'image',
+    price: 0.5 / 7.3,
+  },
+  'qwen-image-2.0-pro-2026-04-22': {
+    unit: 'image',
+    price: 0.5 / 7.3,
+  },
+  'qwen-image-2.0-pro-2026-03-03': {
     unit: 'image',
     price: 0.5 / 7.3,
   },
@@ -156,6 +181,27 @@ const DEFAULT_PRICING: Record<string, NativePricingSpec> = {
       '1080P': 1.2 / 7.3,
     },
   },
+  'happyhorse-1.0-t2v': {
+    unit: 'video_second',
+    prices: {
+      '720P': 0.9 / 7.3,
+      '1080P': 1.6 / 7.3,
+    },
+  },
+  'happyhorse-1.0-i2v': {
+    unit: 'video_second',
+    prices: {
+      '720P': 0.9 / 7.3,
+      '1080P': 1.6 / 7.3,
+    },
+  },
+  'happyhorse-1.0-r2v': {
+    unit: 'video_second',
+    prices: {
+      '720P': 0.9 / 7.3,
+      '1080P': 1.6 / 7.3,
+    },
+  },
   'happyhorse-1.0-video-edit': {
     unit: 'video_second',
     prices: {
@@ -170,11 +216,118 @@ const DEFAULT_PRICING: Record<string, NativePricingSpec> = {
       '1080P': 1 / 7.3,
     },
   },
+  'wan2.7-t2v-2026-06-12': {
+    unit: 'video_second',
+    prices: {
+      '720P': 0.6 / 7.3,
+      '1080P': 1 / 7.3,
+    },
+  },
+  'wan2.7-t2v-2026-04-25': {
+    unit: 'video_second',
+    prices: {
+      '720P': 0.6 / 7.3,
+      '1080P': 1 / 7.3,
+    },
+  },
   'wan2.7-i2v': {
     unit: 'video_second',
     prices: {
       '720P': 0.6 / 7.3,
       '1080P': 1 / 7.3,
+    },
+  },
+  'wan2.7-i2v-2026-04-25': {
+    unit: 'video_second',
+    prices: {
+      '720P': 0.6 / 7.3,
+      '1080P': 1 / 7.3,
+    },
+  },
+  'wan2.6-t2v': {
+    unit: 'video_second',
+    prices: {
+      '720P': 0.6 / 7.3,
+      '1080P': 1 / 7.3,
+    },
+  },
+  'wan2.6-i2v': {
+    unit: 'video_second',
+    prices: {
+      '720P': 0.6 / 7.3,
+      '1080P': 1 / 7.3,
+    },
+  },
+  'wan2.5-t2v-preview': {
+    unit: 'video_second',
+    prices: {
+      '480P': 0.3 / 7.3,
+      '720P': 0.6 / 7.3,
+      '1080P': 1 / 7.3,
+    },
+  },
+  'wan2.5-i2v-preview': {
+    unit: 'video_second',
+    prices: {
+      '480P': 0.3 / 7.3,
+      '720P': 0.6 / 7.3,
+      '1080P': 1 / 7.3,
+    },
+  },
+  'wan2.2-t2v-plus': {
+    unit: 'video_second',
+    prices: {
+      '480P': 0.14 / 7.3,
+      '1080P': 0.7 / 7.3,
+    },
+  },
+  'wan2.2-i2v-plus': {
+    unit: 'video_second',
+    prices: {
+      '480P': 0.14 / 7.3,
+      '1080P': 0.7 / 7.3,
+    },
+  },
+  'wan2.2-i2v-flash': {
+    unit: 'video_second',
+    prices: {
+      '480P': 0.1 / 7.3,
+      '720P': 0.2 / 7.3,
+      '1080P': 0.48 / 7.3,
+    },
+  },
+  'wan2.2-kf2v-flash': {
+    unit: 'video_second',
+    prices: {
+      '480P': 0.1 / 7.3,
+      '720P': 0.2 / 7.3,
+      '1080P': 0.48 / 7.3,
+    },
+  },
+  'wanx2.1-t2v-turbo': {
+    unit: 'video_second',
+    prices: {
+      '480P': 0.24 / 7.3,
+      '720P': 0.24 / 7.3,
+    },
+  },
+  'wanx2.1-t2v-plus': {
+    unit: 'video_second',
+    prices: {
+      '720P': 0.7 / 7.3,
+    },
+  },
+  'wanx2.1-i2v-turbo': {
+    unit: 'video_second',
+    prices: {
+      '480P': 0.24 / 7.3,
+      '720P': 0.24 / 7.3,
+    },
+  },
+  'wanx2.1-i2v-plus': {
+    unit: 'video_second',
+    prices: {
+      '720P': 0.7 / 7.3,
     },
   },
 }
@@ -324,6 +477,11 @@ function formatSpec(spec: NativePricingSpec | string | null | undefined): string
   return `${spec.unit} / ${numberValue(spec.price)}${Object.keys(spec.prices || {}).length ? ` (+${Object.keys(spec.prices || {}).length})` : ''}`
 }
 
+function formatBillingMode(value: unknown): string {
+  if (!value || value === 'same') return '-'
+  return String(value)
+}
+
 function parseSyncedSpec(value: unknown): NativePricingSpec | null {
   if (!value || value === 'same' || typeof value !== 'string') return null
   try {
@@ -378,6 +536,7 @@ export function DashScopeNativePricing({
   const [rows, setRows] = useState<PricingRow[]>([])
   const [selectedChannelId, setSelectedChannelId] = useState('')
   const [syncRows, setSyncRows] = useState<SyncRow[]>([])
+  const [selectedSyncIds, setSelectedSyncIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     setRows(pricingToRows(parsePricing(pricingDefault)))
@@ -412,22 +571,45 @@ export function DashScopeNativePricing({
       }
       const nextRows: SyncRow[] = []
       for (const [model, fields] of Object.entries(data.data.differences)) {
-        const diff = (fields as Record<string, RatioDifference>).dashscope_native_pricing
-        if (!diff) continue
-        for (const [source, upstreamValue] of Object.entries(diff.upstreams)) {
-          const spec = parseSyncedSpec(upstreamValue)
-          if (spec) {
-            nextRows.push({
-              model,
-              current: formatSpec(diff.current as string | null),
-              upstream: formatSpec(spec),
-              source,
-              spec,
-            })
+        const fieldMap = fields as Record<string, RatioDifference>
+        const pricingDiff = fieldMap.dashscope_native_pricing
+        if (pricingDiff) {
+          for (const [source, upstreamValue] of Object.entries(pricingDiff.upstreams)) {
+            const spec = parseSyncedSpec(upstreamValue)
+            if (spec) {
+              nextRows.push({
+                id: `${model}:dashscope_native_pricing:${source}`,
+                model,
+                field: 'dashscope_native_pricing',
+                fieldLabel: t('Native price'),
+                current: formatSpec(pricingDiff.current as string | null),
+                upstream: formatSpec(spec),
+                source,
+                spec,
+              })
+            }
+          }
+        }
+        const modeDiff = fieldMap.billing_mode
+        if (modeDiff) {
+          for (const [source, upstreamValue] of Object.entries(modeDiff.upstreams)) {
+            if (typeof upstreamValue === 'string' && upstreamValue !== 'same') {
+              nextRows.push({
+                id: `${model}:billing_mode:${source}`,
+                model,
+                field: 'billing_mode',
+                fieldLabel: t('Billing mode'),
+                current: formatBillingMode(modeDiff.current),
+                upstream: formatBillingMode(upstreamValue),
+                source,
+                mode: upstreamValue,
+              })
+            }
           }
         }
       }
       setSyncRows(nextRows)
+      setSelectedSyncIds(new Set(nextRows.map((row) => row.id)))
       if (nextRows.length === 0 && errors.length > 0) {
         toast.error(t('DashScope Native price sync did not return usable prices'))
         return
@@ -467,6 +649,7 @@ export function DashScopeNativePricing({
       toast.success(t('Prices synced successfully'))
       queryClient.invalidateQueries({ queryKey: ['system-options'] })
       setSyncRows([])
+      setSelectedSyncIds(new Set())
     },
     onError: (error: Error) => toast.error(error.message || t('Failed to sync prices')),
   })
@@ -590,11 +773,19 @@ export function DashScopeNativePricing({
     const nextBillingMode = parseBillingMode(billingModeDefault)
     const nextPricing = { ...currentPricing }
     for (const row of syncRows) {
-      nextPricing[row.model] = row.spec
-      nextBillingMode[row.model] = DASH_SCOPE_NATIVE_BILLING_MODE
+      if (!selectedSyncIds.has(row.id)) continue
+      if (row.field === 'dashscope_native_pricing' && row.spec) {
+        nextPricing[row.model] = row.spec
+      }
+      if (row.field === 'billing_mode' && row.mode) {
+        nextBillingMode[row.model] = row.mode
+      }
     }
     applySyncMutation.mutate({ nextPricing, nextBillingMode })
-  }, [applySyncMutation, billingModeDefault, currentPricing, syncRows])
+  }, [applySyncMutation, billingModeDefault, currentPricing, selectedSyncIds, syncRows])
+
+  const allSyncSelected = syncRows.length > 0 && selectedSyncIds.size === syncRows.length
+  const someSyncSelected = selectedSyncIds.size > 0 && !allSyncSelected
 
   return (
     <SettingsSection
@@ -827,7 +1018,7 @@ export function DashScopeNativePricing({
             <Button
               variant='secondary'
               onClick={handleApplySync}
-              disabled={syncRows.length === 0 || applySyncMutation.isPending}
+              disabled={selectedSyncIds.size === 0 || applySyncMutation.isPending}
             >
               <CheckSquare className='mr-2 h-4 w-4' />
               {t('Apply Sync')}
@@ -837,7 +1028,20 @@ export function DashScopeNativePricing({
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className='w-[44px]'>
+                    <Checkbox
+                      checked={allSyncSelected}
+                      indeterminate={someSyncSelected}
+                      onCheckedChange={(checked) => {
+                        setSelectedSyncIds(
+                          checked ? new Set(syncRows.map((row) => row.id)) : new Set()
+                        )
+                      }}
+                      aria-label={t('Select all sync changes')}
+                    />
+                  </TableHead>
                   <TableHead>{t('Model')}</TableHead>
+                  <TableHead>{t('Field')}</TableHead>
                   <TableHead>{t('Current')}</TableHead>
                   <TableHead>{t('Upstream')}</TableHead>
                   <TableHead>{t('Source')}</TableHead>
@@ -846,7 +1050,7 @@ export function DashScopeNativePricing({
               <TableBody>
                 {syncRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className='py-8 text-center text-muted-foreground'>
+                    <TableCell colSpan={6} className='py-8 text-center text-muted-foreground'>
                       {nativeChannels.length === 0
                         ? t('No DashScope Native channels found')
                         : t('No DashScope Native price differences found')}
@@ -854,8 +1058,23 @@ export function DashScopeNativePricing({
                   </TableRow>
                 ) : (
                   syncRows.map((row) => (
-                    <TableRow key={`${row.model}-${row.source}`}>
+                    <TableRow key={row.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedSyncIds.has(row.id)}
+                          onCheckedChange={(checked) => {
+                            setSelectedSyncIds((previous) => {
+                              const next = new Set(previous)
+                              if (checked) next.add(row.id)
+                              else next.delete(row.id)
+                              return next
+                            })
+                          }}
+                          aria-label={`${t('Select')} ${row.model} ${row.fieldLabel}`}
+                        />
+                      </TableCell>
                       <TableCell className='font-mono text-sm'>{row.model}</TableCell>
+                      <TableCell>{row.fieldLabel}</TableCell>
                       <TableCell>{row.current}</TableCell>
                       <TableCell>{row.upstream}</TableCell>
                       <TableCell>{row.source}</TableCell>

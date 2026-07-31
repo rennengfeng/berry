@@ -4950,6 +4950,10 @@
       "Add pricing condition": "添加条件价格",
       "DashScope Native sync uses the selected channel base URL to choose the built-in domestic or international official price catalog, then writes native pricing and billing mode together.": "DashScope 原生同步会根据所选渠道的 Base URL 选择内置的国内或国际官方价格目录，并同时写入原生定价和计费模式。",
       "DashScope Native price sync did not return usable prices": "DashScope 原生价格同步没有返回可用价格",
-      "Prices saved successfully": "价格及计费模式保存成功"
+      "Prices saved successfully": "价格及计费模式保存成功",
+      "Native price": "原生价格",
+      "Billing mode": "计费模式",
+      "Field": "字段",
+      "Select all sync changes": "全选同步项"
   }
 }
