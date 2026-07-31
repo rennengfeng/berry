@@ -1,6 +1,8 @@
 export type OAuthCallbackMode = 'login' | 'bind'
 
 const STORAGE_KEY = 'new-api:oauth-callback-mode'
+const PROVIDER_KEY = 'new-api:oauth-bind-provider'
+const STATE_KEY = 'new-api:oauth-bind-state'
 
 function storage(): Storage | null {
   if (typeof window === 'undefined') return null
@@ -29,9 +31,36 @@ export function clearOAuthCallbackMode(): void {
   storage()?.removeItem(STORAGE_KEY)
 }
 
-export function inferOAuthCallbackMode(): OAuthCallbackMode {
+export function getOAuthSessionStorage(target?: Window | null): Storage | null {
+  if (!target) return storage()
+  try {
+    return target.sessionStorage
+  } catch {
+    return null
+  }
+}
+
+export function markOAuthBindPopup(targetStorage: Storage | null, provider: string, state: string): boolean {
+  if (!targetStorage || !provider || !state) return false
+  try {
+    targetStorage.setItem(STORAGE_KEY, 'bind')
+    targetStorage.setItem(PROVIDER_KEY, provider)
+    targetStorage.setItem(STATE_KEY, state)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function inferOAuthCallbackMode(provider?: string, state?: string, options?: { opener?: Window | null; storage?: Storage | null }): OAuthCallbackMode {
+  const targetStorage = options?.storage ?? storage()
+  const mode = normalizeOAuthCallbackMode(targetStorage?.getItem(STORAGE_KEY))
+  const markedProvider = targetStorage?.getItem(PROVIDER_KEY)
+  const markedState = targetStorage?.getItem(STATE_KEY)
+  if (mode === 'bind' && (!provider || !markedProvider || markedProvider === provider) && (!state || !markedState || markedState === state)) return 'bind'
   if (typeof window !== 'undefined' && window.opener) return 'bind'
-  return getOAuthCallbackMode()
+  if (options?.opener) return 'bind'
+  return 'login'
 }
 
 export const resolveOAuthCallbackMode = inferOAuthCallbackMode
