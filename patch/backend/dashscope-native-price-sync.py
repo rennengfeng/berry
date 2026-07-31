@@ -600,15 +600,24 @@ def patch_price_helper() -> None:
             raise SystemExit("DashScope Native price sync patch failed: price helper import block not found")
         text = text[:import_match.end()] + "".join(f"\t{item}\n" for item in missing_imports) + text[import_match.end():]
 
+    price_data_type = "types.PriceData"
+    price_data_match = re.search(r'func\s+ModelPriceHelper\s*\([^)]*\)\s*\(([^,]+),\s*error\)', text)
+    if price_data_match:
+        price_data_type = price_data_match.group(1).strip()
+    group_ratio_type = "types.GroupRatioInfo"
+    group_ratio_match = re.search(r'func\s+HandleGroupRatio\s*\([^)]*\)\s*([^\s{]+)\s*\{', text)
+    if group_ratio_match:
+        group_ratio_type = group_ratio_match.group(1).strip()
+
     native_branch = '''\tif billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeDashScopeNative {
 \t\tgroupRatioInfo := HandleGroupRatio(c, info)
 \t\tif info.ChannelType != constant.ChannelTypeAliDashScopeNative || !info.IsChannelTest {
-\t\t\treturn types.PriceData{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
+\t\t\treturn __PRICE_DATA_TYPE__{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
 \t\t}
 \t\treturn modelPriceHelperDashScopeNative(info, groupRatioInfo)
 \t}
 
-'''
+'''.replace("__PRICE_DATA_TYPE__", price_data_type)
     if "return modelPriceHelperDashScopeNative(info, groupRatioInfo)" not in text:
         entry_match = re.search(r'func\s+ModelPriceHelper\s*\([^)]*\)\s*(?:\([^)]*\)|[^{\s]+)?\s*\{\n', text)
         if not entry_match:
@@ -616,10 +625,10 @@ def patch_price_helper() -> None:
         text = text[:entry_match.end()] + native_branch + text[entry_match.end():]
     if "func modelPriceHelperDashScopeNative(" not in text:
         helper = r'''
-func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo types.GroupRatioInfo) (types.PriceData, error) {
+func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo __GROUP_RATIO_TYPE__) (__PRICE_DATA_TYPE__, error) {
 	spec, ok := billing_setting.GetDashScopeNativePricing(info.OriginModelName)
 	if !ok {
-		return types.PriceData{}, modelPriceNotConfiguredError(info.OriginModelName, info.UserId)
+		return __PRICE_DATA_TYPE__{}, modelPriceNotConfiguredError(info.OriginModelName, info.UserId)
 	}
 
 	referencePrice := spec.Price
@@ -635,10 +644,10 @@ func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo
 		}
 	}
 	if referencePrice <= 0 {
-		return types.PriceData{}, fmt.Errorf("DashScope Native price is not configured for model %q", info.OriginModelName)
+		return __PRICE_DATA_TYPE__{}, fmt.Errorf("DashScope Native price is not configured for model %q", info.OriginModelName)
 	}
 
-	priceData := types.PriceData{
+	priceData := __PRICE_DATA_TYPE__{
 		ModelPrice:     referencePrice,
 		UsePrice:       true,
 		GroupRatioInfo: groupRatioInfo,
@@ -657,7 +666,7 @@ func dashScopeNativeMaxFloat64(values ...float64) float64 {
 	return result
 }
 
-'''
+'''.replace("__PRICE_DATA_TYPE__", price_data_type).replace("__GROUP_RATIO_TYPE__", group_ratio_type)
         text = text.rstrip() + "\n\n" + helper.lstrip()
     write(rel, text)
 
@@ -666,21 +675,23 @@ def patch_billing_setting() -> None:
     rel = "setting/billing_setting/tiered_billing.go"
     text = read(rel)
     if "BillingModeDashScopeNative" not in text:
-        anchor = '\tBillingModeTieredExpr       = "tiered_expr"\n'
-        if anchor not in text:
-            raise SystemExit("DashScope Native price sync patch failed: BillingModeTieredExpr anchor not found")
-        text = text.replace(anchor, anchor + '\tBillingModeDashScopeNative  = "dashscope_native"\n', 1)
-    if "CacheReadPrice" not in text and "type DashScopeNativePricing struct" in text:
-        anchor = '\tOutputPrice float64            `json:"output_price,omitempty"`\n'
-        if anchor not in text:
-            raise SystemExit("DashScope Native price sync patch failed: DashScopeNativePricing OutputPrice anchor not found")
-        text = text.replace(
-            anchor,
-            anchor
-            + '\tCacheReadPrice  float64            `json:"cache_read_price,omitempty"`\n'
-            + '\tCacheWritePrice float64            `json:"cache_write_price,omitempty"`\n',
-            1,
+        text, count = re.subn(
+            r'(\tBillingModeTieredExpr\s*=\s*"tiered_expr"\n)',
+            r'\1\tBillingModeDashScopeNative  = "dashscope_native"\n',
+            text,
+            count=1,
         )
+        if count != 1:
+            raise SystemExit("DashScope Native price sync patch failed: BillingModeTieredExpr anchor not found")
+    if "CacheReadPrice" not in text and "type DashScopeNativePricing struct" in text:
+        text, count = re.subn(
+            r'(\tOutputPrice\s+float64\s+`json:"output_price,omitempty"`\n)',
+            r'\1\tCacheReadPrice  float64            `json:"cache_read_price,omitempty"`\n\tCacheWritePrice float64            `json:"cache_write_price,omitempty"`\n',
+            text,
+            count=1,
+        )
+        if count != 1:
+            raise SystemExit("DashScope Native price sync patch failed: DashScopeNativePricing OutputPrice anchor not found")
     write(rel, text)
 
 
@@ -688,7 +699,7 @@ def main() -> None:
     dto_has_type = patch_dto()
     patch_ratio_sync(dto_has_type)
     patch_price_helper()
-    print("applied DashScope Native price sync backend patch v2-entry-helper")
+    print("applied DashScope Native price sync backend patch v3-dynamic-price-types")
 
 
 if __name__ == "__main__":
