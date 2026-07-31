@@ -127,18 +127,54 @@ const DEFAULT_PRICING: Record<string, NativePricingSpec> = {
   'qwen-image-2.0': {
     unit: 'image',
     price: 0.2 / 7.3,
+  },
+  'qwen-image-2.0-pro': {
+    unit: 'image',
+    price: 0.5 / 7.3,
+  },
+  'happyhorse-1.1-t2v': {
+    unit: 'video_second',
     prices: {
-      '1K': 0.2 / 7.3,
-      '2K': 0.2 / 7.3,
-      '4K': 0.2 / 7.3,
+      '480P': 0.45 / 7.3,
+      '720P': 0.9 / 7.3,
+      '1080P': 1.2 / 7.3,
     },
   },
   'happyhorse-1.1-i2v': {
     unit: 'video_second',
-    price: 0,
     prices: {
+      '480P': 0.45 / 7.3,
       '720P': 0.9 / 7.3,
       '1080P': 1.2 / 7.3,
+    },
+  },
+  'happyhorse-1.1-r2v': {
+    unit: 'video_second',
+    prices: {
+      '480P': 0.45 / 7.3,
+      '720P': 0.9 / 7.3,
+      '1080P': 1.2 / 7.3,
+    },
+  },
+  'happyhorse-1.0-video-edit': {
+    unit: 'video_second',
+    prices: {
+      '720P': 0.9 / 7.3,
+      '1080P': 1.6 / 7.3,
+    },
+  },
+  'wan2.7-t2v': {
+    unit: 'video_second',
+    prices: {
+      '720P': 0.6 / 7.3,
+      '1080P': 1 / 7.3,
+    },
+  },
+  'wan2.7-i2v': {
+    unit: 'video_second',
+    prices: {
+      '720P': 0.6 / 7.3,
+      '1080P': 1 / 7.3,
     },
   },
 }
@@ -392,6 +428,10 @@ export function DashScopeNativePricing({
         }
       }
       setSyncRows(nextRows)
+      if (nextRows.length === 0 && errors.length > 0) {
+        toast.error(t('DashScope Native price sync did not return usable prices'))
+        return
+      }
       toast.success(
         nextRows.length > 0
           ? t('DashScope Native prices fetched successfully')
@@ -509,11 +549,27 @@ export function DashScopeNativePricing({
   }, [])
 
   const handleSave = useCallback(async () => {
-    await updateOption.mutateAsync({
+    const nextBillingMode = parseBillingMode(billingModeDefault)
+    for (const model of Object.keys(currentPricing)) {
+      nextBillingMode[model] = DASH_SCOPE_NATIVE_BILLING_MODE
+    }
+    const pricingResult = await updateOption.mutateAsync({
       key: PRICING_OPTION_KEY,
       value: JSON.stringify(currentPricing),
     })
-  }, [currentPricing, updateOption])
+    if (pricingResult.success) {
+      const billingModeResult = await updateSystemOption({
+        key: BILLING_MODE_OPTION_KEY,
+        value: JSON.stringify(nextBillingMode),
+      })
+      if (!billingModeResult.success) {
+        toast.error(billingModeResult.message || t('Failed to update setting'))
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['system-options'] })
+        toast.success(t('Prices saved successfully'))
+      }
+    }
+  }, [billingModeDefault, currentPricing, queryClient, t, updateOption])
 
   const handleFetchSync = useCallback(() => {
     const selected = nativeChannels.find((channel) => String(channel.id) === selectedChannelId)

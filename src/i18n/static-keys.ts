@@ -524,4 +524,6 @@ export const STATIC_I18N_KEYS = [
   'Resolution / quality',
   'Add pricing condition',
   'DashScope Native sync uses the selected channel base URL to choose the built-in domestic or international official price catalog, then writes native pricing and billing mode together.',
+  'DashScope Native price sync did not return usable prices',
+  'Prices saved successfully',
 ] as const

@@ -894,6 +894,8 @@ def patch_i18n(root: Path) -> None:
         "No DashScope Native channels found": "没有找到 DashScope 原生渠道",
         "No DashScope Native price differences found": "没有 DashScope 原生价格差异",
         "DashScope Native prices fetched successfully": "DashScope 原生价格拉取成功",
+        "DashScope Native price sync did not return usable prices": "DashScope 原生价格同步没有返回可用价格",
+        "Prices saved successfully": "价格及计费模式保存成功",
         "Please select a DashScope Native channel": "请选择 DashScope 原生渠道",
     }
     en = {key: key for key in zh}
