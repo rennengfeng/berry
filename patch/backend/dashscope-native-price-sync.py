@@ -86,6 +86,7 @@ def patch_dto() -> bool:
 
 
 def patch_ratio_sync(dto_has_type: bool) -> None:
+    patch_billing_setting()
     text = read("controller/ratio_sync.go")
     if '"net/url"' not in text:
         text = text.replace('\t"net/http"\n', '\t"net/http"\n\t"net/url"\n', 1)
@@ -405,6 +406,28 @@ func convertDashScopeNativeOfficialPricingData(channel *model.Channel) (map[stri
                 raise SystemExit(f"DashScope Native price sync patch failed: missing valueMap anchor {old}")
             text = text.replace(old, new, 1)
     write("controller/ratio_sync.go", text)
+
+
+def patch_billing_setting() -> None:
+    rel = "setting/billing_setting/tiered_billing.go"
+    text = read(rel)
+    if "BillingModeDashScopeNative" not in text:
+        anchor = '\tBillingModeTieredExpr       = "tiered_expr"\n'
+        if anchor not in text:
+            raise SystemExit("DashScope Native price sync patch failed: BillingModeTieredExpr anchor not found")
+        text = text.replace(anchor, anchor + '\tBillingModeDashScopeNative  = "dashscope_native"\n', 1)
+    if "CacheReadPrice" not in text and "type DashScopeNativePricing struct" in text:
+        anchor = '\tOutputPrice float64            `json:"output_price,omitempty"`\n'
+        if anchor not in text:
+            raise SystemExit("DashScope Native price sync patch failed: DashScopeNativePricing OutputPrice anchor not found")
+        text = text.replace(
+            anchor,
+            anchor
+            + '\tCacheReadPrice  float64            `json:"cache_read_price,omitempty"`\n'
+            + '\tCacheWritePrice float64            `json:"cache_write_price,omitempty"`\n',
+            1,
+        )
+    write(rel, text)
 
 
 def main() -> None:
