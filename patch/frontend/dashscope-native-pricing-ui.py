@@ -714,7 +714,9 @@ def write_component(root: Path) -> None:
     path = root / "src" / "features" / "system-settings" / "models" / "dashscope-native-pricing.tsx"
     path.parent.mkdir(parents=True, exist_ok=True)
     template_path = Path(__file__).with_name("dashscope-native-pricing.tsx.template")
-    component = template_path.read_text(encoding="utf-8") if template_path.exists() else COMPONENT
+    if not template_path.exists():
+        raise SystemExit("DashScope Native pricing UI patch failed: missing dashscope-native-pricing.tsx.template")
+    component = template_path.read_text(encoding="utf-8")
     write(path, component)
 
 

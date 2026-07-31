@@ -589,43 +589,32 @@ def patch_existing_pricing_catalog_file() -> None:
 def patch_price_helper() -> None:
     rel = "relay/helper/price.go"
     text = read(rel)
-    if '"github.com/QuantumNous/new-api/constant"' not in text:
-        anchor = '\t"github.com/QuantumNous/new-api/common"\n'
-        if anchor not in text:
-            raise SystemExit("DashScope Native price sync patch failed: price helper common import anchor not found")
-        text = text.replace(
-            anchor,
-            anchor + '\t"github.com/QuantumNous/new-api/constant"\n',
-            1,
-        )
-    native_branch = '''\tif billingMode == billing_setting.BillingModeDashScopeNative {
+    required_imports = [
+        '"github.com/QuantumNous/new-api/constant"',
+        '"github.com/QuantumNous/new-api/setting/billing_setting"',
+    ]
+    missing_imports = [item for item in required_imports if item not in text]
+    if missing_imports:
+        import_match = re.search(r'import \(\n', text)
+        if not import_match:
+            raise SystemExit("DashScope Native price sync patch failed: price helper import block not found")
+        text = text[:import_match.end()] + "".join(f"\t{item}\n" for item in missing_imports) + text[import_match.end():]
+
+    native_branch = '''\tif billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeDashScopeNative {
+\t\tgroupRatioInfo := HandleGroupRatio(c, info)
 \t\tif info.ChannelType != constant.ChannelTypeAliDashScopeNative || !info.IsChannelTest {
 \t\t\treturn types.PriceData{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
 \t\t}
 \t\treturn modelPriceHelperDashScopeNative(info, groupRatioInfo)
 \t}
+
 '''
     if "return modelPriceHelperDashScopeNative(info, groupRatioInfo)" not in text:
-        old = '''\tif billingMode == billing_setting.BillingModeDashScopeNative {
-\t\treturn types.PriceData{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
-\t}
-'''
-        if old in text:
-            text = text.replace(old, native_branch, 1)
-        else:
-            anchor = '''\tif billingMode == billing_setting.BillingModeTieredExpr {
-\t\treturn modelPriceHelperTiered(c, info, promptTokens, meta, groupRatioInfo)
-\t}
-'''
-            if anchor in text:
-                text = text.replace(anchor, anchor + native_branch, 1)
-            else:
-                fallback_anchor = '\tbillingMode := billing_setting.GetBillingMode(info.OriginModelName)\n'
-                if fallback_anchor not in text:
-                    raise SystemExit("DashScope Native price sync patch failed: price helper billing mode anchor not found")
-                text = text.replace(fallback_anchor, fallback_anchor + native_branch, 1)
+        entry_match = re.search(r'func\s+ModelPriceHelper\s*\([^)]*\)\s*(?:\([^)]*\)|[^{\s]+)?\s*\{\n', text)
+        if not entry_match:
+            raise SystemExit("DashScope Native price sync patch failed: ModelPriceHelper entry not found")
+        text = text[:entry_match.end()] + native_branch + text[entry_match.end():]
     if "func modelPriceHelperDashScopeNative(" not in text:
-        anchor = "\nfunc ModelPriceHelperPerCall("
         helper = r'''
 func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo types.GroupRatioInfo) (types.PriceData, error) {
 	spec, ok := billing_setting.GetDashScopeNativePricing(info.OriginModelName)
@@ -635,7 +624,7 @@ func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo
 
 	referencePrice := spec.Price
 	if spec.Unit == "token_input_output" {
-		referencePrice = maxFloat64(spec.InputPrice, spec.OutputPrice, spec.CacheReadPrice, spec.CacheWritePrice)
+		referencePrice = dashScopeNativeMaxFloat64(spec.InputPrice, spec.OutputPrice, spec.CacheReadPrice, spec.CacheWritePrice)
 	}
 	if referencePrice <= 0 {
 		for _, price := range spec.Prices {
@@ -658,7 +647,7 @@ func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo
 	return priceData, nil
 }
 
-func maxFloat64(values ...float64) float64 {
+func dashScopeNativeMaxFloat64(values ...float64) float64 {
 	result := 0.0
 	for _, value := range values {
 		if value > result {
@@ -669,9 +658,7 @@ func maxFloat64(values ...float64) float64 {
 }
 
 '''
-        if anchor not in text:
-            raise SystemExit("DashScope Native price sync patch failed: price helper per-call anchor not found")
-        text = text.replace(anchor, "\n" + helper + anchor, 1)
+        text = text.rstrip() + "\n\n" + helper.lstrip()
     write(rel, text)
 
 
@@ -701,7 +688,7 @@ def main() -> None:
     dto_has_type = patch_dto()
     patch_ratio_sync(dto_has_type)
     patch_price_helper()
-    print("applied DashScope Native price sync backend patch")
+    print("applied DashScope Native price sync backend patch v2-entry-helper")
 
 
 if __name__ == "__main__":
