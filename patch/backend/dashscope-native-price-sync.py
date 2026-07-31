@@ -598,23 +598,34 @@ def patch_price_helper() -> None:
             anchor + '\t"github.com/QuantumNous/new-api/constant"\n',
             1,
         )
-    old = '''\tif billingMode == billing_setting.BillingModeDashScopeNative {
-\t\treturn types.PriceData{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
-\t}
-'''
-    new = '''\tif billingMode == billing_setting.BillingModeDashScopeNative {
+    native_branch = '''\tif billingMode == billing_setting.BillingModeDashScopeNative {
 \t\tif info.ChannelType != constant.ChannelTypeAliDashScopeNative || !info.IsChannelTest {
 \t\t\treturn types.PriceData{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
 \t\t}
 \t\treturn modelPriceHelperDashScopeNative(info, groupRatioInfo)
 \t}
 '''
-    if new not in text:
-        if old not in text:
-            raise SystemExit("DashScope Native price sync patch failed: price helper native billing anchor not found")
-        text = text.replace(old, new, 1)
+    if "return modelPriceHelperDashScopeNative(info, groupRatioInfo)" not in text:
+        old = '''\tif billingMode == billing_setting.BillingModeDashScopeNative {
+\t\treturn types.PriceData{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
+\t}
+'''
+        if old in text:
+            text = text.replace(old, native_branch, 1)
+        else:
+            anchor = '''\tif billingMode == billing_setting.BillingModeTieredExpr {
+\t\treturn modelPriceHelperTiered(c, info, promptTokens, meta, groupRatioInfo)
+\t}
+'''
+            if anchor in text:
+                text = text.replace(anchor, anchor + native_branch, 1)
+            else:
+                fallback_anchor = '\tbillingMode := billing_setting.GetBillingMode(info.OriginModelName)\n'
+                if fallback_anchor not in text:
+                    raise SystemExit("DashScope Native price sync patch failed: price helper billing mode anchor not found")
+                text = text.replace(fallback_anchor, fallback_anchor + native_branch, 1)
     if "func modelPriceHelperDashScopeNative(" not in text:
-        anchor = "\n// ModelPriceHelperPerCall 按次/按量计费的 PriceHelper (MJ、Task)\n"
+        anchor = "\nfunc ModelPriceHelperPerCall("
         helper = r'''
 func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo types.GroupRatioInfo) (types.PriceData, error) {
 	spec, ok := billing_setting.GetDashScopeNativePricing(info.OriginModelName)
@@ -659,7 +670,7 @@ func maxFloat64(values ...float64) float64 {
 
 '''
         if anchor not in text:
-            raise SystemExit("DashScope Native price sync patch failed: price helper insertion anchor not found")
+            raise SystemExit("DashScope Native price sync patch failed: price helper per-call anchor not found")
         text = text.replace(anchor, "\n" + helper + anchor, 1)
     write(rel, text)
 
