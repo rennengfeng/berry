@@ -595,10 +595,16 @@ def patch_price_helper() -> None:
     ]
     missing_imports = [item for item in required_imports if item not in text]
     if missing_imports:
-        import_match = re.search(r'import \(\n', text)
-        if not import_match:
-            raise SystemExit("DashScope Native price sync patch failed: price helper import block not found")
-        text = text[:import_match.end()] + "".join(f"\t{item}\n" for item in missing_imports) + text[import_match.end():]
+        import_match = re.search(r'import\s*\(\s*\n', text)
+        if import_match:
+            text = text[:import_match.end()] + "".join(f"\t{item}\n" for item in missing_imports) + text[import_match.end():]
+        else:
+            single_import_match = re.search(r'import\s+([^\n]+)\n', text)
+            if not single_import_match:
+                raise SystemExit("DashScope Native price sync patch failed: price helper import block not found")
+            existing_import = single_import_match.group(1).strip()
+            import_block = "import (\n\t" + existing_import + "\n" + "".join(f"\t{item}\n" for item in missing_imports) + ")\n"
+            text = text[:single_import_match.start()] + import_block + text[single_import_match.end():]
 
     price_data_type = "types.PriceData"
     price_data_match = re.search(r'func\s+ModelPriceHelper\s*\([^)]*\)\s*\(([^,]+),\s*error\)', text)
@@ -699,7 +705,7 @@ def main() -> None:
     dto_has_type = patch_dto()
     patch_ratio_sync(dto_has_type)
     patch_price_helper()
-    print("applied DashScope Native price sync backend patch v3-dynamic-price-types")
+    print("applied DashScope Native price sync backend patch v4-flex-imports")
 
 
 if __name__ == "__main__":
