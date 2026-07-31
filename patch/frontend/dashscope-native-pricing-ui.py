@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
-FRONTEND = sys.argv[2] if len(sys.argv) > 2 else "berry"
+FRONTEND = sys.argv[2] if len(sys.argv) > 2 else "openrouter"
 OPTION_KEY = "billing_setting.dashscope_native_pricing"
 
 
@@ -713,7 +713,9 @@ export function DashScopeNativePricing({
 def write_component(root: Path) -> None:
     path = root / "src" / "features" / "system-settings" / "models" / "dashscope-native-pricing.tsx"
     path.parent.mkdir(parents=True, exist_ok=True)
-    write(path, COMPONENT)
+    template_path = Path(__file__).with_name("dashscope-native-pricing.tsx.template")
+    component = template_path.read_text(encoding="utf-8") if template_path.exists() else COMPONENT
+    write(path, component)
 
 
 def patch_billing_registry(root: Path) -> None:
@@ -735,6 +737,7 @@ def patch_billing_registry(root: Path) -> None:
       <DashScopeNativePricing
         pricingDefault={settings['billing_setting.dashscope_native_pricing']}
         toolPricesDefault={settings['tool_price_setting.prices']}
+        billingModeDefault={settings['billing_setting.billing_mode']}
       />
     ),
   },
@@ -743,6 +746,25 @@ def patch_billing_registry(root: Path) -> None:
         if anchor not in text:
             raise SystemExit("DashScope Native pricing UI patch failed: billing section insert anchor not found")
         text = text.replace(anchor, section + anchor, 1)
+    text = text.replace(
+        "        toolPricesDefault={settings['tool_price_setting.prices']}\n"
+        "        billingModeDefault={settings['billing_setting.billing_mode']}\n"
+        "        visibleTabs={['models', 'tool-prices', 'upstream-sync']}\n",
+        "        toolPricesDefault={settings['tool_price_setting.prices']}\n"
+        "        visibleTabs={['models', 'tool-prices', 'upstream-sync']}\n",
+        1,
+    )
+    dashscope_props = (
+        "        pricingDefault={settings['billing_setting.dashscope_native_pricing']}\n"
+        "        toolPricesDefault={settings['tool_price_setting.prices']}\n"
+    )
+    dashscope_props_with_mode = dashscope_props + "        billingModeDefault={settings['billing_setting.billing_mode']}\n"
+    if "<DashScopeNativePricing" in text and dashscope_props_with_mode not in text:
+        text = text.replace(
+            dashscope_props,
+            dashscope_props_with_mode,
+            1,
+        )
     write(path, text)
 
 
@@ -762,36 +784,67 @@ def patch_billing_defaults(root: Path) -> None:
 def patch_types(root: Path) -> None:
     path = root / "src" / "features" / "system-settings" / "types.ts"
     text = read(path)
-    if "'billing_setting.dashscope_native_pricing': string" in text:
-        write(path, text)
-        return
-    pattern = r"(export type BillingSettings = \{.*?  'billing_setting\.billing_expr': string\n)"
-    text, count = re.subn(
-        pattern,
-        "\\1  'billing_setting.dashscope_native_pricing': string\n",
-        text,
-        count=1,
-        flags=re.S,
-    )
-    if count != 1:
-        raise SystemExit("DashScope Native pricing UI patch failed: BillingSettings type anchor not found")
+    if "'billing_setting.dashscope_native_pricing': string" not in text:
+        pattern = r"(export type BillingSettings = \{.*?  'billing_setting\.billing_expr': string\n)"
+        text, count = re.subn(
+            pattern,
+            "\\1  'billing_setting.dashscope_native_pricing': string\n",
+            text,
+            count=1,
+            flags=re.S,
+        )
+        if count != 1:
+            raise SystemExit("DashScope Native pricing UI patch failed: BillingSettings type anchor not found")
+    if "| 'dashscope_native_pricing'" not in text:
+        ratio_anchor = "  | 'billing_expr'\n"
+        if ratio_anchor not in text:
+            raise SystemExit("DashScope Native pricing UI patch failed: RatioType anchor not found")
+        text = text.replace(
+            ratio_anchor,
+            ratio_anchor + "  | 'dashscope_native_pricing'\n",
+            1,
+        )
     write(path, text)
 
 
 def patch_locale(path: Path, translations: dict[str, str]) -> None:
     if not path.exists():
         return
-    data = json.loads(path.read_text(encoding="utf-8"))
+    text = path.read_text(encoding="utf-8")
+    data = json.loads(text)
     translation = data.setdefault("translation", {})
     if not isinstance(translation, dict):
         raise SystemExit(f"DashScope Native pricing UI patch failed: invalid locale {path}")
     changed = False
+    missing: list[tuple[str, str]] = []
     for key, value in translations.items():
-        if translation.get(key) != value:
-            translation[key] = value
+        key_json = json.dumps(key, ensure_ascii=False)
+        value_json = json.dumps(value, ensure_ascii=False)
+        if key in translation:
+            if translation.get(key) == value:
+                continue
+            pattern = re.compile(rf'^(\s*){re.escape(key_json)}\s*:\s*.*?(,?)$', re.M)
+            text, count = pattern.subn(rf'\1{key_json}: {value_json}\2', text, count=1)
+            if count != 1:
+                translation[key] = value
+                text = json.dumps(data, ensure_ascii=False, indent=4) + "\n"
             changed = True
+        else:
+            missing.append((key_json, value_json))
+            changed = True
+    if missing:
+        close_match = re.search(r'\n(\s*)}\s*\n}\s*$', text)
+        if not close_match:
+            translation.update({key: value for key, value in translations.items() if key not in translation})
+            text = json.dumps(data, ensure_ascii=False, indent=4) + "\n"
+        else:
+            item_indent = " " * (len(close_match.group(1)) + 4)
+            insertion = ",\n" + ",\n".join(
+                f"{item_indent}{key_json}: {value_json}" for key_json, value_json in missing
+            )
+            text = text[:close_match.start()] + insertion + text[close_match.start():]
     if changed:
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        path.write_text(text, encoding="utf-8")
 
 
 def patch_static_keys(root: Path, keys: list[str]) -> None:
@@ -814,14 +867,20 @@ def patch_i18n(root: Path) -> None:
         "Ali SDK / DashScope Native Pricing": "阿里 SDK / DashScope 原生定价",
         "Configure pricing used only by Ali SDK / DashScope Native channels": "配置仅阿里 SDK / DashScope 原生渠道使用的专用定价",
         "Native model prices": "原生模型价格",
-        "These prices are isolated to ChannelType 10001 and are not used by ordinary NewAPI model pricing.": "这些价格只用于 ChannelType 10001，不会参与普通 NewAPI 模型定价。",
+        "These prices are isolated to Ali SDK / DashScope Native channels and are not used by ordinary NewAPI model pricing.": "这些价格只用于阿里 SDK / DashScope 原生渠道，不会参与普通 NewAPI 模型定价。",
         "Add model": "添加模型",
         "Save DashScope Native pricing": "保存 DashScope 原生定价",
         "Billing unit": "计费单位",
-        "Base price": "基础价格",
+        "Price configuration": "价格配置",
+        "Input price": "输入价格",
+        "Output price": "输出价格",
+        "Cache read price": "缓存读取价格",
+        "Cache write price": "缓存写入价格",
+        "Default price": "默认价格",
+        "Resolution / quality": "分辨率 / 质量",
+        "Add pricing condition": "添加条件价格",
         "Conditional prices": "条件价格",
         "No DashScope Native pricing configured": "尚未配置 DashScope 原生定价",
-        "Add condition price": "添加条件价格",
         "Characters": "字符",
         "Audio seconds": "音频秒",
         "Images": "图片张数",
@@ -829,7 +888,7 @@ def patch_i18n(root: Path) -> None:
         "Video tasks": "视频任务",
         "Requests": "请求次数",
         "Input/output tokens": "输入/输出 Token",
-        "DashScope Native sync uses the dedicated dashscope_native endpoint and only writes the native pricing option.": "DashScope 原生同步使用专用 dashscope_native 端点，并且只写入原生定价配置。",
+        "DashScope Native sync uses the selected channel base URL to choose the built-in domestic or international official price catalog, then writes native pricing and billing mode together.": "DashScope 原生同步会根据所选渠道的 Base URL 选择内置的国内或国际官方价格目录，并同时写入原生定价和计费模式。",
         "Select DashScope Native channel": "选择 DashScope 原生渠道",
         "Fetch DashScope Native prices": "拉取 DashScope 原生价格",
         "No DashScope Native channels found": "没有找到 DashScope 原生渠道",

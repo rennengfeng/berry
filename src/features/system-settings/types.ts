@@ -354,6 +354,7 @@ export type RatioType =
   | 'billing_mode'
   | 'billing_unit'
   | 'billing_expr'
+  | 'dashscope_native_pricing'
 
 export type RatioDifference = {
   current: number | string | null

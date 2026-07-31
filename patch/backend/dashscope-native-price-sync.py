@@ -87,6 +87,14 @@ def patch_dto() -> bool:
 
 def patch_ratio_sync(dto_has_type: bool) -> None:
     text = read("controller/ratio_sync.go")
+    if '"net/url"' not in text:
+        text = text.replace('\t"net/http"\n', '\t"net/http"\n\t"net/url"\n', 1)
+    if '"github.com/QuantumNous/new-api/constant"' not in text:
+        text = text.replace(
+            '\t"github.com/QuantumNous/new-api/common"\n',
+            '\t"github.com/QuantumNous/new-api/common"\n\t"github.com/QuantumNous/new-api/constant"\n',
+            1,
+        )
     if "billing_setting.DashScopeNativePricingField," not in text:
         text = text.replace(
             '\tbilling_setting.BillingExprField,\n',
@@ -142,24 +150,99 @@ func compactJSONSyncValue(value any) string {
 	}
 	if text, ok := value.(string); ok {
 		var raw any
-		if err := json.Unmarshal([]byte(text), &raw); err == nil {
-			if compact, err := json.Marshal(raw); err == nil {
+		if err := common.Unmarshal([]byte(text), &raw); err == nil {
+			if compact, err := common.Marshal(raw); err == nil {
 				return string(compact)
 			}
 		}
 		return strings.TrimSpace(text)
 	}
-	compact, err := json.Marshal(value)
+	compact, err := common.Marshal(value)
 	if err != nil {
 		return fmt.Sprintf("%v", value)
 	}
 	return string(compact)
 }
 
-var dashScopeNativeOfficialPricing = map[string]billing_setting.DashScopeNativePricing{
-	// Official unit is USD per 10,000 input characters; native billing stores
-	// USD per character so settlement can multiply by the exact text length.
-	"cosyvoice-v3.5-plus": {Unit: "character", Price: 0.000022},
+const (
+	dashScopeNativePricingRegionDomestic = "domestic"
+	dashScopeNativePricingRegionIntl     = "intl"
+)
+
+var dashScopeNativeOfficialPricingCatalog = map[string]map[string]billing_setting.DashScopeNativePricing{
+	dashScopeNativePricingRegionDomestic: {
+		"cosyvoice-v3.5-plus": {Unit: "character", Price: 1.5 / ratio_setting.USD2RMB / 10000},
+		"qwen-image-2.0":      {Unit: "image", Price: 0.2 / ratio_setting.USD2RMB},
+		"happyhorse-1.1-i2v": {
+			Unit: "video_second",
+			Prices: map[string]float64{
+				"720P":  0.9 / ratio_setting.USD2RMB,
+				"1080P": 1.2 / ratio_setting.USD2RMB,
+			},
+		},
+	},
+	dashScopeNativePricingRegionIntl: {
+		"cosyvoice-v3.5-plus": {Unit: "character", Price: 1.5 / ratio_setting.USD2RMB / 10000},
+		"qwen-image-2.0":      {Unit: "image", Price: 0.256873 / ratio_setting.USD2RMB},
+		"happyhorse-1.1-i2v": {
+			Unit: "video_second",
+			Prices: map[string]float64{
+				"720P":  1.049188 / ratio_setting.USD2RMB,
+				"1080P": 1.348956 / ratio_setting.USD2RMB,
+			},
+		},
+	},
+}
+
+func dashScopeNativePricingRegionFromBaseURL(baseURL string) string {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return dashScopeNativePricingRegionDomestic
+	}
+	parsed, err := url.Parse(baseURL)
+	host := strings.ToLower(baseURL)
+	if err == nil && parsed.Hostname() != "" {
+		host = strings.ToLower(parsed.Hostname())
+	}
+	if strings.Contains(host, "dashscope-us") ||
+		strings.Contains(host, "dashscope-intl") ||
+		strings.Contains(host, "ap-southeast-1") ||
+		strings.Contains(host, "eu-central-1") ||
+		strings.Contains(host, "us-virginia") ||
+		strings.Contains(host, "international") ||
+		strings.Contains(host, ".sg") ||
+		strings.Contains(host, "-sg") {
+		return dashScopeNativePricingRegionIntl
+	}
+	return dashScopeNativePricingRegionDomestic
+}
+
+func dashScopeNativeOfficialPricingForChannel(channel *model.Channel) map[string]billing_setting.DashScopeNativePricing {
+	result := make(map[string]billing_setting.DashScopeNativePricing)
+	if channel == nil {
+		return result
+	}
+	region := dashScopeNativePricingRegionFromBaseURL(channel.GetBaseURL())
+	catalogs := []map[string]billing_setting.DashScopeNativePricing{
+		dashScopeNativeOfficialPricingCatalog[region],
+		dashScopeNativeOfficialPricingCatalog[dashScopeNativePricingRegionDomestic],
+	}
+	for _, modelName := range channel.GetModels() {
+		modelName = strings.TrimSpace(modelName)
+		if modelName == "" {
+			continue
+		}
+		for _, catalog := range catalogs {
+			if catalog == nil {
+				continue
+			}
+			if spec, ok := catalog[modelName]; ok {
+				result[modelName] = spec
+				break
+			}
+		}
+	}
+	return result
 }
 
 func dashScopeNativePricingValueMap(value any) map[string]any {
@@ -196,22 +279,31 @@ func convertDashScopeNativeOfficialPricingData(channel *model.Channel) (map[stri
 	if len(modelNames) == 0 {
 		return nil, fmt.Errorf("DashScope Native channel has no models to sync")
 	}
+	billingModeMap := make(map[string]any)
 	nativePricingMap := make(map[string]any)
+	officialPricing := dashScopeNativeOfficialPricingForChannel(channel)
+	missingModels := make([]string, 0)
 	for _, modelName := range modelNames {
 		modelName = strings.TrimSpace(modelName)
 		if modelName == "" {
 			continue
 		}
-		spec, ok := dashScopeNativeOfficialPricing[modelName]
+		spec, ok := officialPricing[modelName]
 		if !ok {
+			missingModels = append(missingModels, modelName)
 			continue
 		}
+		billingModeMap[modelName] = billing_setting.BillingModeDashScopeNative
 		nativePricingMap[modelName] = compactJSONSyncValue(spec)
+	}
+	if len(missingModels) > 0 {
+		return nil, fmt.Errorf("missing built-in DashScope Native official prices for model(s): %s", strings.Join(missingModels, ", "))
 	}
 	if len(nativePricingMap) == 0 {
 		return nil, fmt.Errorf("no built-in DashScope Native official prices matched this channel's models")
 	}
 	return map[string]any{
+		billing_setting.BillingModeField:            billingModeMap,
 		billing_setting.DashScopeNativePricingField: nativePricingMap,
 	}, nil
 }
@@ -254,7 +346,7 @@ func convertDashScopeNativeOfficialPricingData(channel *model.Channel) (map[stri
 \t\t\tendpoint := chItem.Endpoint
 ''',
                 '''\t\t\tisOpenRouter := chItem.Endpoint == "openrouter"
-\t\t\tisDashScopeNativePricing := chItem.Endpoint == "dashscope_native"
+\t\t\tisDashScopeNativePricing := chItem.Endpoint == "dashscope_native" || chItem.Type == constant.ChannelTypeAliDashScopeNative
 
 \t\t\tendpoint := chItem.Endpoint
 ''',
@@ -263,7 +355,7 @@ func convertDashScopeNativeOfficialPricingData(channel *model.Channel) (map[stri
         else:
             text, count = re.subn(
                 r'(\n\s*isOpenRouter := chItem\.Endpoint == "openrouter"\n)',
-                r'\1			isDashScopeNativePricing := chItem.Endpoint == "dashscope_native"\n',
+                r'\1			isDashScopeNativePricing := chItem.Endpoint == "dashscope_native" || chItem.Type == constant.ChannelTypeAliDashScopeNative\n',
                 text,
                 count=1,
             )

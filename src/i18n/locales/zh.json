@@ -4942,6 +4942,12 @@
     "No DashScope Native channels found": "没有找到 DashScope 原生渠道",
     "No DashScope Native price differences found": "没有 DashScope 原生价格差异",
     "DashScope Native prices fetched successfully": "DashScope 原生价格拉取成功",
-    "Please select a DashScope Native channel": "请选择 DashScope 原生渠道"
+    "Please select a DashScope Native channel": "请选择 DashScope 原生渠道",
+      "These prices are isolated to Ali SDK / DashScope Native channels and are not used by ordinary NewAPI model pricing.": "这些价格只用于阿里 SDK / DashScope 原生渠道，不会参与普通 NewAPI 模型定价。",
+      "Price configuration": "价格配置",
+      "Default price": "默认价格",
+      "Resolution / quality": "分辨率 / 质量",
+      "Add pricing condition": "添加条件价格",
+      "DashScope Native sync uses the selected channel base URL to choose the built-in domestic or international official price catalog, then writes native pricing and billing mode together.": "DashScope 原生同步会根据所选渠道的 Base URL 选择内置的国内或国际官方价格目录，并同时写入原生定价和计费模式。"
   }
 }

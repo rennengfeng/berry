@@ -127,6 +127,7 @@ const BILLING_SECTIONS = [
       <DashScopeNativePricing
         pricingDefault={settings['billing_setting.dashscope_native_pricing']}
         toolPricesDefault={settings['tool_price_setting.prices']}
+        billingModeDefault={settings['billing_setting.billing_mode']}
       />
     ),
   },
