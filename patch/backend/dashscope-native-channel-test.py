@@ -45,7 +45,7 @@ func testDashScopeNativeChannel(ctx context.Context, channel *model.Channel, tes
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	requestPath, requestBody, configOnly, err := buildDashScopeNativeTestRequest(testModel)
+	requestPath, requestBody, err := buildDashScopeNativeTestRequest(testModel)
 	if err != nil {
 		return testResult{localErr: err, newAPIError: types.NewError(err, types.ErrorCodeInvalidRequest)}
 	}
@@ -71,33 +71,37 @@ func testDashScopeNativeChannel(ctx context.Context, channel *model.Channel, tes
 		return testResult{context: c, localErr: newAPIError, newAPIError: newAPIError}
 	}
 
-	if configOnly {
-		info := newDashScopeNativeRelayInfo(c, testModel)
-		info.InitChannelMeta(c)
-		if info.ChannelType != constant.ChannelTypeAliDashScopeNative {
-			err := fmt.Errorf("DashScope Native test requires channel type %s", constant.GetChannelTypeName(constant.ChannelTypeAliDashScopeNative))
-			return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCodeInvalidApiType)}
-		}
-		info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
-		if _, err := calculateDashScopeNativeCharge(info, requestBody); err != nil {
-			return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))}
-		}
-		common.SysLog(fmt.Sprintf("testing DashScope Native channel %d with realtime/config-only model %s", channel.Id, testModel))
-		return testResult{context: c}
+	info := newDashScopeNativeRelayInfo(c, testModel)
+	info.InitChannelMeta(c)
+	if info.ChannelType != constant.ChannelTypeAliDashScopeNative {
+		err := fmt.Errorf("DashScope Native test requires channel type %s", constant.GetChannelTypeName(constant.ChannelTypeAliDashScopeNative))
+		return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCodeInvalidApiType)}
 	}
+	preparedBody := prepareDashScopeNativeMediaRequest(c, requestBody)
+	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+	charge, err := calculateDashScopeNativeCharge(info, preparedBody)
+	if err != nil {
+		return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))}
+	}
+	info.PriceData.Quota = charge.Quota
+	info.PriceData.ModelPrice = charge.PriceUSD
+	info.PriceData.UsePrice = true
 
 	common.SysLog(fmt.Sprintf("testing DashScope Native channel %d with model %s via %s", channel.Id, testModel, requestPath))
-	RelayDashScopeNative(c)
+	resp, err := doDashScopeNativeHTTPRequest(c, info, bytes.NewReader(preparedBody))
+	if err != nil {
+		return testResult{context: c, localErr: err, newAPIError: types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)}
+	}
+	defer service.CloseResponseBodyGracefully(resp)
 
-	result := w.Result()
-	respBody, readErr := readTestResponseBody(result.Body, false)
+	respBody, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
 		return testResult{context: c, localErr: readErr, newAPIError: types.NewOpenAIError(readErr, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)}
 	}
-	if result.StatusCode >= http.StatusBadRequest {
+	if resp.StatusCode >= http.StatusBadRequest {
 		err := detectErrorFromTestResponseBody(respBody)
 		if err == nil {
-			err = fmt.Errorf("bad response status code %d, body: %s", result.StatusCode, strings.TrimSpace(string(respBody)))
+			err = fmt.Errorf("bad response status code %d, body: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 		}
 		common.SysError(fmt.Sprintf(
 			"DashScope Native channel test bad response: channel_id=%d name=%s model=%s path=%s status=%d err=%v",
@@ -105,7 +109,7 @@ func testDashScopeNativeChannel(ctx context.Context, channel *model.Channel, tes
 			channel.Name,
 			testModel,
 			requestPath,
-			result.StatusCode,
+			resp.StatusCode,
 			err,
 		))
 		return testResult{context: c, localErr: err, newAPIError: types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)}
@@ -113,27 +117,41 @@ func testDashScopeNativeChannel(ctx context.Context, channel *model.Channel, tes
 	if bodyErr := validateTestResponseBody(respBody, false); bodyErr != nil {
 		return testResult{context: c, localErr: bodyErr, newAPIError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)}
 	}
+	info.PriceData.AddOtherRatio("native_quantity", charge.Quantity)
+	model.RecordConsumeLog(c, testUserID, model.RecordConsumeLogParams{
+		ChannelId:  channel.Id,
+		ModelName:  info.OriginModelName,
+		TokenName:  "模型测试",
+		Quota:      charge.Quota,
+		Content:    "DashScope Native 模型测试",
+		TokenId:    info.TokenId,
+		Group:      info.UsingGroup,
+		Other:      map[string]interface{}{"is_channel_test": true, "request_path": requestPath, "native_unit": charge.Unit, "native_quantity": charge.Quantity, "model_price": charge.PriceUSD},
+	})
 	common.SysLog(fmt.Sprintf("testing DashScope Native channel #%d, response: \n%s", channel.Id, common.LocalLogPreview(string(respBody))))
 	return testResult{context: c}
 }
 
-func buildDashScopeNativeTestRequest(modelName string) (string, []byte, bool, error) {
+func buildDashScopeNativeTestRequest(modelName string) (string, []byte, error) {
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" {
-		return "", nil, false, errors.New("model is required")
+		return "", nil, errors.New("model is required")
 	}
 	normalized := strings.ToLower(modelName)
-	if isDashScopeNativeRealtimeTestModel(normalized) {
+	if strings.Contains(normalized, "cosyvoice") || strings.Contains(normalized, "qwen-audio") {
 		body, err := json.Marshal(map[string]any{
 			"model": modelName,
 			"input": map[string]any{
-				"text": "你好，这是连通性测试。",
-			},
-			"parameters": map[string]any{
-				"format": "mp3",
+				"text":        "你好，这是连通性测试。",
+				"voice":       "longxiaochun",
+				"format":      "wav",
+				"sample_rate": 24000,
 			},
 		})
-		return "/api-ws/v1/inference?model=" + modelName, body, true, err
+		return "/api/v1/services/audio/tts/SpeechSynthesizer", body, err
+	}
+	if isDashScopeNativeRealtimeTestModel(normalized) {
+		return "", nil, fmt.Errorf("DashScope Native model %q uses realtime/WebSocket protocol and is not supported by automatic HTTP channel test; please test it with a realtime client request", modelName)
 	}
 	if strings.Contains(normalized, "qwen-image") || strings.Contains(normalized, "wan2.7-image") {
 		body, err := json.Marshal(map[string]any{
@@ -156,21 +174,10 @@ func buildDashScopeNativeTestRequest(modelName string) (string, []byte, bool, er
 				"result_format": "url",
 			},
 		})
-		return "/api/v1/services/aigc/image-generation/generation", body, false, err
+		return "/api/v1/services/aigc/image-generation/generation", body, err
 	}
 	if isDashScopeNativeVideoEditTestModel(normalized) {
-		body, err := json.Marshal(map[string]any{
-			"model": modelName,
-			"input": map[string]any{
-				"prompt": "make it cinematic",
-			},
-			"parameters": map[string]any{
-				"resolution": "720P",
-				"ratio":      "16:9",
-				"duration":   5,
-			},
-		})
-		return "/api/v1/services/aigc/video-generation/video-synthesis", body, true, err
+		return "", nil, fmt.Errorf("DashScope Native model %q requires a real edit source video/image and is not supported by automatic channel test", modelName)
 	}
 	if isDashScopeNativeVideoTestModel(normalized) {
 		input := map[string]any{
@@ -195,7 +202,7 @@ func buildDashScopeNativeTestRequest(modelName string) (string, []byte, bool, er
 				"result_format": "url",
 			},
 		})
-		return "/api/v1/services/aigc/video-generation/video-synthesis", body, false, err
+		return "/api/v1/services/aigc/video-generation/video-synthesis", body, err
 	}
 	body, err := json.Marshal(map[string]any{
 		"model": modelName,
@@ -203,13 +210,11 @@ func buildDashScopeNativeTestRequest(modelName string) (string, []byte, bool, er
 			"prompt": "hi",
 		},
 	})
-	return "/api/v1/services/aigc/multimodal-generation/generation", body, false, err
+	return "/api/v1/services/aigc/multimodal-generation/generation", body, err
 }
 
 func isDashScopeNativeRealtimeTestModel(normalizedModelName string) bool {
-	return strings.Contains(normalizedModelName, "cosyvoice") ||
-		strings.Contains(normalizedModelName, "qwen-audio") ||
-		strings.Contains(normalizedModelName, "tts") ||
+	return strings.Contains(normalizedModelName, "tts") ||
 		strings.Contains(normalizedModelName, "realtime")
 }
 
