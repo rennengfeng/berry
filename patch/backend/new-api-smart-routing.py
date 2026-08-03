@@ -322,12 +322,27 @@ def patch_distributor() -> None:
 
 
 def patch_relay() -> None:
-    replace_once(
-        "controller/relay.go",
-        "\tchannel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)\n\n\tinfo.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)\n",
-        "\tchannel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)\n\tif selectGroup != \"\" {\n\t\tinfo.UsingGroup = selectGroup\n\t\tinfo.TokenGroup = selectGroup\n\t\tcommon.SetContextKey(c, constant.ContextKeyUsingGroup, selectGroup)\n\t\tcommon.SetContextKey(c, constant.ContextKeyTokenGroup, selectGroup)\n\t}\n\n\tinfo.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)\n",
-        "relay selected group sync",
+    rel = "controller/relay.go"
+    text = read(rel)
+    if "info.UsingGroup = selectGroup" in text:
+        return
+    pattern = (
+        r"(?P<select>\tchannel,\s*selectGroup,\s*err\s*:=\s*service\.CacheGetRandomSatisfiedChannel\(retryParam\)\n)"
+        r"(?P<between>\s*)"
+        r"(?P<group>\tinfo\.PriceData\.GroupRatioInfo\s*=\s*helper\.HandleGroupRatio\(c,\s*info\)\n)"
     )
+    snippet = (
+        "\tif selectGroup != \"\" {\n"
+        "\t\tinfo.UsingGroup = selectGroup\n"
+        "\t\tinfo.TokenGroup = selectGroup\n"
+        "\t\tcommon.SetContextKey(c, constant.ContextKeyUsingGroup, selectGroup)\n"
+        "\t\tcommon.SetContextKey(c, constant.ContextKeyTokenGroup, selectGroup)\n"
+        "\t}\n\n"
+    )
+    new_text, count = re.subn(pattern, lambda m: m.group("select") + snippet + m.group("group"), text, count=1, flags=re.S)
+    if count != 1:
+        raise SystemExit("smart routing patch failed: relay selected group sync anchor not found in controller/relay.go")
+    write(rel, new_text)
 
 
 def patch_model_list() -> None:
