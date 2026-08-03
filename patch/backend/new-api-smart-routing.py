@@ -50,9 +50,21 @@ def patch_import(rel: str, import_line: str, after_line: str, label: str) -> Non
     if import_line in text:
         return
     anchor = after_line + "\n"
-    if anchor not in text:
-        raise SystemExit(f"smart routing patch failed: {label} import anchor not found in {rel}")
-    write(rel, text.replace(anchor, anchor + "\t" + import_line + "\n", 1))
+    if anchor in text:
+        write(rel, text.replace(anchor, anchor + "\t" + import_line + "\n", 1))
+        return
+    block = re.search(r"import\s*\((?P<body>.*?)\n\)", text, flags=re.S)
+    if block:
+        insert_at = block.end("body")
+        write(rel, text[:insert_at] + "\n\t" + import_line + text[insert_at:])
+        return
+    single = re.search(r'(?m)^import\s+(?P<single>"[^"]+")\s*$', text)
+    if single:
+        existing = single.group("single")
+        replacement = "import (\n\t" + existing + "\n\t" + import_line + "\n)"
+        write(rel, text[:single.start()] + replacement + text[single.end():])
+        return
+    raise SystemExit(f"smart routing patch failed: {label} import block not found in {rel}")
 
 
 def regex_replace(rel: str, pattern: str, repl: str, marker: str, label: str) -> None:
@@ -324,24 +336,40 @@ def patch_distributor() -> None:
 def patch_relay() -> None:
     rel = "controller/relay.go"
     text = read(rel)
-    if "info.UsingGroup = selectGroup" in text:
+    if "info.UsingGroup =" in text and "ContextKeyUsingGroup" in text and "CacheGetRandomSatisfiedChannel" in text:
         return
-    pattern = (
-        r"(?P<select>\tchannel,\s*selectGroup,\s*err\s*:=\s*service\.CacheGetRandomSatisfiedChannel\(retryParam\)\n)"
-        r"(?P<between>\s*)"
-        r"(?P<group>\tinfo\.PriceData\.GroupRatioInfo\s*=\s*helper\.HandleGroupRatio\(c,\s*info\)\n)"
-    )
-    snippet = (
-        "\tif selectGroup != \"\" {\n"
-        "\t\tinfo.UsingGroup = selectGroup\n"
-        "\t\tinfo.TokenGroup = selectGroup\n"
-        "\t\tcommon.SetContextKey(c, constant.ContextKeyUsingGroup, selectGroup)\n"
-        "\t\tcommon.SetContextKey(c, constant.ContextKeyTokenGroup, selectGroup)\n"
-        "\t}\n\n"
-    )
-    new_text, count = re.subn(pattern, lambda m: m.group("select") + snippet + m.group("group"), text, count=1, flags=re.S)
+
+    pattern = r"(?m)^(?P<indent>\s*)(?P<lhs>[\w\s,]+?)\s*(?P<op>:=|=)\s*service\.CacheGetRandomSatisfiedChannel\((?P<args>[^)]*)\)\s*$"
+
+    def repl(match: re.Match[str]) -> str:
+        indent = match.group("indent")
+        lhs_parts = [part.strip() for part in match.group("lhs").split(",") if part.strip()]
+        op = match.group("op")
+        if len(lhs_parts) >= 3:
+            group_var = lhs_parts[1]
+            if group_var == "_":
+                group_var = "selectGroup"
+                lhs_parts[1] = group_var
+        elif len(lhs_parts) == 2:
+            group_var = "selectGroup"
+            lhs_parts = [lhs_parts[0], group_var, lhs_parts[1]]
+            op = ":="
+        else:
+            raise SystemExit("smart routing patch failed: relay selected group assignment shape is unsupported in controller/relay.go")
+        line = f"{indent}{', '.join(lhs_parts)} {op} service.CacheGetRandomSatisfiedChannel({match.group('args')})"
+        snippet = (
+            f"\n{indent}if {group_var} != \"\" {{\n"
+            f"{indent}\tinfo.UsingGroup = {group_var}\n"
+            f"{indent}\tinfo.TokenGroup = {group_var}\n"
+            f"{indent}\tcommon.SetContextKey(c, constant.ContextKeyUsingGroup, {group_var})\n"
+            f"{indent}\tcommon.SetContextKey(c, constant.ContextKeyTokenGroup, {group_var})\n"
+            f"{indent}}}\n"
+        )
+        return line + snippet
+
+    new_text, count = re.subn(pattern, repl, text, count=1)
     if count != 1:
-        raise SystemExit("smart routing patch failed: relay selected group sync anchor not found in controller/relay.go")
+        raise SystemExit("smart routing patch failed: CacheGetRandomSatisfiedChannel call anchor not found in controller/relay.go")
     write(rel, new_text)
 
 
