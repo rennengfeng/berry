@@ -1072,6 +1072,12 @@ def patch_channel_select() -> None:
     patch_import("service/channel_select.go", '"time"', '"strings"', "channel_select time")
     patch_import(
         "service/channel_select.go",
+        '"github.com/QuantumNous/new-api/setting"',
+        '"github.com/QuantumNous/new-api/model"',
+        "channel_select setting",
+    )
+    patch_import(
+        "service/channel_select.go",
         '"github.com/QuantumNous/new-api/setting/ratio_setting"',
         '"github.com/QuantumNous/new-api/setting"',
         "channel_select ratio_setting",
