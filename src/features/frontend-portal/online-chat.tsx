@@ -50,7 +50,7 @@ import {
 } from '@/components/ai-elements/reasoning'
 import { Response } from '@/components/ai-elements/response'
 import { Shimmer } from '@/components/ai-elements/shimmer'
-import { getApiKeySummaries, getChatUserModels, sendImageGeneration } from './api'
+import { getApiKeySummaries, getChatUserModels, getTokenKey, sendTokenImageGeneration } from './api'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -572,10 +572,18 @@ export function OnlineChat() {
       const requestGroup = resolveRequestGroup()
 
       try {
-        const res = await sendImageGeneration({
+        if (!selectedApiKeyId) {
+          throw new Error('No enabled API key found. Create or enable one first.')
+        }
+        const rawKey = await getTokenKey(Number(selectedApiKeyId))
+        if (!rawKey) {
+          throw new Error('Failed to load API key')
+        }
+        const token = rawKey.startsWith('sk-') ? rawKey : `sk-${rawKey}`
+        const res = await sendTokenImageGeneration({
+          token,
           model: activeModel,
           prompt,
-          group: requestGroup,
           size: imageSize,
         })
         setMessages((prev) => {
@@ -606,7 +614,7 @@ export function OnlineChat() {
         setIsGenerating(false)
       }
     },
-    [activeModel, resolveRequestGroup, imageSize]
+    [activeModel, selectedApiKeyId, resolveRequestGroup, imageSize]
   )
 
   // Handle submit

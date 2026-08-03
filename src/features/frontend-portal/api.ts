@@ -557,7 +557,7 @@ function assertImageTaskNotFailed(body: ImageTaskPayload) {
 
 async function resolveImageGenerationResponse(
   body: ImageTaskPayload,
-  taskPathPrefix: '/dashscope/api/v1/tasks' | '/pg/images/tasks',
+  taskPathPrefix: '/dashscope/api/v1/tasks' | '/pg/images/tasks' | '/v1/image-tasks',
   headers?: Record<string, string>
 ): Promise<ImageGenerationResult> {
   const directImages = extractImagesFromTask(body)
@@ -593,7 +593,7 @@ export async function sendTokenImageGeneration(params: {
 }): Promise<ImageGenerationResult> {
   try {
     const res = await api.post(
-      '/v1/images/generations',
+      '/v1/image-tasks/generations',
       {
         model: params.model,
         prompt: params.prompt,
@@ -610,7 +610,7 @@ export async function sendTokenImageGeneration(params: {
         skipErrorHandler: true,
       } as Record<string, unknown>
     )
-    return resolveImageGenerationResponse(res.data as ImageTaskPayload, '/dashscope/api/v1/tasks', {
+    return resolveImageGenerationResponse(res.data as ImageTaskPayload, '/v1/image-tasks', {
       Authorization: `Bearer ${params.token}`,
     })
   } catch (err: unknown) {
