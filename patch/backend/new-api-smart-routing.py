@@ -164,12 +164,24 @@ def patch_token_model() -> None:
         "token routing_strategy field",
     )
     insert_token_model_helpers()
-    replace_once(
-        "model/token.go",
-        '\t\t"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry").Updates(token).Error',
-        '\t\t"model_limits_enabled", "model_limits", "allow_ips", "group", "routing_strategy", "cross_group_retry").Updates(token).Error',
-        "token update fields",
-    )
+    patch_token_update_fields()
+
+
+def patch_token_update_fields() -> None:
+    rel = "model/token.go"
+    text = read(rel)
+    pattern = r"DB\.Model\(token\)\.Select\((?P<fields>.*?)\)\.Updates\(token\)\.Error"
+    match = re.search(pattern, text, flags=re.S)
+    if not match:
+        raise SystemExit("smart routing patch failed: token update Select fields anchor not found in model/token.go")
+    fields = match.group("fields")
+    if '"routing_strategy"' in fields:
+        return
+    if '"cross_group_retry"' in fields:
+        next_fields = fields.replace('"cross_group_retry"', '"routing_strategy", "cross_group_retry"', 1)
+    else:
+        next_fields = fields.rstrip() + ',\n\t\t"routing_strategy"'
+    write(rel, text[: match.start("fields")] + next_fields + text[match.end("fields") :])
 
 
 def patch_token_controller() -> None:
