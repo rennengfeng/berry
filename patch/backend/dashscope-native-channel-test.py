@@ -99,7 +99,7 @@ func testDashScopeNativeChannel(ctx context.Context, channel *model.Channel, tes
 		return testResult{context: c, localErr: readErr, newAPIError: types.NewOpenAIError(readErr, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)}
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
-		err := detectErrorFromTestResponseBody(respBody)
+		err := detectDashScopeNativeTestResponseError(respBody)
 		if err == nil {
 			err = fmt.Errorf("bad response status code %d, body: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 		}
@@ -114,7 +114,7 @@ func testDashScopeNativeChannel(ctx context.Context, channel *model.Channel, tes
 		))
 		return testResult{context: c, localErr: err, newAPIError: types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)}
 	}
-	if bodyErr := validateTestResponseBody(respBody, false); bodyErr != nil {
+	if bodyErr := validateDashScopeNativeTestResponse(c, info, requestPath, respBody); bodyErr != nil {
 		return testResult{context: c, localErr: bodyErr, newAPIError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)}
 	}
 	info.PriceData.AddOtherRatio("native_quantity", charge.Quantity)
@@ -174,7 +174,7 @@ func buildDashScopeNativeTestRequest(modelName string) (string, []byte, error) {
 				"result_format": "url",
 			},
 		})
-		return "/api/v1/services/aigc/image-generation/generation", body, err
+		return "/api/v1/services/aigc/multimodal-generation/generation", body, err
 	}
 	if isDashScopeNativeVideoEditTestModel(normalized) {
 		return "", nil, fmt.Errorf("DashScope Native model %q requires a real edit source video/image and is not supported by automatic channel test", modelName)
@@ -234,6 +234,152 @@ func isDashScopeNativeImageToVideoTestModel(normalizedModelName string) bool {
 
 func isDashScopeNativeVideoEditTestModel(normalizedModelName string) bool {
 	return strings.Contains(normalizedModelName, "video-edit")
+}
+
+func validateDashScopeNativeTestResponse(c *gin.Context, info *relaycommon.RelayInfo, requestPath string, respBody []byte) error {
+	if bodyErr := detectDashScopeNativeTestResponseError(respBody); bodyErr != nil {
+		return bodyErr
+	}
+	normalizedPath := strings.ToLower(requestPath)
+	if taskID := strings.TrimSpace(gjson.GetBytes(respBody, "output.task_id").String()); taskID != "" {
+		return pollDashScopeNativeTestTask(c, info, taskID, 150*time.Second)
+	}
+	if strings.Contains(normalizedPath, "/multimodal-generation/") {
+		if dashScopeNativeTestHasResultURL(respBody) {
+			return nil
+		}
+		return fmt.Errorf("DashScope Native image test response does not contain generated image URL, body: %s", common.LocalLogPreview(string(respBody)))
+	}
+	if strings.Contains(normalizedPath, "/video-generation/") {
+		return fmt.Errorf("DashScope Native async video test response did not include output.task_id, body: %s", common.LocalLogPreview(string(respBody)))
+	}
+	if strings.Contains(normalizedPath, "/audio/tts/") || strings.Contains(normalizedPath, "/speechsynthesizer") {
+		if len(bytes.TrimSpace(respBody)) > 0 && !gjson.ValidBytes(respBody) {
+			return nil
+		}
+		if dashScopeNativeTestHasResultURL(respBody) {
+			return nil
+		}
+		return fmt.Errorf("DashScope Native TTS test response does not contain generated audio URL, body: %s", common.LocalLogPreview(string(respBody)))
+	}
+	return validateTestResponseBody(respBody, false)
+}
+
+func pollDashScopeNativeTestTask(c *gin.Context, info *relaycommon.RelayInfo, taskID string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	lastStatus := ""
+	for {
+		respBody, err := fetchDashScopeNativeTestTask(c, info, taskID)
+		if err != nil {
+			return err
+		}
+		if bodyErr := detectDashScopeNativeTestResponseError(respBody); bodyErr != nil {
+			return bodyErr
+		}
+		status := strings.ToUpper(strings.TrimSpace(gjson.GetBytes(respBody, "output.task_status").String()))
+		if status == "" {
+			status = strings.ToUpper(strings.TrimSpace(gjson.GetBytes(respBody, "task_status").String()))
+		}
+		lastStatus = status
+		switch status {
+		case "SUCCEEDED":
+			if dashScopeNativeTestHasResultURL(respBody) {
+				return nil
+			}
+			return fmt.Errorf("DashScope Native async task %s succeeded but no result URL was returned, body: %s", taskID, common.LocalLogPreview(string(respBody)))
+		case "FAILED", "CANCELED", "UNKNOWN":
+			message := strings.TrimSpace(gjson.GetBytes(respBody, "output.message").String())
+			if message == "" {
+				message = strings.TrimSpace(gjson.GetBytes(respBody, "message").String())
+			}
+			if message == "" {
+				message = common.LocalLogPreview(string(respBody))
+			}
+			return fmt.Errorf("DashScope Native async task %s ended with status %s: %s", taskID, status, message)
+		}
+		if time.Now().After(deadline) {
+			if lastStatus == "" {
+				lastStatus = "UNKNOWN"
+			}
+			return fmt.Errorf("DashScope Native async task %s is still %s after %.0f seconds; channel test is not marked successful until the real result URL is returned", taskID, lastStatus, timeout.Seconds())
+		}
+		select {
+		case <-c.Request.Context().Done():
+			return c.Request.Context().Err()
+		case <-time.After(5 * time.Second):
+		}
+	}
+}
+
+func fetchDashScopeNativeTestTask(c *gin.Context, info *relaycommon.RelayInfo, taskID string) ([]byte, error) {
+	previousMethod := c.Request.Method
+	c.Request.Method = http.MethodGet
+	resp, err := doDashScopeNativeHTTPRequest(c, info, nil, "/api/v1/tasks/"+taskID)
+	c.Request.Method = previousMethod
+	if err != nil {
+		return nil, err
+	}
+	defer service.CloseResponseBodyGracefully(resp)
+	respBody, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, readErr
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		if bodyErr := detectDashScopeNativeTestResponseError(respBody); bodyErr != nil {
+			return nil, bodyErr
+		}
+		return nil, fmt.Errorf("DashScope Native async task poll bad response status code %d, body: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+	return respBody, nil
+}
+
+func dashScopeNativeTestHasResultURL(respBody []byte) bool {
+	paths := []string{
+		"output.video_url",
+		"output.audio.url",
+		"output.audio.data",
+		"output.url",
+		"output.image_url",
+		"output.results.0.url",
+		"output.results.0.video_url",
+		"output.results.0.image",
+		"output.choices.0.message.content.0.image",
+		"data.0.url",
+	}
+	for _, path := range paths {
+		if strings.TrimSpace(gjson.GetBytes(respBody, path).String()) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func detectDashScopeNativeTestResponseError(respBody []byte) error {
+	if err := detectErrorFromTestResponseBody(respBody); err != nil {
+		return err
+	}
+	b := bytes.TrimSpace(respBody)
+	if len(b) == 0 || (b[0] != '{' && b[0] != '[') {
+		return nil
+	}
+	message := strings.TrimSpace(gjson.GetBytes(b, "message").String())
+	if message == "" {
+		message = strings.TrimSpace(gjson.GetBytes(b, "output.message").String())
+	}
+	code := strings.TrimSpace(gjson.GetBytes(b, "code").String())
+	if code == "" {
+		code = strings.TrimSpace(gjson.GetBytes(b, "output.code").String())
+	}
+	if gjson.GetBytes(b, "output").Exists() || gjson.GetBytes(b, "data").Exists() {
+		return nil
+	}
+	if message == "" {
+		return nil
+	}
+	if code != "" {
+		return fmt.Errorf("upstream error %s: %s", code, message)
+	}
+	return fmt.Errorf("upstream error: %s", message)
 }
 
 '''
