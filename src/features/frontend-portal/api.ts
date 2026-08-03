@@ -328,7 +328,13 @@ export async function getTokenKey(id: number): Promise<string> {
       if (attempt < 2) await new Promise((r) => setTimeout(r, 300))
     }
   }
-  return ''
+  try {
+    const res = await api.post('/api/token/batch/keys', { ids: [id] })
+    const keys = res.data?.data?.keys ?? {}
+    return keys[id] || keys[String(id)] || ''
+  } catch {
+    return ''
+  }
 }
 
 export async function sendTokenChatCompletion(params: {
