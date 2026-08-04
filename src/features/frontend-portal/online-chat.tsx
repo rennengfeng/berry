@@ -31,10 +31,17 @@ import {
   XIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
+  SlidersHorizontalIcon,
 } from 'lucide-react'
 import { getCommonHeaders } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import {
   Select,
   SelectContent,
@@ -84,15 +91,62 @@ type ModelOption = { label: string; value: string; groups?: string[]; endpoints?
 type ApiKeyOption = { label: string; value: string; groups: string[] }
 
 type ImageProvider = 'qwen' | 'gpt' | 'gemini' | 'generic'
+type ImageAspectRatio = 'auto' | '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3'
+type ImageResolutionTier = '1K' | '2K' | '4K'
+type ImageRequestSettings = {
+  size: string
+  quality?: string
+  aspect_ratio?: string
+  resolution?: string
+  ratio?: string
+  summary: string
+  detail: string
+}
 
 const IMAGE_COUNT_OPTIONS = ['1', '2', '3', '4'] as const
 const IMAGE_QUALITY_OPTIONS = ['auto', 'low', 'medium', 'high'] as const
 const IMAGE_OUTPUT_FORMATS = ['auto', 'png', 'jpeg', 'webp'] as const
-const IMAGE_SIZE_OPTIONS: Record<ImageProvider, string[]> = {
-  qwen: ['2048*2048', '2688*1536', '1536*2688', '2368*1728', '1728*2368', '1024*1024'],
-  gpt: ['1024x1024', '1024x1536', '1536x1024', 'auto'],
-  gemini: ['1:1', '16:9', '9:16', '4:3', '3:4'],
-  generic: ['1024x1024', '1024x1792', '1792x1024', 'auto'],
+const QWEN_ASPECT_OPTIONS: ImageAspectRatio[] = ['1:1', '16:9', '9:16', '4:3', '3:4']
+const GPT_ASPECT_OPTIONS: ImageAspectRatio[] = ['1:1', '3:2', '2:3', 'auto']
+const GEMINI_ASPECT_OPTIONS: ImageAspectRatio[] = ['1:1', '16:9', '9:16', '4:3', '3:4']
+const GENERIC_ASPECT_OPTIONS: ImageAspectRatio[] = ['1:1', '16:9', '9:16', '4:3', '3:4', 'auto']
+const QWEN_RESOLUTION_OPTIONS: ImageResolutionTier[] = ['2K', '1K']
+const GEMINI_RESOLUTION_OPTIONS: ImageResolutionTier[] = ['2K', '1K']
+const GEMINI_4K_RESOLUTION_OPTIONS: ImageResolutionTier[] = ['2K', '4K', '1K']
+
+const QWEN_SIZE_BY_TIER_RATIO: Record<ImageResolutionTier, Partial<Record<ImageAspectRatio, string>>> = {
+  '1K': {
+    '1:1': '1024*1024',
+    '16:9': '1344*768',
+    '9:16': '768*1344',
+    '4:3': '1184*864',
+    '3:4': '864*1184',
+  },
+  '2K': {
+    '1:1': '2048*2048',
+    '16:9': '2688*1536',
+    '9:16': '1536*2688',
+    '4:3': '2368*1728',
+    '3:4': '1728*2368',
+  },
+  '4K': {
+    '1:1': '4096*4096',
+    '16:9': '5376*3072',
+    '9:16': '3072*5376',
+    '4:3': '4736*3456',
+    '3:4': '3456*4736',
+  },
+}
+
+const GPT_SIZE_BY_RATIO: Record<ImageAspectRatio, string> = {
+  auto: 'auto',
+  '1:1': '1024x1024',
+  '16:9': '1536x1024',
+  '9:16': '1024x1536',
+  '4:3': '1536x1024',
+  '3:4': '1024x1536',
+  '3:2': '1536x1024',
+  '2:3': '1024x1536',
 }
 
 function getImageProvider(model: string): ImageProvider {
@@ -101,6 +155,96 @@ function getImageProvider(model: string): ImageProvider {
   if (value.includes('gpt-image') || value.includes('dall-e')) return 'gpt'
   if (value.includes('gemini')) return 'gemini'
   return 'generic'
+}
+
+function getImageAspectOptions(provider: ImageProvider): ImageAspectRatio[] {
+  if (provider === 'qwen') return QWEN_ASPECT_OPTIONS
+  if (provider === 'gpt') return GPT_ASPECT_OPTIONS
+  if (provider === 'gemini') return GEMINI_ASPECT_OPTIONS
+  return GENERIC_ASPECT_OPTIONS
+}
+
+function getImageResolutionOptions(provider: ImageProvider, model: string): ImageResolutionTier[] {
+  if (provider === 'gemini' && /4k/i.test(model)) return GEMINI_4K_RESOLUTION_OPTIONS
+  if (provider === 'gemini') return GEMINI_RESOLUTION_OPTIONS
+  if (provider === 'qwen') return QWEN_RESOLUTION_OPTIONS
+  return ['2K', '4K', '1K']
+}
+
+function resolveQwenSize(aspectRatio: ImageAspectRatio, resolution: ImageResolutionTier): string {
+  return (
+    QWEN_SIZE_BY_TIER_RATIO[resolution]?.[aspectRatio] ||
+    QWEN_SIZE_BY_TIER_RATIO['2K'][aspectRatio] ||
+    QWEN_SIZE_BY_TIER_RATIO['2K']['1:1'] ||
+    '2048*2048'
+  )
+}
+
+function resolveGenericSize(aspectRatio: ImageAspectRatio, resolution: ImageResolutionTier): string {
+  if (aspectRatio === 'auto') return 'auto'
+  const [wRaw, hRaw] = aspectRatio.split(':')
+  const w = Number(wRaw) || 1
+  const h = Number(hRaw) || 1
+  const longEdge = resolution === '4K' ? 3840 : resolution === '1K' ? 1024 : 2048
+  if (w >= h) {
+    const height = Math.round(longEdge * (h / w))
+    return `${longEdge}x${height}`
+  }
+  const width = Math.round(longEdge * (w / h))
+  return `${width}x${longEdge}`
+}
+
+function resolveImageRequestSettings(
+  provider: ImageProvider,
+  model: string,
+  aspectRatio: ImageAspectRatio,
+  resolution: ImageResolutionTier,
+  quality: string,
+  count: string
+): ImageRequestSettings {
+  const selectedCount = String(Math.max(1, Number(count) || 1))
+  if (provider === 'qwen') {
+    const size = resolveQwenSize(aspectRatio, resolution)
+    return {
+      size,
+      resolution,
+      ratio: aspectRatio,
+      aspect_ratio: aspectRatio,
+      summary: `${aspectRatio} · ${resolution} · ${selectedCount}`,
+      detail: size,
+    }
+  }
+  if (provider === 'gpt') {
+    const size = GPT_SIZE_BY_RATIO[aspectRatio] || '1024x1024'
+    return {
+      size,
+      quality,
+      summary: `${aspectRatio} · ${quality} · ${selectedCount}`,
+      detail: size,
+    }
+  }
+  if (provider === 'gemini') {
+    const safeResolution = getImageResolutionOptions(provider, model).includes(resolution) ? resolution : '2K'
+    return {
+      size: aspectRatio,
+      quality: safeResolution,
+      aspect_ratio: aspectRatio,
+      resolution: safeResolution,
+      ratio: aspectRatio,
+      summary: `${aspectRatio} · ${safeResolution} · ${selectedCount}`,
+      detail: aspectRatio,
+    }
+  }
+  const size = resolveGenericSize(aspectRatio, resolution)
+  return {
+    size,
+    quality,
+    aspect_ratio: aspectRatio === 'auto' ? undefined : aspectRatio,
+    resolution,
+    ratio: aspectRatio === 'auto' ? undefined : aspectRatio,
+    summary: `${aspectRatio} · ${resolution} · ${selectedCount}`,
+    detail: size,
+  }
 }
 
 function splitGroupList(group?: string): string[] {
@@ -237,10 +381,12 @@ export function OnlineChat() {
   const [apiKeyOptions, setApiKeyOptions] = useState<ApiKeyOption[]>([])
   const [selectedModel, setSelectedModel] = useState('')
   const [selectedApiKeyId, setSelectedApiKeyId] = useState('')
-  const [imageSize, setImageSize] = useState<string>('1024x1024')
-  const [imageQuality, setImageQuality] = useState<string>('auto')
+  const [imageAspectRatio, setImageAspectRatio] = useState<ImageAspectRatio>('1:1')
+  const [imageResolution, setImageResolution] = useState<ImageResolutionTier>('2K')
+  const [imageQuality, setImageQuality] = useState<string>('medium')
   const [imageCount, setImageCount] = useState<string>('1')
   const [imageOutputFormat, setImageOutputFormat] = useState<string>('auto')
+  const [imageSettingsOpen, setImageSettingsOpen] = useState(false)
 
   // Sessions (chat history) — initialized from localStorage
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadSessions())
@@ -297,14 +443,29 @@ export function OnlineChat() {
   }, [filteredModels, selectedModel])
 
   const imageProvider = useMemo(() => getImageProvider(activeModel), [activeModel])
-  const imageSizeOptions = useMemo(() => IMAGE_SIZE_OPTIONS[imageProvider], [imageProvider])
+  const imageAspectOptions = useMemo(() => getImageAspectOptions(imageProvider), [imageProvider])
+  const imageResolutionOptions = useMemo(
+    () => getImageResolutionOptions(imageProvider, activeModel),
+    [imageProvider, activeModel]
+  )
+  const imageRequestSettings = useMemo(
+    () => resolveImageRequestSettings(imageProvider, activeModel, imageAspectRatio, imageResolution, imageQuality, imageCount),
+    [imageProvider, activeModel, imageAspectRatio, imageResolution, imageQuality, imageCount]
+  )
 
   useEffect(() => {
-    const options = IMAGE_SIZE_OPTIONS[imageProvider]
-    if (!options.includes(imageSize)) {
-      setImageSize(options[0])
+    const aspectOptions = getImageAspectOptions(imageProvider)
+    if (!aspectOptions.includes(imageAspectRatio)) {
+      setImageAspectRatio(aspectOptions[0])
     }
-  }, [imageProvider, imageSize])
+    const resolutionOptions = getImageResolutionOptions(imageProvider, activeModel)
+    if (!resolutionOptions.includes(imageResolution)) {
+      setImageResolution(resolutionOptions[0])
+    }
+    if (imageProvider === 'gpt' && !IMAGE_QUALITY_OPTIONS.includes(imageQuality as (typeof IMAGE_QUALITY_OPTIONS)[number])) {
+      setImageQuality('medium')
+    }
+  }, [imageProvider, activeModel, imageAspectRatio, imageResolution, imageQuality])
 
   const resolveRequestGroup = useCallback(
     (modelValue = activeModel) => {
@@ -612,18 +773,28 @@ export function OnlineChat() {
         }
         const token = rawKey.startsWith('sk-') ? rawKey : `sk-${rawKey}`
         const count = Math.max(1, Number(imageCount) || 1)
+        const imageRequest = resolveImageRequestSettings(
+          imageProvider,
+          activeModel,
+          imageAspectRatio,
+          imageResolution,
+          imageQuality,
+          imageCount
+        )
         const requests = Array.from({ length: count }, () =>
           sendTokenImageGeneration({
             token,
             model: activeModel,
             prompt,
             group: requestGroup,
-            size: imageSize,
+            size: imageRequest.size,
             n: 1,
-            quality: imageProvider === 'gpt' ? imageQuality : undefined,
+            quality: imageRequest.quality,
             output_format: imageOutputFormat !== 'auto' ? imageOutputFormat : undefined,
             images: pendingImages,
-            aspect_ratio: imageProvider === 'gemini' ? imageSize : undefined,
+            aspect_ratio: imageRequest.aspect_ratio,
+            resolution: imageRequest.resolution,
+            ratio: imageRequest.ratio,
           })
         )
         const results = await Promise.all(requests)
@@ -656,7 +827,7 @@ export function OnlineChat() {
         setIsGenerating(false)
       }
     },
-    [activeModel, selectedApiKeyId, resolveRequestGroup, imageSize, imageCount, imageQuality, imageOutputFormat, imageProvider, pendingImages]
+    [activeModel, selectedApiKeyId, resolveRequestGroup, imageAspectRatio, imageResolution, imageCount, imageQuality, imageOutputFormat, imageProvider, pendingImages]
   )
 
   // Handle submit
@@ -1049,8 +1220,8 @@ export function OnlineChat() {
               )}
             </div>
 
-            {/* Controls row — evenly distributed */}
-            <div className={cn('mt-2 grid gap-2', chatMode === 'image' ? 'grid-cols-2 md:grid-cols-6' : 'grid-cols-4')}>
+            {/* Controls row */}
+            <div className={cn('mt-2 grid gap-2', chatMode === 'image' ? 'grid-cols-[auto_minmax(0,1fr)_auto_minmax(8rem,12rem)]' : 'grid-cols-4')}>
               {/* Mode switch */}
               <div className="flex items-center rounded-lg border p-0.5">
                 <Button
@@ -1072,67 +1243,6 @@ export function OnlineChat() {
                   {t('Image')}
                 </Button>
               </div>
-
-              {/* Image size (only in image mode) */}
-              {chatMode === 'image' && (
-                <Select value={imageSize} onValueChange={(value) => setImageSize(value ?? '')}>
-                  <SelectTrigger className="h-7 w-full text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {imageSizeOptions.map((s) => (
-                      <SelectItem key={s} value={s} className="text-xs">
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              {chatMode === 'image' && imageProvider === 'gpt' && (
-                <Select value={imageQuality} onValueChange={(value) => setImageQuality(value ?? 'auto')}>
-                  <SelectTrigger className="h-7 w-full text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {IMAGE_QUALITY_OPTIONS.map((quality) => (
-                      <SelectItem key={quality} value={quality} className="text-xs">
-                        {quality}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              {chatMode === 'image' && (
-                <Select value={imageCount} onValueChange={(value) => setImageCount(value ?? '1')}>
-                  <SelectTrigger className="h-7 w-full text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {IMAGE_COUNT_OPTIONS.map((count) => (
-                      <SelectItem key={count} value={count} className="text-xs">
-                        {count}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              {chatMode === 'image' && (
-                <Select value={imageOutputFormat} onValueChange={(value) => setImageOutputFormat(value ?? 'auto')}>
-                  <SelectTrigger className="h-7 w-full text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {IMAGE_OUTPUT_FORMATS.map((format) => (
-                      <SelectItem key={format} value={format} className="text-xs">
-                        {format}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
 
               {/* API key selector: the selected key's group is used for billing. */}
               <Select
@@ -1165,11 +1275,159 @@ export function OnlineChat() {
                   ))}
                 </SelectContent>
               </Select>
+
+              {chatMode === 'image' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  onClick={() => setImageSettingsOpen(true)}
+                  disabled={isGenerating}
+                  title={t('Settings')}
+                >
+                  <SlidersHorizontalIcon className="h-3.5 w-3.5" />
+                  <span className="whitespace-nowrap">{imageRequestSettings.summary.replace(/ · /g, ' ')}</span>
+                </Button>
+              )}
             </div>
           </div>
         </div>
       </div>
       </div>
+      <Sheet open={imageSettingsOpen} onOpenChange={setImageSettingsOpen}>
+        <SheetContent side="right" className="w-[360px] sm:max-w-md">
+          <SheetHeader className="border-b">
+            <SheetTitle>{t('Image settings')}</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-5 px-4 pb-4">
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">{t('Aspect ratio')}</div>
+              <Select value={imageAspectRatio} onValueChange={(value) => setImageAspectRatio((value ?? '1:1') as ImageAspectRatio)}>
+                <SelectTrigger className="h-9 w-full text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {imageAspectOptions.map((ratio) => (
+                    <SelectItem key={ratio} value={ratio}>
+                      {ratio}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {imageProvider === 'qwen' && (
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">{t('Resolution')}</div>
+                <Select value={imageResolution} onValueChange={(value) => setImageResolution((value ?? '2K') as ImageResolutionTier)}>
+                  <SelectTrigger className="h-9 w-full text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {imageResolutionOptions.map((resolution) => (
+                      <SelectItem key={resolution} value={resolution}>
+                        {resolution}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                  {imageRequestSettings.detail}
+                </div>
+              </div>
+            )}
+
+            {imageProvider === 'gemini' && (
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">{t('Image size')}</div>
+                <Select value={imageResolution} onValueChange={(value) => setImageResolution((value ?? '2K') as ImageResolutionTier)}>
+                  <SelectTrigger className="h-9 w-full text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {imageResolutionOptions.map((resolution) => (
+                      <SelectItem key={resolution} value={resolution}>
+                        {resolution}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {imageProvider === 'gpt' && (
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">{t('Quality')}</div>
+                <Select value={imageQuality} onValueChange={(value) => setImageQuality(value ?? 'medium')}>
+                  <SelectTrigger className="h-9 w-full text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {IMAGE_QUALITY_OPTIONS.map((quality) => (
+                      <SelectItem key={quality} value={quality}>
+                        {quality}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {imageProvider === 'generic' && (
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">{t('Resolution')}</div>
+                <Select value={imageResolution} onValueChange={(value) => setImageResolution((value ?? '2K') as ImageResolutionTier)}>
+                  <SelectTrigger className="h-9 w-full text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {imageResolutionOptions.map((resolution) => (
+                      <SelectItem key={resolution} value={resolution}>
+                        {resolution}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                  {imageRequestSettings.detail}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">{t('Count')}</div>
+              <Select value={imageCount} onValueChange={(value) => setImageCount(value ?? '1')}>
+                <SelectTrigger className="h-9 w-full text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {IMAGE_COUNT_OPTIONS.map((count) => (
+                    <SelectItem key={count} value={count}>
+                      {count}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">{t('Output format')}</div>
+              <Select value={imageOutputFormat} onValueChange={(value) => setImageOutputFormat(value ?? 'auto')}>
+                <SelectTrigger className="h-9 w-full text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {IMAGE_OUTPUT_FORMATS.map((format) => (
+                    <SelectItem key={format} value={format}>
+                      {format}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

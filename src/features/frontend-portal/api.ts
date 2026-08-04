@@ -561,6 +561,28 @@ function assertImageTaskNotFailed(body: ImageTaskPayload) {
   }
 }
 
+async function fetchImageApiJson(
+  path: string,
+  method: 'GET' | 'POST',
+  headers: Record<string, string>,
+  body?: unknown
+): Promise<ImageTaskPayload> {
+  const res = await fetch(path, {
+    method,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers,
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  const payload = (await res.json().catch(() => ({}))) as ImageTaskPayload
+  if (!res.ok) {
+    throw new Error(payload.error?.message || payload.output?.message || `HTTP ${res.status}`)
+  }
+  return payload
+}
+
 async function resolveImageGenerationResponse(
   body: ImageTaskPayload,
   taskPathPrefix: '/dashscope/api/v1/tasks' | '/pg/images/tasks' | '/v1/image-tasks',
@@ -574,12 +596,11 @@ async function resolveImageGenerationResponse(
 
   if (taskPathPrefix === '/v1/image-tasks') {
     try {
-      const res = await api.post(`${taskPathPrefix}/${encodeURIComponent(taskId)}/resume-poll?timeout=120`, undefined, {
-        ...(headers ? { headers } : {}),
-        skipErrorHandler: true,
-        disableDuplicate: true,
-      } as Record<string, unknown>)
-      const taskBody = res.data as ImageTaskPayload
+      const taskBody = await fetchImageApiJson(
+        `${taskPathPrefix}/${encodeURIComponent(taskId)}/resume-poll?timeout=120`,
+        'POST',
+        headers ?? {}
+      )
       assertImageTaskNotFailed(taskBody)
       const images = extractImagesFromTask(taskBody)
       if (images.length > 0) return { data: images }
@@ -590,12 +611,16 @@ async function resolveImageGenerationResponse(
 
   for (let i = 0; i < IMAGE_TASK_MAX_POLLS; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, IMAGE_TASK_POLL_INTERVAL_MS))
-    const res = await api.get(`${taskPathPrefix}/${encodeURIComponent(taskId)}`, {
-      ...(headers ? { headers } : {}),
-      skipErrorHandler: true,
-      disableDuplicate: true,
-    } as Record<string, unknown>)
-    const taskBody = res.data as ImageTaskPayload
+    const taskBody = headers
+      ? await fetchImageApiJson(
+          `${taskPathPrefix}/${encodeURIComponent(taskId)}`,
+          'GET',
+          headers
+        )
+      : ((await api.get(`${taskPathPrefix}/${encodeURIComponent(taskId)}`, {
+          skipErrorHandler: true,
+          disableDuplicate: true,
+        } as Record<string, unknown>)).data as ImageTaskPayload)
     assertImageTaskNotFailed(taskBody)
     const images = extractImagesFromTask(taskBody)
     if (images.length > 0) return { data: images }
@@ -617,10 +642,13 @@ export async function sendTokenImageGeneration(params: {
   output_format?: string
   aspect_ratio?: string
   resolution?: string
+  ratio?: string
 }): Promise<ImageGenerationResult> {
   try {
-    const res = await api.post(
+    const payload = await fetchImageApiJson(
       '/v1/image-tasks/generations',
+      'POST',
+      { Authorization: `Bearer ${params.token}` },
       {
         model: params.model,
         prompt: params.prompt,
@@ -634,15 +662,10 @@ export async function sendTokenImageGeneration(params: {
         ...(params.output_format && { output_format: params.output_format }),
         ...(params.aspect_ratio && { aspect_ratio: params.aspect_ratio }),
         ...(params.resolution && { resolution: params.resolution }),
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${params.token}`,
-        },
-        skipErrorHandler: true,
-      } as Record<string, unknown>
+        ...(params.ratio && { ratio: params.ratio }),
+      }
     )
-    return resolveImageGenerationResponse(res.data as ImageTaskPayload, '/v1/image-tasks', {
+    return resolveImageGenerationResponse(payload, '/v1/image-tasks', {
       Authorization: `Bearer ${params.token}`,
     })
   } catch (err: unknown) {
@@ -703,6 +726,12 @@ export async function sendImageGeneration(params: {
   size?: string
   quality?: string
   n?: number
+  style?: string
+  images?: string[]
+  output_format?: string
+  aspect_ratio?: string
+  resolution?: string
+  ratio?: string
 }): Promise<ImageGenerationResult> {
   try {
     const res = await api.post(
@@ -715,6 +744,12 @@ export async function sendImageGeneration(params: {
         ...(params.size && { size: params.size }),
         ...(params.quality && { quality: params.quality }),
         ...(params.n && { n: params.n }),
+        ...(params.style && { style: params.style }),
+        ...(params.images && params.images.length > 0 && { images: params.images }),
+        ...(params.output_format && { output_format: params.output_format }),
+        ...(params.aspect_ratio && { aspect_ratio: params.aspect_ratio }),
+        ...(params.resolution && { resolution: params.resolution }),
+        ...(params.ratio && { ratio: params.ratio }),
       },
       {
         headers: getCommonHeaders(),
