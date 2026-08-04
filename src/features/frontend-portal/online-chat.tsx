@@ -524,6 +524,7 @@ export function OnlineChat() {
         : { label: t('Chat'), Icon: MessageSquareIcon },
     [chatMode, t]
   )
+  const ActiveModeIcon = activeModeMeta.Icon
   const creationModeOptions = useMemo(
     () => [
       { key: 'chat', label: t('Chat'), Icon: MessageSquareIcon, mode: 'chat' as const },
@@ -589,28 +590,38 @@ export function OnlineChat() {
   // Load active API keys. The selected key's groups constrain the playground
   // model list and one matching group is sent with each request.
   useEffect(() => {
-    getApiKeySummaries().then((tokens) => {
-      const keyOptions: ApiKeyOption[] = tokens
-        .filter((token) => token.status === 1)
-        .map((token) => {
-          const groups = splitGroupList(token.group)
-          return {
-            label: token.name || groups.join(',') || 'default',
-            value: String(token.id),
-            groups: groups.length > 0 ? groups : ['default'],
-          }
-        })
-      setApiKeyOptions(keyOptions)
-      setSelectedApiKeyId((current) =>
-        current && keyOptions.some((option) => option.value === current)
-          ? current
-          : keyOptions[0]?.value || ''
-      )
-    })
-    getChatUserModels().then((m) => {
-      setModels(m)
-      if (m.length > 0) setSelectedModel(m[0].value)
-    })
+    getApiKeySummaries()
+      .then((tokens) => {
+        const keyOptions: ApiKeyOption[] = tokens
+          .filter((token) => token.status === 1)
+          .map((token) => {
+            const groups = splitGroupList(token.group)
+            return {
+              label: token.name || groups.join(',') || 'default',
+              value: String(token.id),
+              groups: groups.length > 0 ? groups : ['default'],
+            }
+          })
+        setApiKeyOptions(keyOptions)
+        setSelectedApiKeyId((current) =>
+          current && keyOptions.some((option) => option.value === current)
+            ? current
+            : keyOptions[0]?.value || ''
+        )
+      })
+      .catch(() => {
+        setApiKeyOptions([])
+        setSelectedApiKeyId('')
+      })
+    getChatUserModels()
+      .then((m) => {
+        setModels(m)
+        if (m.length > 0) setSelectedModel(m[0].value)
+      })
+      .catch(() => {
+        setModels([])
+        setSelectedModel('')
+      })
   }, [])
 
   // Create new session
@@ -1320,7 +1331,7 @@ export function OnlineChat() {
                   }
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <activeModeMeta.Icon className="h-3.5 w-3.5 shrink-0" />
+                    <ActiveModeIcon className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">{activeModeMeta.label}</span>
                   </span>
                   <ChevronUpIcon className="h-3.5 w-3.5 shrink-0 opacity-60" />

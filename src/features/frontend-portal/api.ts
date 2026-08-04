@@ -313,7 +313,9 @@ export async function getSystemBranding(): Promise<Record<string, unknown>> {
 // ----------------------------------------------------------------------------
 
 export async function getApiKeySummaries(): Promise<ApiKeySummary[]> {
-  const res = await api.get('/api/token/?p=1&size=100')
+  const res = await api.get('/api/token/?p=1&size=100', {
+    skipErrorHandler: true,
+  } as Record<string, unknown>)
   const items = res.data?.data?.items
   return Array.isArray(items) ? items : []
 }
