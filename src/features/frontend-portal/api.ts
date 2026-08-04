@@ -572,6 +572,22 @@ async function resolveImageGenerationResponse(
   const taskId = extractImageTaskId(body)
   if (!taskId) return { data: [] }
 
+  if (taskPathPrefix === '/v1/image-tasks') {
+    try {
+      const res = await api.post(`${taskPathPrefix}/${encodeURIComponent(taskId)}/resume-poll?timeout=120`, undefined, {
+        ...(headers ? { headers } : {}),
+        skipErrorHandler: true,
+        disableDuplicate: true,
+      } as Record<string, unknown>)
+      const taskBody = res.data as ImageTaskPayload
+      assertImageTaskNotFailed(taskBody)
+      const images = extractImagesFromTask(taskBody)
+      if (images.length > 0) return { data: images }
+    } catch {
+      // Fall back to short polling below so older backends still work.
+    }
+  }
+
   for (let i = 0; i < IMAGE_TASK_MAX_POLLS; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, IMAGE_TASK_POLL_INTERVAL_MS))
     const res = await api.get(`${taskPathPrefix}/${encodeURIComponent(taskId)}`, {
@@ -596,6 +612,11 @@ export async function sendTokenImageGeneration(params: {
   quality?: string
   n?: number
   style?: string
+  group?: string
+  images?: string[]
+  output_format?: string
+  aspect_ratio?: string
+  resolution?: string
 }): Promise<ImageGenerationResult> {
   try {
     const res = await api.post(
@@ -608,6 +629,11 @@ export async function sendTokenImageGeneration(params: {
         ...(params.quality && { quality: params.quality }),
         ...(params.n && { n: params.n }),
         ...(params.style && { style: params.style }),
+        ...(params.group && { group: params.group }),
+        ...(params.images && params.images.length > 0 && { images: params.images }),
+        ...(params.output_format && { output_format: params.output_format }),
+        ...(params.aspect_ratio && { aspect_ratio: params.aspect_ratio }),
+        ...(params.resolution && { resolution: params.resolution }),
       },
       {
         headers: {

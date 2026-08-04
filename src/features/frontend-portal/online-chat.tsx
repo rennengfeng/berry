@@ -83,7 +83,25 @@ type ChatSession = {
 type ModelOption = { label: string; value: string; groups?: string[]; endpoints?: string[] }
 type ApiKeyOption = { label: string; value: string; groups: string[] }
 
-const IMAGE_SIZES = ['1024x1024', '1024x1792', '1792x1024', 'auto'] as const
+type ImageProvider = 'qwen' | 'gpt' | 'gemini' | 'generic'
+
+const IMAGE_COUNT_OPTIONS = ['1', '2', '3', '4'] as const
+const IMAGE_QUALITY_OPTIONS = ['auto', 'low', 'medium', 'high'] as const
+const IMAGE_OUTPUT_FORMATS = ['auto', 'png', 'jpeg', 'webp'] as const
+const IMAGE_SIZE_OPTIONS: Record<ImageProvider, string[]> = {
+  qwen: ['2048*2048', '2688*1536', '1536*2688', '2368*1728', '1728*2368', '1024*1024'],
+  gpt: ['1024x1024', '1024x1536', '1536x1024', 'auto'],
+  gemini: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+  generic: ['1024x1024', '1024x1792', '1792x1024', 'auto'],
+}
+
+function getImageProvider(model: string): ImageProvider {
+  const value = model.toLowerCase()
+  if (value.startsWith('qwen-image')) return 'qwen'
+  if (value.includes('gpt-image') || value.includes('dall-e')) return 'gpt'
+  if (value.includes('gemini')) return 'gemini'
+  return 'generic'
+}
 
 function splitGroupList(group?: string): string[] {
   return Array.from(
@@ -220,6 +238,9 @@ export function OnlineChat() {
   const [selectedModel, setSelectedModel] = useState('')
   const [selectedApiKeyId, setSelectedApiKeyId] = useState('')
   const [imageSize, setImageSize] = useState<string>('1024x1024')
+  const [imageQuality, setImageQuality] = useState<string>('auto')
+  const [imageCount, setImageCount] = useState<string>('1')
+  const [imageOutputFormat, setImageOutputFormat] = useState<string>('auto')
 
   // Sessions (chat history) — initialized from localStorage
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadSessions())
@@ -274,6 +295,16 @@ export function OnlineChat() {
     if (filteredModels.some((m) => m.value === selectedModel)) return selectedModel
     return filteredModels[0]?.value || ''
   }, [filteredModels, selectedModel])
+
+  const imageProvider = useMemo(() => getImageProvider(activeModel), [activeModel])
+  const imageSizeOptions = useMemo(() => IMAGE_SIZE_OPTIONS[imageProvider], [imageProvider])
+
+  useEffect(() => {
+    const options = IMAGE_SIZE_OPTIONS[imageProvider]
+    if (!options.includes(imageSize)) {
+      setImageSize(options[0])
+    }
+  }, [imageProvider, imageSize])
 
   const resolveRequestGroup = useCallback(
     (modelValue = activeModel) => {
@@ -580,20 +611,31 @@ export function OnlineChat() {
           throw new Error('Failed to load API key')
         }
         const token = rawKey.startsWith('sk-') ? rawKey : `sk-${rawKey}`
-        const res = await sendTokenImageGeneration({
-          token,
-          model: activeModel,
-          prompt,
-          size: imageSize,
-        })
+        const count = Math.max(1, Number(imageCount) || 1)
+        const requests = Array.from({ length: count }, () =>
+          sendTokenImageGeneration({
+            token,
+            model: activeModel,
+            prompt,
+            group: requestGroup,
+            size: imageSize,
+            n: 1,
+            quality: imageProvider === 'gpt' ? imageQuality : undefined,
+            output_format: imageOutputFormat !== 'auto' ? imageOutputFormat : undefined,
+            images: pendingImages,
+            aspect_ratio: imageProvider === 'gemini' ? imageSize : undefined,
+          })
+        )
+        const results = await Promise.all(requests)
+        const images = results.flatMap((item) => item.data ?? [])
         setMessages((prev) => {
           const updated = [...prev]
           const last = updated[updated.length - 1]
           if (last?.from === 'assistant') {
             updated[updated.length - 1] = {
               ...last,
-              content: res.data?.[0]?.revised_prompt || prompt,
-              images: res.data,
+              content: images[0]?.revised_prompt || prompt,
+              images,
               status: 'complete',
             }
           }
@@ -614,7 +656,7 @@ export function OnlineChat() {
         setIsGenerating(false)
       }
     },
-    [activeModel, selectedApiKeyId, resolveRequestGroup, imageSize]
+    [activeModel, selectedApiKeyId, resolveRequestGroup, imageSize, imageCount, imageQuality, imageOutputFormat, imageProvider, pendingImages]
   )
 
   // Handle submit
@@ -1008,7 +1050,7 @@ export function OnlineChat() {
             </div>
 
             {/* Controls row — evenly distributed */}
-            <div className={cn('mt-2 grid gap-2', chatMode === 'image' ? 'grid-cols-5' : 'grid-cols-4')}>
+            <div className={cn('mt-2 grid gap-2', chatMode === 'image' ? 'grid-cols-2 md:grid-cols-6' : 'grid-cols-4')}>
               {/* Mode switch */}
               <div className="flex items-center rounded-lg border p-0.5">
                 <Button
@@ -1038,9 +1080,54 @@ export function OnlineChat() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {IMAGE_SIZES.map((s) => (
+                    {imageSizeOptions.map((s) => (
                       <SelectItem key={s} value={s} className="text-xs">
                         {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {chatMode === 'image' && imageProvider === 'gpt' && (
+                <Select value={imageQuality} onValueChange={(value) => setImageQuality(value ?? 'auto')}>
+                  <SelectTrigger className="h-7 w-full text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {IMAGE_QUALITY_OPTIONS.map((quality) => (
+                      <SelectItem key={quality} value={quality} className="text-xs">
+                        {quality}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {chatMode === 'image' && (
+                <Select value={imageCount} onValueChange={(value) => setImageCount(value ?? '1')}>
+                  <SelectTrigger className="h-7 w-full text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {IMAGE_COUNT_OPTIONS.map((count) => (
+                      <SelectItem key={count} value={count} className="text-xs">
+                        {count}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {chatMode === 'image' && (
+                <Select value={imageOutputFormat} onValueChange={(value) => setImageOutputFormat(value ?? 'auto')}>
+                  <SelectTrigger className="h-7 w-full text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {IMAGE_OUTPUT_FORMATS.map((format) => (
+                      <SelectItem key={format} value={format} className="text-xs">
+                        {format}
                       </SelectItem>
                     ))}
                   </SelectContent>
