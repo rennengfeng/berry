@@ -131,7 +131,7 @@ const IMAGE_COUNT_OPTIONS = ['1', '2', '3', '4'] as const
 const IMAGE_QUALITY_OPTIONS = ['auto', 'low', 'medium', 'high'] as const
 const IMAGE_OUTPUT_FORMATS = ['auto', 'png', 'jpeg', 'webp'] as const
 const IMAGE_ASPECT_OPTIONS: ImageAspectRatio[] = ['auto', '21:9', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16', '9:21']
-const QWEN_RESOLUTION_OPTIONS: ImageResolutionTier[] = ['1K', '2K']
+const QWEN_RESOLUTION_OPTIONS: ImageResolutionTier[] = ['1K', '2K', '4K']
 const GPT_RESOLUTION_OPTIONS: ImageResolutionTier[] = ['1K', '2K', '4K']
 const GEMINI_RESOLUTION_OPTIONS: ImageResolutionTier[] = ['1K', '2K', '4K']
 
@@ -213,7 +213,7 @@ function getModelCapability(model: ModelOption): ChatMode | 'video' | 'audio' {
 }
 
 function getImageAspectOptions(provider: ImageProvider): ImageAspectRatio[] {
-  if (provider === 'gpt') return ['auto', '1:1', '3:2', '2:3', '16:9', '9:16']
+  if (provider === 'gpt') return ['auto', '1:1', '21:9', '16:9', '3:2', '4:3', '3:4', '2:3', '9:16', '9:21']
   if (provider === 'qwen') return ['1:1', '21:9', '16:9', '3:2', '4:3', '3:4', '2:3', '9:16', '9:21']
   if (provider === 'gemini') return ['1:1', '21:9', '16:9', '3:2', '4:3', '3:4', '2:3', '9:16', '9:21']
   return IMAGE_ASPECT_OPTIONS
@@ -221,7 +221,7 @@ function getImageAspectOptions(provider: ImageProvider): ImageAspectRatio[] {
 
 function getImageResolutionOptions(provider: ImageProvider, model: string): ImageResolutionTier[] {
   if (provider === 'gpt') return GPT_RESOLUTION_OPTIONS
-  if (provider === 'gemini' && !/4k/i.test(model)) return ['1K', '2K']
+  if (provider === 'gemini' && !/4k/i.test(model)) return ['1K', '2K', '4K']
   if (provider === 'gemini') return GEMINI_RESOLUTION_OPTIONS
   if (provider === 'qwen') return QWEN_RESOLUTION_OPTIONS
   return ['1K', '2K', '4K']
@@ -282,6 +282,7 @@ function resolveImageRequestSettings(
   }
   if (provider === 'gemini') {
     const safeResolution = getImageResolutionOptions(provider, model).includes(resolution) ? resolution : '2K'
+    const detail = resolveGenericSize(aspectRatio, safeResolution)
     return {
       size: aspectRatio,
       quality: safeResolution,
@@ -289,7 +290,7 @@ function resolveImageRequestSettings(
       resolution: safeResolution,
       ratio: aspectRatio,
       summary: `${aspectRatio} · ${safeResolution} · ${selectedCount}`,
-      detail: aspectRatio,
+      detail,
     }
   }
   const size = resolveGenericSize(aspectRatio, resolution)
@@ -309,6 +310,34 @@ function formatImageSize(size: string): string {
   return size.replace('*', '×')
 }
 
+function formatImageQualityLabel(quality: string): string {
+  switch (quality) {
+    case 'low':
+      return '低'
+    case 'medium':
+      return '中'
+    case 'high':
+      return '高'
+    case 'auto':
+      return '自动'
+    default:
+      return quality
+  }
+}
+
+function formatImageResolutionLabel(resolution: ImageResolutionTier): string {
+  switch (resolution) {
+    case '1K':
+      return '标清 1K'
+    case '2K':
+      return '高清 2K'
+    case '4K':
+      return '超清 4K'
+    default:
+      return resolution
+  }
+}
+
 function getImageSizePreview(size: string): { width: string; height: string } | null {
   const match = size.match(/^(\d+)[x*](\d+)$/)
   if (!match) return null
@@ -317,11 +346,23 @@ function getImageSizePreview(size: string): { width: string; height: string } | 
 
 function imageChipClass(selected: boolean): string {
   return cn(
-    'inline-flex h-10 min-w-0 items-center justify-center rounded-xl border px-3 text-sm transition',
+    'inline-flex min-w-0 items-center justify-center rounded-lg border text-sm transition',
     selected
-      ? 'border-primary/50 bg-primary/15 text-foreground shadow-sm'
-      : 'border-border/70 bg-background/70 text-muted-foreground hover:border-primary/30 hover:bg-primary/10 hover:text-foreground'
+      ? 'border-violet-400/70 bg-violet-500/20 text-white shadow-[0_0_0_1px_rgba(139,92,246,0.25)]'
+      : 'border-white/10 bg-white/[0.04] text-white/60 hover:border-violet-400/40 hover:bg-violet-500/10 hover:text-white'
   )
+}
+
+function aspectPreviewClass(ratio: ImageAspectRatio): string {
+  if (ratio === 'auto') return 'aspect-square w-7'
+  const [wRaw, hRaw] = ratio.split(':')
+  const w = Math.max(1, Number(wRaw) || 1)
+  const h = Math.max(1, Number(hRaw) || 1)
+  if (w / h >= 2) return 'h-3 w-9'
+  if (w > h) return 'h-4 w-8'
+  if (w === h) return 'h-6 w-6'
+  if (h / w >= 2) return 'h-8 w-3'
+  return 'h-8 w-5'
 }
 
 function splitGroupList(group?: string): string[] {
@@ -1443,19 +1484,31 @@ export function OnlineChat() {
                     <SlidersHorizontalIcon className="h-3.5 w-3.5" />
                     <span className="whitespace-nowrap">{imageRequestSettings.summary.replace(/ · /g, ' ')}</span>
                   </PopoverTrigger>
-                  <PopoverContent side="top" align="end" sideOffset={10} className="w-[min(92vw,34rem)] rounded-2xl p-4 shadow-xl">
+                  <PopoverContent
+                    side="top"
+                    align="end"
+                    sideOffset={10}
+                    className="w-[min(92vw,36rem)] rounded-2xl border border-white/10 bg-[#151124]/95 p-4 text-white shadow-2xl backdrop-blur-xl"
+                  >
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <div className="text-xs text-muted-foreground">{t('Aspect ratio')}</div>
-                        <div className="grid grid-cols-5 gap-2">
+                        <div className="text-xs text-white/55">{t('Aspect ratio')}</div>
+                        <div className="flex flex-wrap gap-1.5">
                           {imageAspectOptions.map((ratio) => (
                             <button
                               key={ratio}
                               type="button"
-                              className={cn(imageChipClass(imageAspectRatio === ratio), 'flex-col gap-1 px-2')}
+                              className={cn(imageChipClass(imageAspectRatio === ratio), 'h-[3.7rem] w-[4.15rem] flex-col gap-1 px-1.5')}
                               onClick={() => setImageAspectRatio(ratio)}
                             >
-                              <span className="text-xs leading-none">{ratio === 'auto' ? t('Auto') : ratio}</span>
+                              <span
+                                className={cn(
+                                  'rounded-[3px] border',
+                                  aspectPreviewClass(ratio),
+                                  imageAspectRatio === ratio ? 'border-violet-200 bg-violet-200/40' : 'border-white/30 bg-white/10'
+                                )}
+                              />
+                              <span className="text-[11px] leading-none">{ratio === 'auto' ? t('Auto') : ratio}</span>
                             </button>
                           ))}
                         </div>
@@ -1463,32 +1516,32 @@ export function OnlineChat() {
 
                       {imageProvider === 'gpt' ? (
                         <div className="space-y-2">
-                          <div className="text-xs text-muted-foreground">{t('Quality')}</div>
+                          <div className="text-xs text-white/55">{t('Quality')}</div>
                           <div className="grid grid-cols-4 gap-2">
                             {IMAGE_QUALITY_OPTIONS.map((quality) => (
                               <button
                                 key={quality}
                                 type="button"
-                                className={imageChipClass(imageQuality === quality)}
+                                className={cn(imageChipClass(imageQuality === quality), 'h-10 px-3')}
                                 onClick={() => setImageQuality(quality)}
                               >
-                                {quality}
+                                {formatImageQualityLabel(quality)}
                               </button>
                             ))}
                           </div>
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          <div className="text-xs text-muted-foreground">{t('Resolution')}</div>
+                          <div className="text-xs text-white/55">{t('Resolution')}</div>
                           <div className="grid grid-cols-3 gap-2">
                             {imageResolutionOptions.map((resolution) => (
                               <button
                                 key={resolution}
                                 type="button"
-                                className={imageChipClass(imageResolution === resolution)}
+                                className={cn(imageChipClass(imageResolution === resolution), 'h-10 px-3')}
                                 onClick={() => setImageResolution(resolution)}
                               >
-                                {resolution}
+                                {formatImageResolutionLabel(resolution)}
                               </button>
                             ))}
                           </div>
@@ -1496,13 +1549,13 @@ export function OnlineChat() {
                       )}
 
                       <div className="space-y-2">
-                        <div className="text-xs text-muted-foreground">{t('Count')}</div>
+                        <div className="text-xs text-white/55">{t('Count')}</div>
                         <div className="grid grid-cols-4 gap-2">
                           {IMAGE_COUNT_OPTIONS.map((count) => (
                             <button
                               key={count}
                               type="button"
-                              className={imageChipClass(imageCount === count)}
+                              className={cn(imageChipClass(imageCount === count), 'h-10 px-3')}
                               onClick={() => setImageCount(count)}
                             >
                               {count}
@@ -1512,13 +1565,13 @@ export function OnlineChat() {
                       </div>
 
                       <div className="space-y-2">
-                        <div className="text-xs text-muted-foreground">{t('Output format')}</div>
+                        <div className="text-xs text-white/55">{t('Output format')}</div>
                         <div className="grid grid-cols-4 gap-2">
                           {IMAGE_OUTPUT_FORMATS.map((format) => (
                             <button
                               key={format}
                               type="button"
-                              className={imageChipClass(imageOutputFormat === format)}
+                              className={cn(imageChipClass(imageOutputFormat === format), 'h-10 px-3')}
                               onClick={() => setImageOutputFormat(format)}
                             >
                               {format}
@@ -1527,15 +1580,15 @@ export function OnlineChat() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 text-xs text-muted-foreground">
-                        <div className="rounded-xl border bg-background/70 px-3 py-2">
+                      <div className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 text-xs text-white/45">
+                        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
                           <span className="mr-2">W</span>
-                          <span className="text-foreground">{imageSizePreview?.width ?? formatImageSize(imageRequestSettings.detail)}</span>
+                          <span className="text-white">{imageSizePreview?.width ?? formatImageSize(imageRequestSettings.detail)}</span>
                         </div>
-                        <span className="text-muted-foreground">×</span>
-                        <div className="rounded-xl border bg-background/70 px-3 py-2">
+                        <span className="text-white/45">×</span>
+                        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
                           <span className="mr-2">H</span>
-                          <span className="text-foreground">{imageSizePreview?.height ?? formatImageSize(imageRequestSettings.detail)}</span>
+                          <span className="text-white">{imageSizePreview?.height ?? formatImageSize(imageRequestSettings.detail)}</span>
                         </div>
                         <span>PX</span>
                       </div>
