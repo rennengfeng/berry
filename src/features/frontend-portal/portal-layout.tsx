@@ -132,10 +132,14 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
   const { data: noticeData } = useQuery({
     queryKey: ['portal-notice-bell'],
     queryFn: async () => {
-      const res = await api.get('/api/notice', {
-        skipErrorHandler: true,
-      } as Record<string, unknown>)
-      return typeof res.data?.data === 'string' && res.data.data.trim() ? res.data.data : null
+      try {
+        const res = await api.get('/api/notice', {
+          skipErrorHandler: true,
+        } as Record<string, unknown>)
+        return typeof res.data?.data === 'string' && res.data.data.trim() ? res.data.data : null
+      } catch {
+        return null
+      }
     },
     staleTime: 60_000,
   })

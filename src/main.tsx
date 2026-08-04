@@ -89,6 +89,9 @@ const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error) => {
       if (error instanceof AxiosError) {
+        if (error.config?.skipErrorHandler) {
+          return
+        }
         if (error.response?.status === 401) {
           const currentPath = router.history.location.pathname
           if (isPublicAuthPath(currentPath)) {
