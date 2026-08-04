@@ -61,6 +61,7 @@ type RawPricingModel = {
   billing_mode?: string
   billing_unit?: string
   billing_expr?: string
+  dashscope_native_pricing?: FrontendModel['dashscope_native_pricing']
 }
 
 type RawPricingResponse = {
@@ -140,6 +141,7 @@ export async function getFrontendModels(): Promise<FrontendModelsPayload> {
       billing_mode: m.billing_mode,
       billing_unit: m.billing_unit,
       billing_expr: m.billing_expr,
+      dashscope_native_pricing: m.dashscope_native_pricing,
     }
   })
 

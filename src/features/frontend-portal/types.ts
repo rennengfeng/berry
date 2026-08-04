@@ -187,6 +187,16 @@ export type FrontendPortalSubscriptionHubModule = {
   enabled: boolean
 }
 
+export type DashScopeNativePricing = {
+  unit: string
+  price?: number
+  prices?: Record<string, number>
+  input_price?: number
+  output_price?: number
+  cache_read_price?: number
+  cache_write_price?: number
+}
+
 export type FrontendModel = {
   model_name: string
   description?: string
@@ -211,6 +221,7 @@ export type FrontendModel = {
   billing_mode?: string
   billing_unit?: string
   billing_expr?: string
+  dashscope_native_pricing?: DashScopeNativePricing
 }
 
 export type FrontendModelsPayload = {

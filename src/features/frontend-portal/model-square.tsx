@@ -106,6 +106,29 @@ function formatFixedPrice(
   return formatCurrencyAmount(modelPrice * r, symbol)
 }
 
+function isDashScopeNativePricingModel(model: FrontendModel): boolean {
+  return Boolean(model.dashscope_native_pricing?.unit)
+}
+
+function dashScopeNativeUnitLabel(unit: string | undefined, t: (key: string) => string): string {
+  switch ((unit || '').trim()) {
+    case 'token_input_output':
+      return t('Per 1M tokens')
+    case 'image':
+      return t('per image')
+    case 'video_second':
+      return t('per video second')
+    case 'audio_second':
+      return t('per audio second')
+    case 'character':
+      return t('per character')
+    case 'video_task':
+      return t('per video task')
+    default:
+      return t('per request')
+  }
+}
+
 function isFixedUnitModel(model: FrontendModel): boolean {
   return (
     model.quota_type === 1 ||
@@ -128,6 +151,51 @@ const TIER_PRICE_FIELDS: TierPriceField[] = [
   { field: 'cacheReadPrice', labelKey: 'Cache Read', tone: 'cacheRead' },
   { field: 'cacheCreatePrice', labelKey: 'Cache Write', tone: 'cacheWrite' },
 ]
+
+function dashScopeNativePriceColumns(
+  model: FrontendModel,
+  ratio: number,
+  t: (key: string) => string
+): CardPriceColumn[] {
+  const spec = model.dashscope_native_pricing
+  if (!spec) return []
+  const unit = dashScopeNativeUnitLabel(spec.unit, t)
+  const priceText = (value: number | undefined) =>
+    value === undefined ? '-' : `${formatCurrencyAmount(Number(value) * ratio, '¥')} / ${unit}`
+
+  if (spec.unit === 'token_input_output') {
+    const columns: CardPriceColumn[] = [
+      { key: 'native-input', labelKey: 'Input', site: priceText(spec.input_price), official: '-', tone: 'input' },
+      { key: 'native-output', labelKey: 'Output', site: priceText(spec.output_price), official: '-', tone: 'output' },
+      { key: 'native-cache-read', labelKey: 'Cache Read', site: priceText(spec.cache_read_price), official: '-', tone: 'cacheRead' },
+      { key: 'native-cache-write', labelKey: 'Cache Write', site: priceText(spec.cache_write_price), official: '-', tone: 'cacheWrite' },
+    ]
+    return columns.filter((item) => item.site !== '-')
+  }
+
+  const conditional = Object.entries(spec.prices ?? {})
+  if (conditional.length > 0) {
+    return conditional
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map<CardPriceColumn>(([condition, price]) => ({
+        key: `native-${condition}`,
+        labelKey: condition,
+        site: priceText(price),
+        official: '-',
+        tone: 'request',
+      }))
+  }
+
+  return [
+    {
+      key: 'native-price',
+      labelKey: 'DashScope Native',
+      site: priceText(spec.price),
+      official: '-',
+      tone: 'request',
+    },
+  ]
+}
 
 function getDynamicTiers(model: FrontendModel): ParsedTier[] {
   if (model.billing_mode !== 'tiered_expr' || !model.billing_expr) return []
@@ -184,6 +252,10 @@ function cardPriceColumns(
   ratio: number,
   t: (key: string) => string
 ): CardPriceColumn[] {
+  if (isDashScopeNativePricingModel(model)) {
+    return dashScopeNativePriceColumns(model, ratio, t)
+  }
+
   if (isFixedUnitModel(model)) {
     const unit = fixedBillingUnitLabel(model, t)
     return [
@@ -490,6 +562,9 @@ export function ModelSquare() {
     selectedDynamicTiers.find(
       (tier) => tier.label === tierSelection[selectedKey]
     ) ?? selectedDynamicTiers[0]
+  const selectedNativePriceColumns = selectedModel
+    ? dashScopeNativePriceColumns(selectedModel.model, selectedModel.ratio, t)
+    : []
   const selectedTierFields = TIER_PRICE_FIELDS.filter((field) =>
     selectedDynamicTiers.some((tier) => {
       const value = Number(tier[field.field] ?? 0)
@@ -828,7 +903,33 @@ export function ModelSquare() {
                 {t('Price per group')}
               </p>
 
-              {selectedDynamicTiers.length > 0 ? (
+              {selectedNativePriceColumns.length > 0 ? (
+                <div className='space-y-3'>
+                  <div className='flex flex-wrap items-center gap-2 text-xs'>
+                    <span className='rounded-md bg-white/[0.06] px-2 py-0.5 font-medium text-white/70'>
+                      {selectedModel.group || t('Default')}
+                    </span>
+                    <span className='rounded-md bg-purple-500/10 px-2 py-0.5 text-purple-300'>
+                      {t('DashScope Native')}
+                    </span>
+                  </div>
+                  <div className='grid gap-2 sm:grid-cols-2'>
+                    {selectedNativePriceColumns.map((column) => (
+                      <div
+                        key={column.key}
+                        className={`rounded-lg border bg-white/[0.02] px-3 py-2 ${priceToneClass(column.tone)}`}
+                      >
+                        <div className='text-[10px] leading-tight font-medium text-current/60 uppercase'>
+                          {t(column.labelKey)}
+                        </div>
+                        <div className='mt-1 text-sm font-semibold break-words text-current'>
+                          {column.site}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : selectedDynamicTiers.length > 0 ? (
                 <div className='space-y-3'>
                   <div className='flex flex-wrap items-center gap-2 text-xs'>
                     <span className='rounded-md bg-white/[0.06] px-2 py-0.5 font-medium text-white/70'>

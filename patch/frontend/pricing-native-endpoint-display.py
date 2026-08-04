@@ -500,6 +500,197 @@ def patch_model_details() -> None:
     write(rel, text)
 
 
+def patch_frontend_portal_native_pricing() -> None:
+    rel = "src/features/frontend-portal/types.ts"
+    text = read(rel)
+    if "export type DashScopeNativePricing = {" not in text:
+        anchor = "export type FrontendModel = {\n"
+        insert = """export type DashScopeNativePricing = {
+  unit: string
+  price?: number
+  prices?: Record<string, number>
+  input_price?: number
+  output_price?: number
+  cache_read_price?: number
+  cache_write_price?: number
+}
+
+"""
+        if anchor not in text:
+            raise SystemExit("pricing native endpoint display patch failed: frontend portal model type anchor not found")
+        text = text.replace(anchor, insert + anchor, 1)
+    if "dashscope_native_pricing?: DashScopeNativePricing" not in text:
+        anchor = "  billing_expr?: string\n"
+        if anchor not in text:
+            raise SystemExit("pricing native endpoint display patch failed: frontend portal billing_expr anchor not found")
+        text = text.replace(anchor, anchor + "  dashscope_native_pricing?: DashScopeNativePricing\n", 1)
+    write(rel, text)
+
+    rel = "src/features/frontend-portal/api.ts"
+    text = read(rel)
+    if "dashscope_native_pricing?: FrontendModel['dashscope_native_pricing']" not in text:
+        anchor = "  billing_expr?: string\n"
+        if anchor not in text:
+            raise SystemExit("pricing native endpoint display patch failed: frontend portal raw pricing anchor not found")
+        text = text.replace(anchor, anchor + "  dashscope_native_pricing?: FrontendModel['dashscope_native_pricing']\n", 1)
+    if "dashscope_native_pricing: m.dashscope_native_pricing" not in text:
+        anchor = "      billing_expr: m.billing_expr,\n"
+        if anchor not in text:
+            raise SystemExit("pricing native endpoint display patch failed: frontend portal mapping anchor not found")
+        text = text.replace(anchor, anchor + "      dashscope_native_pricing: m.dashscope_native_pricing,\n", 1)
+    write(rel, text)
+
+    rel = "src/features/frontend-portal/model-square.tsx"
+    text = read(rel)
+    if "function isDashScopeNativePricingModel(model: FrontendModel): boolean" not in text:
+        anchor = """function isFixedUnitModel(model: FrontendModel): boolean {
+"""
+        helper = r"""function isDashScopeNativePricingModel(model: FrontendModel): boolean {
+  return Boolean(model.dashscope_native_pricing?.unit)
+}
+
+function dashScopeNativeUnitLabel(unit: string | undefined, t: (key: string) => string): string {
+  switch ((unit || '').trim()) {
+    case 'token_input_output':
+      return t('Per 1M tokens')
+    case 'image':
+      return t('per image')
+    case 'video_second':
+      return t('per video second')
+    case 'audio_second':
+      return t('per audio second')
+    case 'character':
+      return t('per character')
+    case 'video_task':
+      return t('per video task')
+    default:
+      return t('per request')
+  }
+}
+
+"""
+        if anchor not in text:
+            raise SystemExit("pricing native endpoint display patch failed: model-square fixed unit anchor not found")
+        text = text.replace(anchor, helper + anchor, 1)
+    if "function dashScopeNativePriceColumns(" not in text:
+        anchor = """const TIER_PRICE_FIELDS: TierPriceField[] = [
+  { field: 'inputPrice', labelKey: 'Input', tone: 'input' },
+  { field: 'outputPrice', labelKey: 'Output', tone: 'output' },
+  { field: 'cacheReadPrice', labelKey: 'Cache Read', tone: 'cacheRead' },
+  { field: 'cacheCreatePrice', labelKey: 'Cache Write', tone: 'cacheWrite' },
+]
+"""
+        helper = r"""
+function dashScopeNativePriceColumns(
+  model: FrontendModel,
+  ratio: number,
+  t: (key: string) => string
+): CardPriceColumn[] {
+  const spec = model.dashscope_native_pricing
+  if (!spec) return []
+  const unit = dashScopeNativeUnitLabel(spec.unit, t)
+  const priceText = (value: number | undefined) =>
+    value === undefined ? '-' : `${formatCurrencyAmount(Number(value) * ratio, '¥')} / ${unit}`
+
+  if (spec.unit === 'token_input_output') {
+    const columns: CardPriceColumn[] = [
+      { key: 'native-input', labelKey: 'Input', site: priceText(spec.input_price), official: '-', tone: 'input' },
+      { key: 'native-output', labelKey: 'Output', site: priceText(spec.output_price), official: '-', tone: 'output' },
+      { key: 'native-cache-read', labelKey: 'Cache Read', site: priceText(spec.cache_read_price), official: '-', tone: 'cacheRead' },
+      { key: 'native-cache-write', labelKey: 'Cache Write', site: priceText(spec.cache_write_price), official: '-', tone: 'cacheWrite' },
+    ]
+    return columns.filter((item) => item.site !== '-')
+  }
+
+  const conditional = Object.entries(spec.prices ?? {})
+  if (conditional.length > 0) {
+    return conditional
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map<CardPriceColumn>(([condition, price]) => ({
+        key: `native-${condition}`,
+        labelKey: condition,
+        site: priceText(price),
+        official: '-',
+        tone: 'request',
+      }))
+  }
+
+  return [
+    {
+      key: 'native-price',
+      labelKey: 'DashScope Native',
+      site: priceText(spec.price),
+      official: '-',
+      tone: 'request',
+    },
+  ]
+}
+"""
+        if anchor not in text:
+            raise SystemExit("pricing native endpoint display patch failed: model-square tier fields anchor not found")
+        text = text.replace(anchor, anchor + helper, 1)
+    if "if (isDashScopeNativePricingModel(model))" not in text:
+        anchor = """): CardPriceColumn[] {
+  if (isFixedUnitModel(model)) {
+"""
+        if anchor not in text:
+            raise SystemExit("pricing native endpoint display patch failed: model-square card price anchor not found")
+        text = text.replace(anchor, """): CardPriceColumn[] {
+  if (isDashScopeNativePricingModel(model)) {
+    return dashScopeNativePriceColumns(model, ratio, t)
+  }
+
+  if (isFixedUnitModel(model)) {
+""", 1)
+    if "const selectedNativePriceColumns = selectedModel" not in text:
+        anchor = """  const selectedActiveTier =
+    selectedDynamicTiers.find(
+      (tier) => tier.label === tierSelection[selectedKey]
+    ) ?? selectedDynamicTiers[0]
+"""
+        insert = anchor + """  const selectedNativePriceColumns = selectedModel
+    ? dashScopeNativePriceColumns(selectedModel.model, selectedModel.ratio, t)
+    : []
+"""
+        if anchor not in text:
+            raise SystemExit("pricing native endpoint display patch failed: model-square selected tier anchor not found")
+        text = text.replace(anchor, insert, 1)
+    if "{selectedNativePriceColumns.length > 0 ? (" not in text:
+        anchor = "              {selectedDynamicTiers.length > 0 ? (\n"
+        block = r"""              {selectedNativePriceColumns.length > 0 ? (
+                <div className='space-y-3'>
+                  <div className='flex flex-wrap items-center gap-2 text-xs'>
+                    <span className='rounded-md bg-white/[0.06] px-2 py-0.5 font-medium text-white/70'>
+                      {selectedModel.group || t('Default')}
+                    </span>
+                    <span className='rounded-md bg-purple-500/10 px-2 py-0.5 text-purple-300'>
+                      {t('DashScope Native')}
+                    </span>
+                  </div>
+                  <div className='grid gap-2 sm:grid-cols-2'>
+                    {selectedNativePriceColumns.map((column) => (
+                      <div
+                        key={column.key}
+                        className={`rounded-lg border bg-white/[0.02] px-3 py-2 ${priceToneClass(column.tone)}`}
+                      >
+                        <div className='text-[10px] leading-tight font-medium text-current/60 uppercase'>
+                          {t(column.labelKey)}
+                        </div>
+                        <div className='mt-1 text-sm font-semibold break-words text-current'>
+                          {column.site}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : selectedDynamicTiers.length > 0 ? (
+"""
+        if anchor not in text:
+            raise SystemExit("pricing native endpoint display patch failed: model-square pricing section anchor not found")
+        text = text.replace(anchor, block, 1)
+    write(rel, text)
+
+
 def main() -> None:
     patch_types()
     patch_price_lib()
@@ -507,6 +698,7 @@ def main() -> None:
     patch_model_card()
     patch_pricing_columns()
     patch_model_details()
+    patch_frontend_portal_native_pricing()
     print("applied pricing native endpoint display frontend patch")
 
 
