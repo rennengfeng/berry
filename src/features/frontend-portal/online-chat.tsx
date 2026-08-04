@@ -48,7 +48,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -194,6 +193,23 @@ function getImageProvider(model: string): ImageProvider {
   if (value.includes('gpt-image') || value.includes('dall-e')) return 'gpt'
   if (value.includes('gemini')) return 'gemini'
   return 'generic'
+}
+
+function getModelCapability(model: ModelOption): ChatMode | 'video' | 'audio' {
+  const name = model.value.toLowerCase()
+  const endpoints = (model.endpoints ?? []).join(' ').toLowerCase()
+  const haystack = `${name} ${endpoints}`
+
+  if (/(^|[/_\s-])(audio|tts|asr|speech|voice|music|song)([/_\s-]|$)/i.test(haystack) || /(cosyvoice|whisper|qwen-audio)/i.test(haystack)) {
+    return 'audio'
+  }
+  if (/(^|[/_\s-])(video|t2v|i2v|r2v|kf2v)([/_\s-]|$)/i.test(haystack) || /(happyhorse|wanx?\d|sora|veo|kling|hailuo)/i.test(haystack)) {
+    return 'video'
+  }
+  if (/(^|[/_\s-])(image|images|text2image|image2image)([/_\s-]|$)/i.test(haystack) || /(qwen-image|gpt-image|dall-e|imagen|flux|midjourney|stable-diffusion)/i.test(haystack)) {
+    return 'image'
+  }
+  return 'chat'
 }
 
 function getImageAspectOptions(provider: ImageProvider): ImageAspectRatio[] {
@@ -518,12 +534,7 @@ export function OnlineChat() {
         return selectedGroups.some((group) => group === 'auto' || m.groups?.includes(group))
       })
     }
-    // Simple name-based filter: contains "image" → image model, otherwise → chat model
-    if (chatMode === 'image') {
-      filtered = filtered.filter((m) => /image/i.test(m.value))
-    } else {
-      filtered = filtered.filter((m) => !/image/i.test(m.value))
-    }
+    filtered = filtered.filter((m) => getModelCapability(m) === chatMode)
     return filtered
   }, [models, selectedGroups, chatMode])
 
@@ -1366,7 +1377,7 @@ export function OnlineChat() {
                   <ChevronUpIcon className="h-3.5 w-3.5 shrink-0 opacity-60" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-60 rounded-2xl p-1.5 shadow-xl">
-                  <DropdownMenuLabel className="px-2 py-1.5">创作类型</DropdownMenuLabel>
+                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">创作类型</div>
                   {creationModeOptions.map((option, index) => (
                     <Fragment key={option.key}>
                       {index === 2 && <DropdownMenuSeparator />}
