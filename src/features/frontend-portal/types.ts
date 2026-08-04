@@ -258,6 +258,8 @@ export type ApiKeySummary = {
   key?: string
   status: number
   group?: string
+  model_limits_enabled?: boolean
+  model_limits?: string
   remain_quota: number
   unlimited_quota: boolean
 }

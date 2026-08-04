@@ -580,9 +580,19 @@ async function fetchImageApiJson(
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
-  const payload = (await res.json().catch(() => ({}))) as ImageTaskPayload
+  const rawText = await res.text().catch(() => '')
+  let payload: ImageTaskPayload = {}
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText) as ImageTaskPayload
+    } catch {
+      payload = {}
+    }
+  }
   if (!res.ok) {
-    throw new Error(payload.error?.message || payload.output?.message || `HTTP ${res.status}`)
+    const message = payload.error?.message || payload.output?.message || rawText || `HTTP ${res.status}`
+    const detail = `${method} ${path} -> HTTP ${res.status}${res.url ? ` (${res.url})` : ''}`
+    throw new Error(`${message}\n${detail}`)
   }
   return payload
 }

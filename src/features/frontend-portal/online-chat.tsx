@@ -102,7 +102,7 @@ type ChatSession = {
 }
 
 type ModelOption = { label: string; value: string; groups?: string[]; endpoints?: string[] }
-type ApiKeyOption = { label: string; value: string; groups: string[] }
+type ApiKeyOption = { label: string; value: string; groups: string[]; modelLimitsEnabled?: boolean; modelLimits?: string[] }
 
 type ImageProvider = 'qwen' | 'gpt' | 'gemini' | 'generic'
 type ImageAspectRatio =
@@ -200,7 +200,7 @@ function getModelCapability(model: ModelOption): ChatMode | 'video' | 'audio' {
   const endpointList = (model.endpoints ?? []).map((item) => item.toLowerCase())
 
   if (endpointList.length > 0) {
-    if (endpointList.includes('image-generation')) return 'image'
+    if (endpointList.includes('image-generation') || endpointList.includes('image-generation-async')) return 'image'
     if (endpointList.some((item) => item.includes('video'))) return 'video'
     if (endpointList.some((item) => /(audio|speech|tts|asr)/i.test(item))) return 'audio'
   }
@@ -585,9 +585,13 @@ export function OnlineChat() {
         return selectedGroups.some((group) => group === 'auto' || m.groups?.includes(group))
       })
     }
+    if (selectedApiKey?.modelLimitsEnabled) {
+      const allowed = new Set(selectedApiKey.modelLimits ?? [])
+      filtered = filtered.filter((m) => allowed.has(m.value))
+    }
     filtered = filtered.filter((m) => getModelCapability(m) === chatMode)
     return filtered
-  }, [models, selectedGroups, chatMode])
+  }, [models, selectedGroups, selectedApiKey, chatMode])
 
   const activeModel = useMemo(() => {
     if (filteredModels.some((m) => m.value === selectedModel)) return selectedModel
@@ -687,10 +691,16 @@ export function OnlineChat() {
           .filter((token) => token.status === 1)
           .map((token) => {
             const groups = splitGroupList(token.group)
+            const modelLimits = (token.model_limits || '')
+              .split(',')
+              .map((item) => item.trim())
+              .filter(Boolean)
             return {
               label: token.name || groups.join(',') || 'default',
               value: String(token.id),
               groups: groups.length > 0 ? groups : ['default'],
+              modelLimitsEnabled: Boolean(token.model_limits_enabled),
+              modelLimits,
             }
           })
         setApiKeyOptions(keyOptions)
