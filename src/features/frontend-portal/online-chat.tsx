@@ -389,11 +389,40 @@ function stripBase64FromContent(content: string | ContentPart[]): string | Conte
   })
 }
 
+function isChatMessage(value: unknown): value is ChatMessage {
+  if (!value || typeof value !== 'object') return false
+  const item = value as Record<string, unknown>
+  return (
+    typeof item.key === 'string' &&
+    (item.from === 'user' || item.from === 'assistant') &&
+    (typeof item.content === 'string' || Array.isArray(item.content)) &&
+    (item.status === 'complete' ||
+      item.status === 'loading' ||
+      item.status === 'streaming' ||
+      item.status === 'error')
+  )
+}
+
+function isChatSession(value: unknown): value is ChatSession {
+  if (!value || typeof value !== 'object') return false
+  const item = value as Record<string, unknown>
+  return (
+    typeof item.id === 'string' &&
+    typeof item.title === 'string' &&
+    Array.isArray(item.messages) &&
+    item.messages.every(isChatMessage) &&
+    (item.mode === 'chat' || item.mode === 'image') &&
+    typeof item.createdAt === 'number'
+  )
+}
+
 function loadSessions(): ChatSession[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
-    return JSON.parse(raw) as ChatSession[]
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(isChatSession)
   } catch {
     return []
   }

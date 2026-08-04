@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useEffect } from 'react'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -36,6 +37,14 @@ function getHttpStatus(error: unknown): number | undefined {
   return typeof status === 'number' ? status : undefined
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  if (typeof error !== 'object' || error === null) return ''
+  const message = (error as Record<string, unknown>).message
+  return typeof message === 'string' ? message : ''
+}
+
 export function GeneralError({
   className,
   minimal = false,
@@ -45,6 +54,7 @@ export function GeneralError({
   const navigate = useNavigate()
   const { history } = useRouter()
   const status = getHttpStatus(error)
+  const errorMessage = getErrorMessage(error)
   const isRateLimited = status === 429
   const title = isRateLimited
     ? t('Too many requests')
@@ -52,6 +62,12 @@ export function GeneralError({
   const description = isRateLimited
     ? t('Please wait a moment before trying again.')
     : t('Please try again later.')
+
+  useEffect(() => {
+    if (!error) return
+    // eslint-disable-next-line no-console
+    console.error('[GeneralError]', error)
+  }, [error])
 
   return (
     <div className={cn('h-svh w-full', className)}>
@@ -70,6 +86,11 @@ export function GeneralError({
             {t('If this keeps happening, please report it on GitHub Issues.')}
           </p>
         )}
+        {!minimal && errorMessage ? (
+          <p className='text-muted-foreground max-w-[min(90vw,42rem)] break-words text-center text-xs'>
+            {errorMessage}
+          </p>
+        ) : null}
         {!minimal && (
           <div className='mt-6 flex flex-wrap justify-center gap-4'>
             <Button variant='outline' onClick={() => history.go(-1)}>

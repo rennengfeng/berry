@@ -104,7 +104,13 @@ const queryClient = new QueryClient({
         }
         if (error.response?.status === 500) {
           toast.error(i18next.t('Internal Server Error!'))
-          router.navigate({ to: '/500' })
+          // Query failures should not replace the current route with the global
+          // 500 page. Route/component errors are still handled by the router
+          // error boundary, while optional API failures can degrade in place.
+          if (import.meta.env.DEV) {
+            // eslint-disable-next-line no-console
+            console.error('[QueryCache] HTTP 500 query failed', error)
+          }
         }
       }
     },

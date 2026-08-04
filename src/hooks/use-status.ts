@@ -39,11 +39,20 @@ export function useStatus() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['status'],
     queryFn: async () => {
-      const status = await getStatus()
+      let status: Record<string, unknown> | SystemStatus | null = null
+      try {
+        status = await getStatus()
+      } catch {
+        status = getInitialStatus() ?? null
+      }
       try {
         if (status) {
           const { setConfig } = useSystemConfigStore.getState()
-          setConfig(mapStatusDataToConfig(status))
+          const statusData =
+            (status && typeof status === 'object' && 'data' in status
+              ? (status as SystemStatus).data
+              : status) as Parameters<typeof mapStatusDataToConfig>[0]
+          setConfig(mapStatusDataToConfig(statusData))
         }
       } catch (err) {
         if (import.meta.env.DEV) {
