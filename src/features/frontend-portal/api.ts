@@ -565,13 +565,35 @@ function assertImageTaskNotFailed(body: ImageTaskPayload) {
   }
 }
 
+function normalizePortalApiOrigin(value?: string): string {
+  const raw = (value || '').trim()
+  if (!raw) return ''
+  try {
+    return new URL(raw).origin
+  } catch {
+    return ''
+  }
+}
+
+function resolvePortalRelayUrl(path: string): string {
+  if (!path.startsWith('/v1/') && !path.startsWith('/api/v1/')) return path
+  const configuredOrigin = normalizePortalApiOrigin(import.meta.env.VITE_PORTAL_API_ORIGIN)
+  const storedOrigin =
+    typeof window !== 'undefined'
+      ? normalizePortalApiOrigin(window.localStorage.getItem('newapi.portalApiOrigin') || '')
+      : ''
+  const origin = configuredOrigin || storedOrigin
+  return origin ? new URL(path, origin).toString() : path
+}
+
 async function fetchImageApiJson(
   path: string,
   method: 'GET' | 'POST',
   headers: Record<string, string>,
   body?: unknown
 ): Promise<ImageTaskPayload> {
-  const res = await fetch(path, {
+  const requestUrl = resolvePortalRelayUrl(path)
+  const res = await fetch(requestUrl, {
     method,
     credentials: headers.Authorization ? 'omit' : 'include',
     headers: {
