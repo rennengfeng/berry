@@ -569,7 +569,7 @@ async function fetchImageApiJson(
 ): Promise<ImageTaskPayload> {
   const res = await fetch(path, {
     method,
-    credentials: 'include',
+    credentials: headers.Authorization ? 'omit' : 'include',
     headers: {
       'Content-Type': 'application/json',
       ...headers,
