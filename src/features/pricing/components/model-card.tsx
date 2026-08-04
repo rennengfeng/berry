@@ -32,9 +32,12 @@ import { parseTags } from '../lib/filters'
 import { isTokenBasedModel } from '../lib/model-helpers'
 import {
   formatPrice,
+  getDashScopeNativePrimaryPriceLabel,
+  getDashScopeNativeUnitLabel,
   formatRequestPrice,
   getFixedBillingTypeLabelKey,
   getFixedBillingUnitLabelKey,
+  isDashScopeNativePricingModel,
 } from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
 import { ModelPerfBadge, type ModelPerfBadgeData } from './model-perf-badge'
@@ -68,6 +71,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const isDynamicPricing =
     props.model.billing_mode === 'tiered_expr' &&
     Boolean(props.model.billing_expr)
+  const isNativePricing = isDashScopeNativePricingModel(props.model)
   const hasCachedPrice = isTokenBased && props.model.cache_ratio != null
   const dynamicSummary = isDynamicPricing
     ? getDynamicPricingSummary(props.model, {
@@ -143,6 +147,14 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
                     {t('Dynamic Pricing')}
                   </span>
                 )
+              ) : isNativePricing ? (
+                <span className='text-muted-foreground whitespace-nowrap'>
+                  {t('DashScope Native')}{' '}
+                  <span className='text-foreground font-mono font-semibold'>
+                    {getDashScopeNativePrimaryPriceLabel(props.model)}
+                  </span>
+                  /{t(getDashScopeNativeUnitLabel(props.model.dashscope_native_pricing?.unit))}
+                </span>
               ) : isTokenBased ? (
                 <>
                   <span className='text-muted-foreground whitespace-nowrap'>

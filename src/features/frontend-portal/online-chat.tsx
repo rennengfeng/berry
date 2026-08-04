@@ -197,8 +197,15 @@ function getImageProvider(model: string): ImageProvider {
 
 function getModelCapability(model: ModelOption): ChatMode | 'video' | 'audio' {
   const name = model.value.toLowerCase()
-  const endpoints = (model.endpoints ?? []).join(' ').toLowerCase()
-  const haystack = `${name} ${endpoints}`
+  const endpointList = (model.endpoints ?? []).map((item) => item.toLowerCase())
+
+  if (endpointList.length > 0) {
+    if (endpointList.includes('image-generation')) return 'image'
+    if (endpointList.some((item) => item.includes('video'))) return 'video'
+    if (endpointList.some((item) => /(audio|speech|tts|asr)/i.test(item))) return 'audio'
+  }
+
+  const haystack = name
 
   if (/(^|[/_\s-])(audio|tts|asr|speech|voice|music|song)([/_\s-]|$)/i.test(haystack) || /(cosyvoice|whisper|qwen-audio)/i.test(haystack)) {
     return 'audio'
@@ -208,6 +215,9 @@ function getModelCapability(model: ModelOption): ChatMode | 'video' | 'audio' {
   }
   if (/(^|[/_\s-])(image|images|text2image|image2image)([/_\s-]|$)/i.test(haystack) || /(qwen-image|gpt-image|dall-e|imagen|flux|midjourney|stable-diffusion)/i.test(haystack)) {
     return 'image'
+  }
+  if (endpointList.some((item) => ['openai', 'openai-response', 'openai-response-compact', 'gemini', 'anthropic'].includes(item))) {
+    return 'chat'
   }
   return 'chat'
 }

@@ -53,6 +53,8 @@ export type PricingModel = {
   billing_mode?: string
   /** Raw expression describing dynamic / tiered billing */
   billing_expr?: string
+  /** DashScope Native dedicated pricing for Ali SDK / native protocol models */
+  dashscope_native_pricing?: DashScopeNativePricing
   /** Fixed-price billing unit for quota_type=1 models */
   billing_unit?: BillingUnit
   /** Pricing version returned by backend, useful for cache busting */
@@ -104,6 +106,24 @@ export type PricingData = {
 
 export type TokenUnit = 'M' | 'K'
 export type BillingUnit = 'request' | 'second' | 'image'
+export type DashScopeNativePricingUnit =
+  | 'request'
+  | 'image'
+  | 'video_second'
+  | 'audio_second'
+  | 'character'
+  | 'video_task'
+  | 'token_input_output'
+  | string
+export type DashScopeNativePricing = {
+  unit: DashScopeNativePricingUnit
+  price?: number
+  prices?: Record<string, number>
+  input_price?: number
+  output_price?: number
+  cache_read_price?: number
+  cache_write_price?: number
+}
 export type PriceType =
   | 'input'
   | 'output'

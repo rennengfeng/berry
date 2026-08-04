@@ -63,9 +63,12 @@ import { getAvailableGroups, isTokenBasedModel } from '../lib/model-helpers'
 import { inferModelMetadata } from '../lib/model-metadata'
 import {
   formatFixedPrice,
+  formatDashScopeNativePriceValue,
   formatGroupPrice,
+  getDashScopeNativeUnitLabel,
   getFixedBillingTypeLabelKey,
   getFixedBillingUnitLabelKey,
+  isDashScopeNativePricingModel,
 } from '../lib/price'
 import type {
   Modality,
@@ -364,6 +367,89 @@ function PriceSection(props: {
     groupRatioMultiplier: 1,
   })
 
+  if (isDashScopeNativePricingModel(props.model)) {
+    const spec = props.model.dashscope_native_pricing
+    const unitLabel = getDashScopeNativeUnitLabel(spec?.unit)
+    const conditionPrices = Object.entries(spec?.prices || {}).sort(([a], [b]) =>
+      a.localeCompare(b)
+    )
+    const tokenEntries = [
+      { label: t('Input'), value: spec?.input_price },
+      { label: t('Output'), value: spec?.output_price },
+      { label: t('Cache Read'), value: spec?.cache_read_price },
+      { label: t('Cache Write'), value: spec?.cache_write_price },
+    ].filter((entry) => entry.value !== undefined)
+
+    return (
+      <section>
+        <SectionTitle>{t('Base Price')}</SectionTitle>
+        {spec?.unit === 'token_input_output' ? (
+          <div className='grid grid-cols-2 gap-2'>
+            {tokenEntries.map((entry) => (
+              <div key={entry.label} className='bg-muted/20 rounded-lg border p-3'>
+                <div className='text-muted-foreground text-xs'>{entry.label}</div>
+                <div className='text-foreground mt-1 font-mono text-base font-semibold tabular-nums'>
+                  {formatDashScopeNativePriceValue(
+                    entry.value,
+                    props.showRechargePrice,
+                    props.priceRate,
+                    props.usdExchangeRate
+                  )}
+                  <span className='text-muted-foreground/40 ml-1 text-xs font-normal'>
+                    / {t(unitLabel)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : conditionPrices.length > 0 ? (
+          <div className='bg-muted/20 rounded-lg border px-3 py-2.5'>
+            <div className='space-y-1.5'>
+              {conditionPrices.map(([condition, price]) => (
+                <div
+                  key={condition}
+                  className='flex items-baseline justify-between gap-4'
+                >
+                  <span className='text-muted-foreground/70 text-sm'>
+                    {condition}
+                  </span>
+                  <span className='text-muted-foreground font-mono text-sm tabular-nums'>
+                    {formatDashScopeNativePriceValue(
+                      price,
+                      props.showRechargePrice,
+                      props.priceRate,
+                      props.usdExchangeRate
+                    )}
+                    <span className='text-muted-foreground/40 ml-1 text-xs font-normal'>
+                      / {t(unitLabel)}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className='flex items-baseline justify-between'>
+            <span className='text-muted-foreground text-sm'>
+              {t('DashScope Native')}
+            </span>
+            <span className='text-foreground font-mono text-sm font-semibold tabular-nums'>
+              {formatDashScopeNativePriceValue(
+                spec?.price,
+                props.showRechargePrice,
+                props.priceRate,
+                props.usdExchangeRate
+              )}
+              <span className='text-muted-foreground/40 ml-1 text-xs font-normal'>
+                / {t(unitLabel)}
+              </span>
+            </span>
+          </div>
+        )}
+      </section>
+    )
+  }
+
   const primaryPriceTypes: { label: string; type: PriceType }[] = [
     { label: t('Input'), type: 'input' },
     { label: t('Output'), type: 'output' },
@@ -651,6 +737,109 @@ function GroupPricingSection(props: {
 
   const thClass =
     'text-muted-foreground py-2 text-[10px] font-medium tracking-wider uppercase'
+
+  if (isDashScopeNativePricingModel(props.model)) {
+    const spec = props.model.dashscope_native_pricing
+    const unitLabel = getDashScopeNativeUnitLabel(spec?.unit)
+    const conditionPrices = Object.entries(spec?.prices || {}).sort(([a], [b]) =>
+      a.localeCompare(b)
+    )
+    const tokenFields = [
+      { label: t('Input'), value: spec?.input_price },
+      { label: t('Output'), value: spec?.output_price },
+      { label: t('Cache Read'), value: spec?.cache_read_price },
+      { label: t('Cache Write'), value: spec?.cache_write_price },
+    ].filter((entry) => entry.value !== undefined)
+
+    return (
+      <section>
+        <SectionTitle>{t('Pricing by Group')}</SectionTitle>
+        <AutoGroupChain model={props.model} autoGroups={props.autoGroups} />
+        <div className='-mx-4 overflow-x-auto sm:mx-0'>
+          <Table className='text-sm'>
+            <TableHeader>
+              <TableRow className='hover:bg-transparent'>
+                <TableHead className={thClass}>{t('Group')}</TableHead>
+                <TableHead className={thClass}>{t('Ratio')}</TableHead>
+                {spec?.unit === 'token_input_output' ? (
+                  tokenFields.map((field) => (
+                    <TableHead
+                      key={field.label}
+                      className={`${thClass} text-right`}
+                    >
+                      {field.label}
+                    </TableHead>
+                  ))
+                ) : conditionPrices.length > 0 ? (
+                  conditionPrices.map(([condition]) => (
+                    <TableHead
+                      key={condition}
+                      className={`${thClass} text-right`}
+                    >
+                      {condition}
+                    </TableHead>
+                  ))
+                ) : (
+                  <TableHead className={`${thClass} text-right`}>
+                    {t('Price')}
+                  </TableHead>
+                )}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {availableGroups.map((group) => {
+                const ratio = props.groupRatio[group] || 1
+                const renderNative = (price?: number) =>
+                  formatDashScopeNativePriceValue(
+                    price === undefined ? undefined : Number(price) * ratio,
+                    showRechargePrice,
+                    props.priceRate,
+                    props.usdExchangeRate
+                  )
+
+                return (
+                  <TableRow key={group}>
+                    <TableCell className='py-2.5'>
+                      <GroupBadge group={group} size='sm' />
+                    </TableCell>
+                    <TableCell className='text-muted-foreground py-2.5 font-mono text-xs'>
+                      {ratio}x
+                    </TableCell>
+                    {spec?.unit === 'token_input_output' ? (
+                      tokenFields.map((field) => (
+                        <TableCell
+                          key={field.label}
+                          className='py-2.5 text-right font-mono'
+                        >
+                          {renderNative(field.value)}
+                        </TableCell>
+                      ))
+                    ) : conditionPrices.length > 0 ? (
+                      conditionPrices.map(([condition, price]) => (
+                        <TableCell
+                          key={condition}
+                          className='py-2.5 text-right font-mono'
+                        >
+                          {renderNative(price)}
+                        </TableCell>
+                      ))
+                    ) : (
+                      <TableCell className='py-2.5 text-right font-mono'>
+                        {renderNative(spec?.price)}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+          <p className='text-muted-foreground/40 mt-1.5 px-4 text-[10px] sm:px-0'>
+            {t('Prices shown')} / {t(unitLabel)}
+          </p>
+        </div>
+      </section>
+    )
+  }
 
   if (isDynamicPricingModel(props.model)) {
     const dynamicTiers = getDynamicPricingTiers(props.model)

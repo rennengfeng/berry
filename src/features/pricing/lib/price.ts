@@ -150,6 +150,73 @@ export function getFixedBillingTypeLabelKey(model: PricingModel): string {
   }
 }
 
+export function isDashScopeNativePricingModel(model: PricingModel): boolean {
+  return (
+    model.billing_mode === 'dashscope_native' &&
+    Boolean(model.dashscope_native_pricing)
+  )
+}
+
+export function getDashScopeNativeUnitLabel(unit?: string): string {
+  switch ((unit || '').trim()) {
+    case 'token_input_output':
+      return 'per 1M tokens'
+    case 'image':
+      return 'per image'
+    case 'video_second':
+      return 'per video second'
+    case 'audio_second':
+      return 'per audio second'
+    case 'character':
+      return 'per character'
+    case 'video_task':
+      return 'per video task'
+    default:
+      return 'per request'
+  }
+}
+
+export function formatDashScopeNativePriceValue(
+  price: number | undefined,
+  showWithRecharge = false,
+  priceRate = 1,
+  usdExchangeRate = 1
+): string {
+  if (price === undefined || price === null || !Number.isFinite(Number(price))) {
+    return '-'
+  }
+
+  const adjusted = applyRechargeRate(
+    Number(price),
+    showWithRecharge,
+    priceRate,
+    usdExchangeRate
+  )
+
+  return formatCurrencyFromUSD(adjusted, {
+    digitsLarge: 4,
+    digitsSmall: 6,
+    abbreviate: false,
+  })
+}
+
+export function getDashScopeNativePrimaryPriceLabel(model: PricingModel): string {
+  const spec = model.dashscope_native_pricing
+  if (!spec) return '-'
+  if (spec.unit === 'token_input_output') {
+    return formatDashScopeNativePriceValue(spec.input_price)
+  }
+  if (spec.price !== undefined) {
+    return formatDashScopeNativePriceValue(spec.price)
+  }
+  const prices = Object.entries(spec.prices || {})
+  if (prices.length === 0) return '-'
+  const [, minPrice] = prices.reduce((best, current) =>
+    Number(current[1]) < Number(best[1]) ? current : best
+  )
+  return formatDashScopeNativePriceValue(minPrice)
+}
+
 /**
  * Apply recharge rate to price
  *

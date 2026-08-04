@@ -36,8 +36,11 @@ import { parseTags } from '../lib/filters'
 import { isTokenBasedModel } from '../lib/model-helpers'
 import {
   formatPrice,
+  formatDashScopeNativePriceValue,
   formatRequestPrice,
+  getDashScopeNativeUnitLabel,
   getFixedBillingUnitLabelKey,
+  isDashScopeNativePricingModel,
   stripTrailingZeros,
 } from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
@@ -212,6 +215,38 @@ export function usePricingColumns(
                   ` · ${t('{{count}} tiers', {
                     count: dynamicSummary.tierCount,
                   })}`}
+              </div>
+            </div>
+          )
+        }
+
+        if (isDashScopeNativePricingModel(model)) {
+          const spec = model.dashscope_native_pricing
+          const prices = Object.entries(spec?.prices || {})
+          const primaryPrice =
+            spec?.unit === 'token_input_output'
+              ? spec.input_price
+              : spec?.price !== undefined
+                ? spec.price
+                : prices.length > 0
+                  ? prices.reduce((best, current) =>
+                      Number(current[1]) < Number(best[1]) ? current : best
+                    )[1]
+                  : undefined
+          const price = stripTrailingZeros(
+            formatDashScopeNativePriceValue(
+              primaryPrice,
+              showRechargePrice,
+              priceRate,
+              usdExchangeRate
+            )
+          )
+
+          return (
+            <div className='min-w-[130px]'>
+              <span className='font-mono text-sm tabular-nums'>{price}</span>
+              <div className='text-muted-foreground/50 text-[10px]'>
+                / {t(getDashScopeNativeUnitLabel(spec?.unit))}
               </div>
             </div>
           )
