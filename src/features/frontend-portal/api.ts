@@ -575,14 +575,62 @@ function normalizePortalApiOrigin(value?: string): string {
   }
 }
 
+function readCachedPortalStatus(): Record<string, unknown> | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem('status')
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object') return null
+    const record = parsed as Record<string, unknown>
+    const data = record.data
+    return data && typeof data === 'object'
+      ? (data as Record<string, unknown>)
+      : record
+  } catch {
+    return null
+  }
+}
+
+function getConfiguredPortalApiOrigin(): string {
+  const status = readCachedPortalStatus()
+  if (!status || status.api_info_enabled === false) return ''
+  const apiInfo = status.api_info
+  if (!Array.isArray(apiInfo)) return ''
+  for (const item of apiInfo) {
+    if (!item || typeof item !== 'object') continue
+    const origin = normalizePortalApiOrigin((item as { url?: string }).url)
+    if (origin) return origin
+  }
+  return ''
+}
+
+function inferPortalApiOrigin(): string {
+  if (typeof window === 'undefined') return ''
+  const { protocol, hostname } = window.location
+  if (!/^https?:$/.test(protocol)) return ''
+  if (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) ||
+    hostname.includes(':') ||
+    hostname.startsWith('api.')
+  ) {
+    return ''
+  }
+  const baseHost = hostname.startsWith('www.') ? hostname.slice(4) : hostname
+  return `${protocol}//api.${baseHost}`
+}
+
 function resolvePortalRelayUrl(path: string): string {
   if (!path.startsWith('/v1/') && !path.startsWith('/api/v1/')) return path
+  const apiInfoOrigin = getConfiguredPortalApiOrigin()
   const configuredOrigin = normalizePortalApiOrigin(import.meta.env.VITE_PORTAL_API_ORIGIN)
   const storedOrigin =
     typeof window !== 'undefined'
       ? normalizePortalApiOrigin(window.localStorage.getItem('newapi.portalApiOrigin') || '')
       : ''
-  const origin = configuredOrigin || storedOrigin
+  const origin = apiInfoOrigin || configuredOrigin || storedOrigin || inferPortalApiOrigin()
   return origin ? new URL(path, origin).toString() : path
 }
 
