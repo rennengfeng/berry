@@ -331,6 +331,9 @@ const (
 
 type aliTTSResponse struct {
 	Output struct {
+		AudioURL string `json:"audio_url"`
+		URL      string `json:"url"`
+		Data     string `json:"data"`
 		Audio struct {
 			URL  string `json:"url"`
 			Data string `json:"data"`
@@ -362,7 +365,7 @@ func convertAliAudioRequest(info *relaycommon.RelayInfo, request dto.AudioReques
 		return nil, errors.New("model is required")
 	}
 	input := map[string]any{
-		"text":        request.Input,
+		"text": request.Input,
 		"format":      normalizeAliTTSFormat(request.ResponseFormat),
 		"sample_rate": defaultAliTTSSampleRate,
 	}
@@ -382,7 +385,10 @@ func convertAliAudioRequest(info *relaycommon.RelayInfo, request dto.AudioReques
 	if err := validateAliTTSModelVoice(modelName, input); err != nil {
 		return nil, err
 	}
-	body, err := common.Marshal(map[string]any{"model": modelName, "input": input})
+	body, err := common.Marshal(map[string]any{
+		"model": modelName,
+		"input": input,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal Ali TTS request: %w", err)
 	}
@@ -469,6 +475,16 @@ func normalizeAliTTSFormat(format string) string {
 	}
 }
 
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 func mergeAliTTSMetadata(input map[string]any, raw json.RawMessage) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return
@@ -529,19 +545,20 @@ func aliTTSSpeechHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 }
 
 func resolveAliTTSAudio(c *gin.Context, info *relaycommon.RelayInfo, response aliTTSResponse) ([]byte, string, error) {
-	if strings.TrimSpace(response.Output.Audio.Data) != "" {
-		decoded, err := base64.StdEncoding.DecodeString(response.Output.Audio.Data)
+	audioData := firstNonEmpty(response.Output.Audio.Data, response.Output.Data)
+	if audioData != "" {
+		decoded, err := base64.StdEncoding.DecodeString(audioData)
 		if err != nil {
-			decoded, err = base64.RawStdEncoding.DecodeString(response.Output.Audio.Data)
+			decoded, err = base64.RawStdEncoding.DecodeString(audioData)
 		}
 		if err != nil {
 			return nil, "", fmt.Errorf("decode Ali TTS audio data: %w", err)
 		}
 		return decoded, aliTTSContentType(info), nil
 	}
-	audioURL := strings.TrimSpace(response.Output.Audio.URL)
+	audioURL := firstNonEmpty(response.Output.Audio.URL, response.Output.AudioURL, response.Output.URL)
 	if audioURL == "" {
-		return nil, "", errors.New("Ali TTS response does not contain output.audio.url or output.audio.data")
+		return nil, "", errors.New("Ali TTS response does not contain output.audio.url, output.audio_url, output.url, output.audio.data, or output.data")
 	}
 	parsed, err := url.Parse(audioURL)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
@@ -551,7 +568,11 @@ func resolveAliTTSAudio(c *gin.Context, info *relaycommon.RelayInfo, response al
 	if err != nil {
 		return nil, "", fmt.Errorf("create Ali TTS audio download request: %w", err)
 	}
-	client, err := service.GetHttpClientWithProxy(info.ChannelSetting.Proxy)
+	proxy := ""
+	if info != nil && info.ChannelMeta != nil {
+		proxy = info.ChannelSetting.Proxy
+	}
+	client, err := service.GetHttpClientWithProxy(proxy)
 	if err != nil {
 		return nil, "", fmt.Errorf("create Ali TTS audio download client: %w", err)
 	}
@@ -1015,6 +1036,13 @@ func dashScopeNativeMaxFloat64(values ...float64) float64 {
 
     rel = "service/quota.go"
     text = read(rel)
+    if '"github.com/QuantumNous/new-api/setting/billing_setting"' not in text:
+        text = replace_once(
+            text,
+            '\trelaycommon "github.com/QuantumNous/new-api/relay/common"\n',
+            '\trelaycommon "github.com/QuantumNous/new-api/relay/common"\n\t"github.com/QuantumNous/new-api/setting/billing_setting"\n',
+            "service quota billing setting import",
+        )
     if "OtherRatioMultiplier float64" not in text:
         text = replace_once(
             text,
@@ -1058,17 +1086,14 @@ func dashScopeNativeMaxFloat64(values ...float64) float64 {
 ''',
             "audio fixed price native ratio multiplier",
         )
-    if "quotaInfo.OtherRatioMultiplier = relayInfo.PriceData.OtherRatioMultiplier()" not in text:
-        text = replace_once(
-            text,
-            '''		UsePrice:   usePrice,
+    audio_quota_block = '''		UsePrice:   usePrice,
 		ModelRatio: modelRatio,
 		GroupRatio: groupRatio,
 	}
 
 	quota, clamp := calculateAudioQuota(quotaInfo)
-''',
-            '''		UsePrice:   usePrice,
+'''
+    audio_quota_block_with_native_ratio = '''		UsePrice:   usePrice,
 		ModelRatio: modelRatio,
 		GroupRatio: groupRatio,
 	}
@@ -1077,8 +1102,46 @@ func dashScopeNativeMaxFloat64(values ...float64) float64 {
 	}
 
 	quota, clamp := calculateAudioQuota(quotaInfo)
+'''
+    if audio_quota_block in text:
+        text = text.replace(audio_quota_block, audio_quota_block_with_native_ratio)
+    if "func dashScopeNativeAudioPostMultiplier(" not in text:
+        text = text.rstrip() + r'''
+
+func dashScopeNativeAudioPostMultiplier(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) float64 {
+	if relayInfo == nil || usage == nil {
+		return 0
+	}
+	if billing_setting.GetBillingMode(relayInfo.OriginModelName) != billing_setting.BillingModeDashScopeNative {
+		return 0
+	}
+	spec, ok := billing_setting.GetDashScopeNativePricing(relayInfo.OriginModelName)
+	if !ok || strings.TrimSpace(spec.Unit) != "audio_second" {
+		return 0
+	}
+	audioTokens := usage.CompletionTokenDetails.AudioTokens
+	if audioTokens <= 0 {
+		return 1
+	}
+	seconds := math.Ceil(float64(audioTokens) * 60 / 1000)
+	if seconds < 1 {
+		seconds = 1
+	}
+	return seconds
+}
+'''
+    if "nativeAudioMultiplier := dashScopeNativeAudioPostMultiplier(relayInfo, usage)" not in text:
+        text = replace_once_regex(
+            text,
+            r'(func PostAudioConsumeQuota\(ctx \*gin\.Context, relayInfo \*relaycommon\.RelayInfo, usage \*dto\.Usage, extraContent string\) \{\n(?:.|\n)*?\tif usePrice \{\n\t\tquotaInfo\.OtherRatioMultiplier = relayInfo\.PriceData\.OtherRatioMultiplier\(\)\n\t\}\n)',
+            r'''\g<1>	if nativeAudioMultiplier := dashScopeNativeAudioPostMultiplier(relayInfo, usage); nativeAudioMultiplier > 0 {
+		if quotaInfo.OtherRatioMultiplier <= 0 {
+			quotaInfo.OtherRatioMultiplier = 1
+		}
+		quotaInfo.OtherRatioMultiplier *= nativeAudioMultiplier
+	}
 ''',
-            "post audio native ratio multiplier",
+            "post audio native audio_second multiplier",
         )
     write(rel, text)
 
@@ -1171,12 +1234,16 @@ func (a *TaskAdaptor) dashScopeNativeBillingRatios(info *relaycommon.RelayInfo, 
 			duration = 1
 		}
 		otherRatios["seconds"] = float64(min(duration, relaycommon.MaxTaskDurationSeconds))
+		if price, _ := selectDashScopeNativeVideoTierPrice(spec.Prices, aliReq); price > 0 {
+			info.PriceData.ModelPrice = price
+			baseQuota, _ := common.QuotaFromFloatChecked(
+				price * common.QuotaPerUnit * info.PriceData.GroupRatioInfo.GroupRatio,
+			)
+			info.PriceData.Quota = baseQuota
+		}
 	case "request", "video_task":
 	default:
 		return nil
-	}
-	if price, tierKey := selectDashScopeNativeVideoTierPrice(spec.Prices, aliReq); price > 0 && info.PriceData.ModelPrice > 0 {
-		otherRatios["dashscope_native_tier_"+tierKey] = price / info.PriceData.ModelPrice
 	}
 	return otherRatios
 }
@@ -1187,6 +1254,65 @@ func (a *TaskAdaptor) dashScopeNativeBillingRatios(info *relaycommon.RelayInfo, 
             "func ProcessAliOtherRatios(aliReq *AliVideoRequest) (map[string]float64, error) {\n",
             native_helpers + "\nfunc ProcessAliOtherRatios(aliReq *AliVideoRequest) (map[string]float64, error) {\n",
             "Ali DashScope Native video billing helpers",
+        )
+    if '"dashscope_native_tier_"+tierKey' in text:
+        text = text.replace(
+            '''	if price, tierKey := selectDashScopeNativeVideoTierPrice(spec.Prices, aliReq); price > 0 && info.PriceData.ModelPrice > 0 {
+		otherRatios["dashscope_native_tier_"+tierKey] = price / info.PriceData.ModelPrice
+	}
+''',
+            '',
+            1,
+        )
+        text = text.replace(
+            '''		otherRatios["seconds"] = float64(min(duration, relaycommon.MaxTaskDurationSeconds))
+	case "request", "video_task":
+''',
+            '''		otherRatios["seconds"] = float64(min(duration, relaycommon.MaxTaskDurationSeconds))
+		if price, _ := selectDashScopeNativeVideoTierPrice(spec.Prices, aliReq); price > 0 {
+			info.PriceData.ModelPrice = price
+			baseQuota, _ := common.QuotaFromFloatChecked(
+				price * common.QuotaPerUnit * info.PriceData.GroupRatioInfo.GroupRatio,
+			)
+			info.PriceData.Quota = baseQuota
+		}
+	case "request", "video_task":
+''',
+            1,
+        )
+    if "shortEdge := min(width, height)" not in text:
+        text = replace_once_regex(
+            text,
+            r'func sizeToResolution\(size string\) \(string, error\) \{\n(?:.|\n)*?\n\}',
+            '''func sizeToResolution(size string) (string, error) {
+	size = normalizeAliVideoSize(size)
+	if lo.Contains(size480p, size) {
+		return "480P", nil
+	} else if lo.Contains(size720p, size) {
+		return "720P", nil
+	} else if lo.Contains(size1080p, size) {
+		return "1080P", nil
+	}
+	parts := strings.Split(size, "*")
+	if len(parts) == 2 {
+		width, wErr := strconv.Atoi(strings.TrimSpace(parts[0]))
+		height, hErr := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if wErr == nil && hErr == nil && width > 0 && height > 0 {
+			shortEdge := min(width, height)
+			longEdge := max(width, height)
+			switch {
+			case shortEdge <= 540 || longEdge <= 900:
+				return "480P", nil
+			case shortEdge <= 800 || longEdge <= 1400:
+				return "720P", nil
+			default:
+				return "1080P", nil
+			}
+		}
+	}
+	return "", fmt.Errorf("invalid size: %s", size)
+}''',
+            "Ali extended video size resolution mapping",
         )
 
     old_size_block = '''	if req.Size != "" {

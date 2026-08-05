@@ -71,13 +71,13 @@ import {
 } from '@/components/ai-elements/reasoning'
 import { Response } from '@/components/ai-elements/response'
 import { Shimmer } from '@/components/ai-elements/shimmer'
-import { getApiKeySummaries, getChatUserModels, getTokenKey, sendTokenImageGeneration } from './api'
+import { getApiKeySummaries, getChatUserModels, getTokenKey, sendTokenImageGeneration, sendTokenVideoGeneration } from './api'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type ChatMode = 'chat' | 'image'
+type ChatMode = 'chat' | 'image' | 'video'
 
 type ContentPart =
   | { type: 'text'; text: string }
@@ -91,6 +91,7 @@ type ChatMessage = {
   isReasoningStreaming?: boolean
   status: 'complete' | 'loading' | 'streaming' | 'error'
   images?: Array<{ url?: string; b64_json?: string; revised_prompt?: string }>
+  videos?: Array<{ url: string; format?: string }>
 }
 
 type ChatSession = {
@@ -117,12 +118,21 @@ type ImageAspectRatio =
   | '9:16'
   | '9:21'
 type ImageResolutionTier = '1K' | '2K' | '4K'
+type VideoAspectRatio = '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16'
+type VideoResolutionTier = '480' | '720' | '1080'
+type VideoDuration = '5' | '10' | '15'
 type ImageRequestSettings = {
   size: string
   quality?: string
   aspect_ratio?: string
   resolution?: string
   ratio?: string
+  summary: string
+  detail: string
+}
+type VideoRequestSettings = {
+  size: string
+  duration: number
   summary: string
   detail: string
 }
@@ -134,6 +144,36 @@ const IMAGE_ASPECT_OPTIONS: ImageAspectRatio[] = ['auto', '21:9', '16:9', '3:2',
 const QWEN_RESOLUTION_OPTIONS: ImageResolutionTier[] = ['1K', '2K', '4K']
 const GPT_RESOLUTION_OPTIONS: ImageResolutionTier[] = ['1K', '2K', '4K']
 const GEMINI_RESOLUTION_OPTIONS: ImageResolutionTier[] = ['1K', '2K', '4K']
+const VIDEO_ASPECT_OPTIONS: VideoAspectRatio[] = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16']
+const VIDEO_RESOLUTION_OPTIONS: VideoResolutionTier[] = ['480', '720', '1080']
+const VIDEO_DURATION_OPTIONS: VideoDuration[] = ['5', '10', '15']
+
+const VIDEO_SIZE_BY_RESOLUTION_RATIO: Record<VideoResolutionTier, Record<VideoAspectRatio, string>> = {
+  '480': {
+    '21:9': '1120x480',
+    '16:9': '832x480',
+    '4:3': '640x480',
+    '1:1': '624x624',
+    '3:4': '480x640',
+    '9:16': '480x832',
+  },
+  '720': {
+    '21:9': '1680x720',
+    '16:9': '1280x720',
+    '4:3': '960x720',
+    '1:1': '960x960',
+    '3:4': '720x960',
+    '9:16': '720x1280',
+  },
+  '1080': {
+    '21:9': '2520x1080',
+    '16:9': '1920x1080',
+    '4:3': '1440x1080',
+    '1:1': '1440x1440',
+    '3:4': '1080x1440',
+    '9:16': '1080x1920',
+  },
+}
 
 const QWEN_SIZE_BY_TIER_RATIO: Record<ImageResolutionTier, Partial<Record<ImageAspectRatio, string>>> = {
   '1K': {
@@ -356,6 +396,33 @@ function formatImageResolutionLabel(resolution: ImageResolutionTier): string {
   }
 }
 
+function resolveVideoRequestSettings(
+  aspectRatio: VideoAspectRatio,
+  resolution: VideoResolutionTier,
+  duration: VideoDuration
+): VideoRequestSettings {
+  const size = VIDEO_SIZE_BY_RESOLUTION_RATIO[resolution][aspectRatio]
+  return {
+    size,
+    duration: Number(duration),
+    summary: `${aspectRatio} · ${resolution}P · ${duration}s`,
+    detail: size,
+  }
+}
+
+function formatVideoResolutionLabel(resolution: VideoResolutionTier): string {
+  switch (resolution) {
+    case '480':
+      return '标清 480P'
+    case '720':
+      return '高清 720P'
+    case '1080':
+      return '超清 1080P'
+    default:
+      return `${resolution}P`
+  }
+}
+
 function getImageSizePreview(size: string): { width: string; height: string } | null {
   const match = size.match(/^(\d+)[x*](\d+)$/)
   if (!match) return null
@@ -366,7 +433,7 @@ function imageChipClass(selected: boolean): string {
   return cn(
     'inline-flex min-w-0 items-center justify-center rounded-lg border text-sm transition',
     selected
-      ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+      ? 'border-violet-300/80 bg-violet-500/85 text-white shadow-sm'
       : 'border-white/10 bg-white/[0.04] text-white/65 hover:border-primary/50 hover:bg-primary/15 hover:text-white'
   )
 }
@@ -486,7 +553,7 @@ function isChatSession(value: unknown): value is ChatSession {
     typeof item.title === 'string' &&
     Array.isArray(item.messages) &&
     item.messages.every(isChatMessage) &&
-    (item.mode === 'chat' || item.mode === 'image') &&
+    (item.mode === 'chat' || item.mode === 'image' || item.mode === 'video') &&
     typeof item.createdAt === 'number'
   )
 }
@@ -552,6 +619,10 @@ export function OnlineChat() {
   const [imageCount, setImageCount] = useState<string>('1')
   const [imageOutputFormat, setImageOutputFormat] = useState<string>('auto')
   const [imageSettingsOpen, setImageSettingsOpen] = useState(false)
+  const [videoAspectRatio, setVideoAspectRatio] = useState<VideoAspectRatio>('16:9')
+  const [videoResolution, setVideoResolution] = useState<VideoResolutionTier>('480')
+  const [videoDuration, setVideoDuration] = useState<VideoDuration>('5')
+  const [videoSettingsOpen, setVideoSettingsOpen] = useState(false)
 
   // Sessions (chat history) — initialized from localStorage
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadSessions())
@@ -620,11 +691,20 @@ export function OnlineChat() {
     () => getImageSizePreview(imageRequestSettings.detail),
     [imageRequestSettings.detail]
   )
+  const videoRequestSettings = useMemo(
+    () => resolveVideoRequestSettings(videoAspectRatio, videoResolution, videoDuration),
+    [videoAspectRatio, videoResolution, videoDuration]
+  )
+  const videoSizePreview = useMemo(
+    () => getImageSizePreview(videoRequestSettings.detail),
+    [videoRequestSettings.detail]
+  )
   const activeModeMeta = useMemo(
-    () =>
-      chatMode === 'image'
-        ? { label: t('Image Generation'), Icon: ImageIcon }
-        : { label: t('Chat'), Icon: MessageSquareIcon },
+    () => {
+      if (chatMode === 'image') return { label: t('Image Generation'), Icon: ImageIcon }
+      if (chatMode === 'video') return { label: '视频生成', Icon: VideoIcon }
+      return { label: t('Chat'), Icon: MessageSquareIcon }
+    },
     [chatMode, t]
   )
   const ActiveModeIcon = activeModeMeta.Icon
@@ -633,7 +713,7 @@ export function OnlineChat() {
       { key: 'chat', label: t('Chat'), Icon: MessageSquareIcon, mode: 'chat' as const },
       { key: 'image', label: t('Image Generation'), Icon: ImageIcon, mode: 'image' as const },
       { key: 'agent', label: 'Agent 模式', Icon: BotIcon, disabled: true },
-      { key: 'video', label: '视频生成', Icon: VideoIcon, disabled: true },
+      { key: 'video', label: '视频生成', Icon: VideoIcon, mode: 'video' as const },
       { key: 'music', label: '音乐生成', Icon: MusicIcon, disabled: true },
       { key: 'voice', label: '配音生成', Icon: MicIcon, disabled: true },
       { key: 'digital-human', label: '数字人', Icon: UserRoundIcon, disabled: true },
@@ -1035,6 +1115,71 @@ export function OnlineChat() {
     [activeModel, selectedApiKeyId, resolveRequestGroup, imageAspectRatio, imageResolution, imageCount, imageQuality, imageOutputFormat, imageProvider, pendingImages]
   )
 
+  // Send video generation
+  const sendVideo = useCallback(
+    async (prompt: string) => {
+      if (!activeModel) {
+        return
+      }
+
+      const userMsg: ChatMessage = { key: nanoid(), from: 'user', content: prompt, status: 'complete' }
+      const assistantMsg: ChatMessage = { key: nanoid(), from: 'assistant', content: '', status: 'loading' }
+      setMessages((prev) => [...prev, userMsg, assistantMsg])
+      setIsGenerating(true)
+      const requestGroup = resolveRequestGroup()
+
+      try {
+        if (!selectedApiKeyId) {
+          throw new Error('No enabled API key found. Create or enable one first.')
+        }
+        const rawKey = await getTokenKey(Number(selectedApiKeyId))
+        if (!rawKey) {
+          throw new Error('Failed to load API key')
+        }
+        const token = rawKey.startsWith('sk-') ? rawKey : `sk-${rawKey}`
+        const videoRequest = resolveVideoRequestSettings(videoAspectRatio, videoResolution, videoDuration)
+        const result = await sendTokenVideoGeneration({
+          token,
+          model: activeModel,
+          prompt,
+          group: requestGroup,
+          size: videoRequest.size,
+          duration: videoRequest.duration,
+          image: pendingImages[0],
+          images: pendingImages,
+        })
+        const videos = result.data ?? []
+        setMessages((prev) => {
+          const updated = [...prev]
+          const last = updated[updated.length - 1]
+          if (last?.from === 'assistant') {
+            updated[updated.length - 1] = {
+              ...last,
+              content: videos.length > 0 ? prompt : '视频任务已提交，但没有返回视频地址。',
+              videos,
+              status: videos.length > 0 ? 'complete' : 'error',
+            }
+          }
+          return updated
+        })
+      } catch (err: unknown) {
+        const rawMsg = err instanceof Error ? err.message : '视频生成失败'
+        const msg = cleanErrorMessage(rawMsg)
+        setMessages((prev) => {
+          const updated = [...prev]
+          const last = updated[updated.length - 1]
+          if (last?.from === 'assistant') {
+            updated[updated.length - 1] = { ...last, content: msg, status: 'error' }
+          }
+          return updated
+        })
+      } finally {
+        setIsGenerating(false)
+      }
+    },
+    [activeModel, selectedApiKeyId, resolveRequestGroup, videoAspectRatio, videoResolution, videoDuration, pendingImages]
+  )
+
   // Handle submit
   const handleSubmit = useCallback(() => {
     const text = inputText.trim()
@@ -1045,7 +1190,7 @@ export function OnlineChat() {
     if (!activeSessionId) {
       const newSession: ChatSession = {
         id: nanoid(),
-        title: text.slice(0, 20) || '图片对话',
+        title: text.slice(0, 20) || (chatMode === 'video' ? '视频生成' : chatMode === 'image' ? '图片对话' : '新对话'),
         messages: [],
         mode: chatMode,
         createdAt: Date.now(),
@@ -1058,6 +1203,11 @@ export function OnlineChat() {
 
     if (chatMode === 'image') {
       sendImage(text)
+      setPendingImages([])
+      return
+    }
+    if (chatMode === 'video') {
+      sendVideo(text)
       setPendingImages([])
       return
     }
@@ -1081,7 +1231,7 @@ export function OnlineChat() {
     setMessages(newMessages)
     setPendingImages([])
     sendChat(newMessages)
-  }, [inputText, pendingImages, selectedGroups, activeSessionId, chatMode, messages, sendChat, sendImage])
+  }, [inputText, pendingImages, selectedGroups, activeSessionId, chatMode, messages, sendChat, sendImage, sendVideo])
 
   // Handle keyboard
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1204,6 +1354,8 @@ export function OnlineChat() {
               >
                 {session.mode === 'image' ? (
                   <ImageIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                ) : session.mode === 'video' ? (
+                  <VideoIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 ) : (
                   <MessageSquareIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 )}
@@ -1243,7 +1395,9 @@ export function OnlineChat() {
                 <p className="text-muted-foreground text-sm">
                   {chatMode === 'chat'
                     ? t('Start a conversation')
-                    : t('Describe the image you want to generate')}
+                    : chatMode === 'video'
+                      ? '描述你想生成的视频'
+                      : t('Describe the image you want to generate')}
                 </p>
               </div>
             )}
@@ -1276,7 +1430,7 @@ export function OnlineChat() {
                     <div className="flex items-center gap-2">
                       <Loader />
                       <Shimmer className="text-sm" duration={1}>
-                        {chatMode === 'image' ? t('Generating...') : t('Responding...')}
+                        {chatMode === 'image' || chatMode === 'video' ? t('Generating...') : t('Responding...')}
                       </Shimmer>
                     </div>
                   )}
@@ -1330,6 +1484,28 @@ export function OnlineChat() {
                             src={img.url || `data:image/png;base64,${img.b64_json}`}
                             alt={img.revised_prompt || 'generated'}
                             className="max-h-80 max-w-full object-contain"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Generated videos */}
+                  {msg.videos && msg.videos.length > 0 && (
+                    <div className="mt-2 flex flex-col gap-3">
+                      {msg.videos.map((video, i) => (
+                        <a
+                          key={i}
+                          href={video.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block overflow-hidden rounded-lg border bg-black transition hover:shadow-md"
+                        >
+                          <video
+                            src={video.url}
+                            controls
+                            playsInline
+                            className="max-h-96 w-full max-w-full object-contain"
                           />
                         </a>
                       ))}
@@ -1399,7 +1575,9 @@ export function OnlineChat() {
                 placeholder={
                   chatMode === 'chat'
                     ? t('Type a message, Enter to send, Shift+Enter for new line')
-                    : t('Describe the image you want...')
+                    : chatMode === 'video'
+                      ? '描述你想生成的视频...'
+                      : t('Describe the image you want...')
                 }
                 className="field-sizing-content max-h-32 min-h-[2.5rem] flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
                 rows={1}
@@ -1617,6 +1795,100 @@ export function OnlineChat() {
                         <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
                           <span className="mr-2">H</span>
                           <span className="text-white">{imageSizePreview?.height ?? formatImageSize(imageRequestSettings.detail)}</span>
+                        </div>
+                        <span>PX</span>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+              {chatMode === 'video' && (
+                <Popover open={videoSettingsOpen} onOpenChange={setVideoSettingsOpen}>
+                  <PopoverTrigger
+                    render={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs"
+                        disabled={isGenerating}
+                        title="视频参数"
+                      />
+                    }
+                  >
+                    <SlidersHorizontalIcon className="h-3.5 w-3.5" />
+                    <span className="whitespace-nowrap">{videoRequestSettings.summary.replace(/ · /g, ' ')}</span>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    side="top"
+                    align="end"
+                    sideOffset={10}
+                    className="w-[min(92vw,34rem)] rounded-2xl border border-white/10 bg-[#151124]/95 p-4 text-white shadow-2xl backdrop-blur-xl"
+                  >
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="text-xs text-white/55">比例</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {VIDEO_ASPECT_OPTIONS.map((ratio) => (
+                            <button
+                              key={ratio}
+                              type="button"
+                              className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[3.7rem] flex-col gap-1 px-1.5')}
+                              onClick={() => setVideoAspectRatio(ratio)}
+                            >
+                              <span
+                                className={cn(
+                                  'rounded-[3px] border',
+                                  aspectPreviewClass(ratio),
+                                  videoAspectRatio === ratio ? 'border-violet-200 bg-violet-200/40' : 'border-white/30 bg-white/10'
+                                )}
+                              />
+                              <span className="text-[11px] leading-none">{ratio}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs text-white/55">分辨率</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {VIDEO_RESOLUTION_OPTIONS.map((resolution) => (
+                            <button
+                              key={resolution}
+                              type="button"
+                              className={cn(imageChipClass(videoResolution === resolution), 'h-10 px-3')}
+                              onClick={() => setVideoResolution(resolution)}
+                            >
+                              {formatVideoResolutionLabel(resolution)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs text-white/55">时长</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {VIDEO_DURATION_OPTIONS.map((duration) => (
+                            <button
+                              key={duration}
+                              type="button"
+                              className={cn(imageChipClass(videoDuration === duration), 'h-10 px-3')}
+                              onClick={() => setVideoDuration(duration)}
+                            >
+                              {duration}s
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 text-xs text-white/45">
+                        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                          <span className="mr-2">W</span>
+                          <span className="text-white">{videoSizePreview?.width}</span>
+                        </div>
+                        <span className="text-white/45">×</span>
+                        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                          <span className="mr-2">H</span>
+                          <span className="text-white">{videoSizePreview?.height}</span>
                         </div>
                         <span>PX</span>
                       </div>

@@ -499,6 +499,11 @@ type ImageGenerationResult = {
   data: Array<{ url?: string; b64_json?: string; revised_prompt?: string }>
 }
 
+type VideoGenerationResult = {
+  data: Array<{ url: string; format?: string }>
+  task_id?: string
+}
+
 type ImageTaskPayload = {
   id?: string
   task_id?: string
@@ -518,8 +523,28 @@ type ImageTaskPayload = {
   error?: { message?: string }
 }
 
+type VideoTaskPayload = {
+  id?: string
+  task_id?: string
+  status?: string
+  progress?: number | string
+  url?: string
+  data?: Array<{ url?: string; format?: string }>
+  metadata?: { url?: string; video_url?: string; format?: string }
+  output?: {
+    task_id?: string
+    task_status?: string
+    video_url?: string
+    results?: Array<{ url?: string; video_url?: string; format?: string }>
+    message?: string
+  }
+  error?: { message?: string }
+}
+
 const IMAGE_TASK_POLL_INTERVAL_MS = 2500
 const IMAGE_TASK_MAX_POLLS = 80
+const VIDEO_TASK_POLL_INTERVAL_MS = 5000
+const VIDEO_TASK_MAX_POLLS = 120
 
 function extractImageTaskId(body: ImageTaskPayload): string {
   return body.output?.task_id || body.task_id || body.id || ''
@@ -562,6 +587,34 @@ function assertImageTaskNotFailed(body: ImageTaskPayload) {
   const status = String(body.output?.task_status || '').toUpperCase()
   if (status === 'FAILED' || status === 'CANCELED') {
     throw new Error(body.output?.message || body.error?.message || 'Image generation task failed')
+  }
+}
+
+function extractVideoTaskId(body: VideoTaskPayload): string {
+  return body.output?.task_id || body.task_id || body.id || ''
+}
+
+function extractVideosFromTask(body: VideoTaskPayload): VideoGenerationResult['data'] {
+  if (Array.isArray(body.data) && body.data.length > 0) {
+    return body.data
+      .map((item) => ({ url: item.url || '', format: item.format }))
+      .filter((item) => item.url)
+  }
+  const directUrl = body.metadata?.url || body.metadata?.video_url || body.output?.video_url || body.url
+  if (directUrl) return [{ url: directUrl, format: body.metadata?.format }]
+  const results = body.output?.results
+  if (Array.isArray(results) && results.length > 0) {
+    return results
+      .map((item) => ({ url: item.url || item.video_url || '', format: item.format }))
+      .filter((item) => item.url)
+  }
+  return []
+}
+
+function assertVideoTaskNotFailed(body: VideoTaskPayload) {
+  const status = String(body.status || body.output?.task_status || '').toLowerCase()
+  if (['failed', 'failure', 'error', 'canceled', 'cancelled'].includes(status)) {
+    throw new Error(body.error?.message || body.output?.message || 'Video generation task failed')
   }
 }
 
@@ -667,6 +720,39 @@ async function fetchImageApiJson(
   return payload
 }
 
+async function fetchVideoApiJson(
+  path: string,
+  method: 'GET' | 'POST',
+  headers: Record<string, string>,
+  body?: unknown
+): Promise<VideoTaskPayload> {
+  const requestUrl = resolvePortalRelayUrl(path)
+  const res = await fetch(requestUrl, {
+    method,
+    credentials: headers.Authorization ? 'omit' : 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers,
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  const rawText = await res.text().catch(() => '')
+  let payload: VideoTaskPayload = {}
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText) as VideoTaskPayload
+    } catch {
+      payload = {}
+    }
+  }
+  if (!res.ok) {
+    const message = payload.error?.message || payload.output?.message || rawText || `HTTP ${res.status}`
+    const detail = `${method} ${path} -> HTTP ${res.status}${res.url ? ` (${res.url})` : ''}`
+    throw new Error(`${message}\n${detail}`)
+  }
+  return payload
+}
+
 async function resolveImageGenerationResponse(
   body: ImageTaskPayload,
   taskPathPrefix: '/dashscope/api/v1/tasks' | '/pg/images/tasks' | '/v1/image-tasks',
@@ -755,6 +841,59 @@ export async function sendTokenImageGeneration(params: {
   } catch (err: unknown) {
     const axiosErr = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
     const msg = axiosErr?.response?.data?.error?.message || axiosErr?.response?.data?.message || (err instanceof Error ? err.message : '图像生成请求失败')
+    throw new Error(msg)
+  }
+}
+
+export async function sendTokenVideoGeneration(params: {
+  token: string
+  model: string
+  prompt: string
+  group?: string
+  size?: string
+  duration?: number
+  image?: string
+  images?: string[]
+}): Promise<VideoGenerationResult> {
+  try {
+    const headers = { Authorization: `Bearer ${params.token}` }
+    const payload = await fetchVideoApiJson(
+      '/v1/videos',
+      'POST',
+      headers,
+      {
+        model: params.model,
+        prompt: params.prompt,
+        response_format: 'url',
+        ...(params.group && { group: params.group }),
+        ...(params.size && { size: params.size }),
+        ...(params.duration && { duration: params.duration }),
+        ...(params.image && { image: params.image }),
+        ...(params.images && params.images.length > 0 && { images: params.images }),
+      }
+    )
+
+    const directVideos = extractVideosFromTask(payload)
+    const taskId = extractVideoTaskId(payload)
+    if (directVideos.length > 0) return { data: directVideos, task_id: taskId }
+    if (!taskId) return { data: [] }
+
+    for (let i = 0; i < VIDEO_TASK_MAX_POLLS; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, VIDEO_TASK_POLL_INTERVAL_MS))
+      const taskBody = await fetchVideoApiJson(
+        `/v1/videos/${encodeURIComponent(taskId)}`,
+        'GET',
+        headers
+      )
+      assertVideoTaskNotFailed(taskBody)
+      const videos = extractVideosFromTask(taskBody)
+      if (videos.length > 0) return { data: videos, task_id: taskId }
+    }
+
+    throw new Error('Video generation task timed out')
+  } catch (err: unknown) {
+    const axiosErr = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
+    const msg = axiosErr?.response?.data?.error?.message || axiosErr?.response?.data?.message || (err instanceof Error ? err.message : '视频生成请求失败')
     throw new Error(msg)
   }
 }
