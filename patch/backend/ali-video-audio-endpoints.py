@@ -369,15 +369,95 @@ func convertAliAudioRequest(info *relaycommon.RelayInfo, request dto.AudioReques
 	if strings.TrimSpace(request.Voice) != "" {
 		input["voice"] = request.Voice
 	}
+	if strings.TrimSpace(request.Instructions) != "" {
+		input["instruction"] = request.Instructions
+	}
 	if request.Speed != nil {
 		input["rate"] = *request.Speed
 	}
 	mergeAliTTSMetadata(input, request.Metadata)
+	if voice, ok := input["voice"].(string); ok {
+		input["voice"] = normalizeAliTTSVoiceAlias(modelName, voice)
+	}
+	if err := validateAliTTSModelVoice(modelName, input); err != nil {
+		return nil, err
+	}
 	body, err := common.Marshal(map[string]any{"model": modelName, "input": input})
 	if err != nil {
 		return nil, fmt.Errorf("marshal Ali TTS request: %w", err)
 	}
 	return bytes.NewReader(body), nil
+}
+
+func validateAliTTSModelVoice(modelName string, input map[string]any) error {
+	voice, _ := input["voice"].(string)
+	voice = strings.TrimSpace(voice)
+	if voice == "" {
+		return errors.New("Ali TTS requires input.voice; use a built-in voice or a registered cloned/designed voice")
+	}
+
+	return nil
+}
+
+func normalizeAliTTSVoiceAlias(modelName string, voice string) string {
+	trimmedVoice := strings.TrimSpace(voice)
+	normalizedModel := strings.ToLower(strings.TrimSpace(modelName))
+	normalizedVoice := strings.ToLower(trimmedVoice)
+
+	switch {
+	case strings.Contains(normalizedModel, "qwen-audio-3.0-tts-flash"):
+		return normalizeAliTTSVoiceFromMap(trimmedVoice, normalizedVoice, map[string]string{
+			"longanhuan":   "longanhuan_v3.6",
+			"longjielidou": "longjielidou_v3.6",
+			"loongeva":     "loongeva_v3.6",
+		})
+	case strings.Contains(normalizedModel, "cosyvoice-v3.5") || strings.Contains(normalizedModel, "cosyvoice-v3"):
+		return normalizeAliTTSVoiceFromMap(trimmedVoice, normalizedVoice, map[string]string{
+			"longxiaochun": "longxiaochun_v3",
+			"longxiaoxia":  "longxiaoxia_v3",
+			"longcheng":    "longcheng_v3",
+			"longwan":      "longwan_v3",
+			"loongbella":   "loongbella_v3",
+			"loongstella":  "loongstella_v3",
+		})
+	case strings.Contains(normalizedModel, "cosyvoice-v2"):
+		return normalizeAliTTSVoiceFromMap(trimmedVoice, normalizedVoice, map[string]string{
+			"longxiaochun": "longxiaochun_v2",
+			"longxiaoxia":  "longxiaoxia_v2",
+			"longcheng":    "longcheng_v2",
+			"longwan":      "longwan_v2",
+			"loongbella":   "loongbella_v2",
+			"loongstella":  "loongstella_v2",
+		})
+	default:
+		return trimmedVoice
+	}
+}
+
+func normalizeAliTTSVoiceFromMap(original string, normalized string, aliases map[string]string) string {
+	if replacement, ok := aliases[normalized]; ok {
+		return replacement
+	}
+	return original
+}
+
+func isKnownAliSystemVoice(voice string) bool {
+	switch strings.ToLower(strings.TrimSpace(voice)) {
+	case
+		"longxiaochun",
+		"longxiaochun_v2",
+		"longxiaochun_v3",
+		"longanhuan",
+		"longanhuan_v3.6",
+		"longanlingxi",
+		"longcheng",
+		"longwan",
+		"loongbella",
+		"loongstella":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeAliTTSFormat(format string) string {
@@ -581,6 +661,65 @@ def patch_ali_audio_adaptor() -> None:
             "\t\tcase constant.RelayModeImagesEdits:\n\t\t\terr, usage = aliImageHandler(a, c, resp, info)\n\t\tcase constant.RelayModeAudioSpeech:\n\t\t\tusage, err = aliTTSSpeechHandler(c, resp, info)\n",
             "Ali TTS response handler",
         )
+    write(rel, text)
+
+    rel = "relay/audio_handler.go"
+    text = read(rel)
+    if "TTS providers commonly return the actionable model/voice error in JSON" not in text:
+        text = replace_once(
+            text,
+            "\t\t\tnewAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)\n",
+            "\t\t\t// TTS providers commonly return the actionable model/voice error in JSON.\n"
+            "\t\t\t// Keep that body visible so an upstream 4xx/5xx is not reduced to a bare status.\n"
+            "\t\t\tnewAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, true)\n",
+            "Ali TTS upstream error body",
+        )
+    write(rel, text)
+
+
+def patch_channel_test_audio_default_voice() -> None:
+    rel = "controller/channel-test.go"
+    path = ROOT / rel
+    if not path.exists():
+        return
+    text = read(rel)
+    audio_case_pattern = (
+        r'(case constant\.EndpointTypeAudioSpeech:\s*\n'
+        r'\s*return &dto\.AudioRequest\{\s*\n'
+        r'\s*Model:\s*model,\s*\n'
+        r'\s*Input:\s*"[^"]*",\s*\n'
+        r'\s*Voice:\s*)"[^"]*"'
+    )
+    text = re.sub(
+        audio_case_pattern,
+        r'\g<1>defaultAudioSpeechTestVoice(model, channel)',
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if "func defaultAudioSpeechTestVoice(" not in text:
+        helper = r'''
+func defaultAudioSpeechTestVoice(modelName string, channel *model.Channel) string {
+	normalizedModel := strings.ToLower(strings.TrimSpace(modelName))
+	if channel != nil && (channel.Type == constant.ChannelTypeAli || channel.Type == constant.ChannelTypeAliDashScopeNative) {
+		switch {
+		case strings.Contains(normalizedModel, "qwen-audio-3.0-tts-flash"):
+			return "longanhuan_v3.6"
+		case strings.Contains(normalizedModel, "qwen-audio-3.0-tts-plus"):
+			return "longanlingxin"
+		case strings.Contains(normalizedModel, "cosyvoice-v3.5"),
+			strings.Contains(normalizedModel, "cosyvoice-v3"):
+			return "longxiaochun_v3"
+		case strings.Contains(normalizedModel, "cosyvoice-v2"):
+			return "longxiaochun_v2"
+		default:
+			return "longxiaochun_v3"
+		}
+	}
+	return "alloy"
+}
+'''
+        text = insert_before_regex(text, r'^\s*func TestChannel\(', helper + "\n", "channel test function")
     write(rel, text)
 
 
@@ -1119,6 +1258,7 @@ def main() -> None:
     patch_advanced_custom_endpoints()
     patch_dashscope_native_task_pricing()
     patch_ali_audio_adaptor()
+    patch_channel_test_audio_default_voice()
     print("applied Ali video/audio endpoint and HTTP TTS backend patch")
 
 

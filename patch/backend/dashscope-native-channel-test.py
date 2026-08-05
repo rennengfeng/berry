@@ -139,11 +139,20 @@ func buildDashScopeNativeTestRequest(modelName string) (string, []byte, error) {
 	}
 	normalized := strings.ToLower(modelName)
 	if strings.Contains(normalized, "cosyvoice") || strings.Contains(normalized, "qwen-audio") {
+		voice := "longxiaochun"
+		if strings.Contains(normalized, "qwen-audio") {
+			voice = "longanhuan_v3.6"
+		}
+		if strings.Contains(normalized, "cosyvoice-v3.5") || strings.Contains(normalized, "cosyvoice-v3") {
+			voice = "longxiaochun_v3"
+		} else if strings.Contains(normalized, "cosyvoice-v2") {
+			voice = "longxiaochun_v2"
+		}
 		body, err := json.Marshal(map[string]any{
 			"model": modelName,
 			"input": map[string]any{
 				"text":        "你好，这是连通性测试。",
-				"voice":       "longxiaochun",
+				"voice":       voice,
 				"format":      "wav",
 				"sample_rate": 24000,
 			},
