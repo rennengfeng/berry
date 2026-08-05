@@ -35,6 +35,15 @@ def ensure_after_regex(text: str, pattern: str, snippet: str, label: str) -> str
     return text[: match.end()] + snippet + text[match.end() :]
 
 
+def insert_before_regex(text: str, pattern: str, snippet: str, label: str) -> str:
+    if snippet.strip() in text:
+        return text
+    match = re.search(pattern, text, flags=re.MULTILINE)
+    if not match:
+        raise SystemExit(f"Ali video/audio endpoint patch failed: {label} anchor not found")
+    return text[: match.start()] + snippet + text[match.start() :]
+
+
 def replace_once(text: str, old: str, new: str, label: str) -> str:
     if old not in text:
         raise SystemExit(f"Ali video/audio endpoint patch failed: {label} anchor not found")
@@ -53,13 +62,20 @@ def has_endpoint_type_const(text: str, name: str, value: str) -> bool:
     return re.search(pattern, text, flags=re.MULTILINE) is not None
 
 
+def has_endpoint_type_alias(text: str, name: str) -> bool:
+    pattern = rf'^\s*{re.escape(name)}\s*=\s*types\.{re.escape(name)}\s*$'
+    return re.search(pattern, text, flags=re.MULTILINE) is not None
+
+
 def has_endpoint_default(text: str, name: str) -> bool:
     pattern = rf'^\s*constant\.{re.escape(name)}\s*:'
     return re.search(pattern, text, flags=re.MULTILINE) is not None
 
 
-def patch_endpoint_types() -> None:
-    rel = "constant/endpoint_type.go"
+def patch_endpoint_type_value_file(rel: str) -> None:
+    path = ROOT / rel
+    if not path.exists():
+        return
     text = read(rel)
     has_video = has_endpoint_type_const(text, "EndpointTypeOpenAIVideo", "openai-video")
     has_audio = has_endpoint_type_const(text, "EndpointTypeAudioSpeech", "audio-speech")
@@ -67,20 +83,54 @@ def patch_endpoint_types() -> None:
         snippet = '\tEndpointTypeOpenAIVideo           EndpointType = "openai-video"\n'
         if not has_audio:
             snippet += '\tEndpointTypeAudioSpeech           EndpointType = "audio-speech"\n'
-        text = ensure_after_regex(
-            text,
-            r'^\s*EndpointTypeEmbeddings\s+EndpointType\s*=\s*"embeddings"\s*\n',
-            snippet,
-            "endpoint type embeddings",
-        )
+        embeddings_pattern = r'^\s*EndpointTypeEmbeddings\s+EndpointType\s*=\s*"embeddings"\s*\n'
+        if re.search(embeddings_pattern, text, flags=re.MULTILINE):
+            text = ensure_after_regex(text, embeddings_pattern, snippet, f"{rel} endpoint type embeddings")
+        else:
+            text = insert_before_regex(text, r'^\s*\)\s*$', snippet, f"{rel} endpoint type const block end")
     elif not has_audio:
         text = ensure_after_regex(
             text,
             r'^\s*EndpointTypeOpenAIVideo\s+EndpointType\s*=\s*"openai-video"\s*\n',
             '\tEndpointTypeAudioSpeech           EndpointType = "audio-speech"\n',
-            "audio endpoint type",
+            f"{rel} audio endpoint type",
         )
     write(rel, text)
+
+
+def patch_endpoint_type_alias_file(rel: str) -> None:
+    text = read(rel)
+    has_video = has_endpoint_type_alias(text, "EndpointTypeOpenAIVideo")
+    has_audio = has_endpoint_type_alias(text, "EndpointTypeAudioSpeech")
+    if not has_video:
+        snippet = '\tEndpointTypeOpenAIVideo           = types.EndpointTypeOpenAIVideo\n'
+        if not has_audio:
+            snippet += '\tEndpointTypeAudioSpeech           = types.EndpointTypeAudioSpeech\n'
+        embeddings_pattern = r'^\s*EndpointTypeEmbeddings\s*=\s*types\.EndpointTypeEmbeddings\s*\n'
+        if re.search(embeddings_pattern, text, flags=re.MULTILINE):
+            text = ensure_after_regex(text, embeddings_pattern, snippet, f"{rel} endpoint alias embeddings")
+        else:
+            text = insert_before_regex(text, r'^\s*\)\s*$', snippet, f"{rel} endpoint alias const block end")
+    elif not has_audio:
+        text = ensure_after_regex(
+            text,
+            r'^\s*EndpointTypeOpenAIVideo\s*=\s*types\.EndpointTypeOpenAIVideo\s*\n',
+            '\tEndpointTypeAudioSpeech           = types.EndpointTypeAudioSpeech\n',
+            f"{rel} audio endpoint alias",
+        )
+    write(rel, text)
+
+
+def patch_endpoint_types() -> None:
+    relaykit_rel = "relaykit/types/endpoint_type.go"
+    patch_endpoint_type_value_file(relaykit_rel)
+
+    rel = "constant/endpoint_type.go"
+    text = read(rel)
+    if "type EndpointType = types.EndpointType" in text:
+        patch_endpoint_type_alias_file(rel)
+    else:
+        patch_endpoint_type_value_file(rel)
 
 
 def patch_endpoint_defaults() -> None:
@@ -92,12 +142,11 @@ def patch_endpoint_defaults() -> None:
         snippet = '\tconstant.EndpointTypeOpenAIVideo:           {Path: "/v1/videos", Method: "POST"},\n'
         if not has_audio:
             snippet += '\tconstant.EndpointTypeAudioSpeech:           {Path: "/v1/audio/speech", Method: "POST"},\n'
-        text = ensure_after_regex(
-            text,
-            r'^\s*constant\.EndpointTypeEmbeddings\s*:\s*\{Path:\s*"/v1/embeddings",\s*Method:\s*"POST"\},\s*\n',
-            snippet,
-            "endpoint defaults embeddings",
-        )
+        embeddings_pattern = r'^\s*constant\.EndpointTypeEmbeddings\s*:\s*\{Path:\s*"/v1/embeddings",\s*Method:\s*"POST"\},\s*\n'
+        if re.search(embeddings_pattern, text, flags=re.MULTILINE):
+            text = ensure_after_regex(text, embeddings_pattern, snippet, "endpoint defaults embeddings")
+        else:
+            text = insert_before_regex(text, r'^\s*\}\s*$', snippet, "endpoint defaults map end")
     elif not has_audio:
         text = ensure_after_regex(
             text,
@@ -112,15 +161,17 @@ def patch_model_capabilities() -> None:
     rel = "common/model.go"
     text = read(rel)
     if "VideoGenerationModels = []string{" not in text:
-        text = ensure_after_regex(
-            text,
-            r'^\s*OpenAITextModels\s*=\s*\[\]string\s*\{(?:.|\n)*?^\s*\}\s*\n',
+        snippet = (
             '\tVideoGenerationModels = []string{\n'
             '\t\t"sora",\n\t\t"t2v",\n\t\t"i2v",\n\t\t"r2v",\n\t\t"kf2v",\n'
             '\t\t"video",\n\t\t"hailuo",\n\t\t"kling",\n\t\t"vidu",\n\t\t"happyhorse",\n\t\t"wan",\n\t}\n'
-            '\tAudioSpeechModels = []string{\n\t\t"tts",\n\t\t"speech",\n\t\t"cosyvoice",\n\t\t"qwen-audio",\n\t}\n',
-            "model capability lists",
+            '\tAudioSpeechModels = []string{\n\t\t"tts",\n\t\t"speech",\n\t\t"cosyvoice",\n\t\t"qwen-audio",\n\t}\n'
         )
+        text_models_pattern = r'^\s*OpenAITextModels\s*=\s*\[\]string\s*\{(?:.|\n)*?^\s*\}\s*\n'
+        if re.search(text_models_pattern, text, flags=re.MULTILINE):
+            text = ensure_after_regex(text, text_models_pattern, snippet, "model capability lists")
+        else:
+            text = insert_before_regex(text, r'^\s*\)\s*$', snippet, "model capability var block end")
     if "func IsVideoGenerationModel(" not in text:
         text = text.rstrip() + '''
 
