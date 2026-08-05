@@ -26,28 +26,75 @@ def ensure_after(text: str, anchor: str, snippet: str, label: str) -> str:
     return text.replace(anchor, anchor + snippet, 1)
 
 
+def ensure_after_regex(text: str, pattern: str, snippet: str, label: str) -> str:
+    if snippet.strip() in text:
+        return text
+    match = re.search(pattern, text, flags=re.MULTILINE)
+    if not match:
+        raise SystemExit(f"Ali video/audio endpoint patch failed: {label} anchor not found")
+    return text[: match.end()] + snippet + text[match.end() :]
+
+
+def replace_once(text: str, old: str, new: str, label: str) -> str:
+    if old not in text:
+        raise SystemExit(f"Ali video/audio endpoint patch failed: {label} anchor not found")
+    return text.replace(old, new, 1)
+
+
+def replace_once_regex(text: str, pattern: str, repl: str, label: str) -> str:
+    new_text, count = re.subn(pattern, repl, text, count=1, flags=re.MULTILINE)
+    if count == 0:
+        raise SystemExit(f"Ali video/audio endpoint patch failed: {label} anchor not found")
+    return new_text
+
+
 def patch_endpoint_types() -> None:
     rel = "constant/endpoint_type.go"
     text = read(rel)
-    text = ensure_after(
-        text,
-        '\tEndpointTypeOpenAIVideo           EndpointType = "openai-video"\n',
-        '\tEndpointTypeAudioSpeech           EndpointType = "audio-speech"\n',
-        "audio endpoint type",
-    )
+    has_video = "EndpointTypeOpenAIVideo" in text
+    has_audio = "EndpointTypeAudioSpeech" in text
+    if not has_video:
+        snippet = '\tEndpointTypeOpenAIVideo           EndpointType = "openai-video"\n'
+        if not has_audio:
+            snippet += '\tEndpointTypeAudioSpeech           EndpointType = "audio-speech"\n'
+        text = ensure_after_regex(
+            text,
+            r'^\s*EndpointTypeEmbeddings\s+EndpointType\s*=\s*"embeddings"\s*\n',
+            snippet,
+            "endpoint type embeddings",
+        )
+    elif not has_audio:
+        text = ensure_after_regex(
+            text,
+            r'^\s*EndpointTypeOpenAIVideo\s+EndpointType\s*=\s*"openai-video"\s*\n',
+            '\tEndpointTypeAudioSpeech           EndpointType = "audio-speech"\n',
+            "audio endpoint type",
+        )
     write(rel, text)
 
 
 def patch_endpoint_defaults() -> None:
     rel = "common/endpoint_defaults.go"
     text = read(rel)
-    text = ensure_after(
-        text,
-        '\tconstant.EndpointTypeEmbeddings:            {Path: "/v1/embeddings", Method: "POST"},\n',
-        '\tconstant.EndpointTypeOpenAIVideo:           {Path: "/v1/videos", Method: "POST"},\n'
-        '\tconstant.EndpointTypeAudioSpeech:           {Path: "/v1/audio/speech", Method: "POST"},\n',
-        "video/audio endpoint defaults",
-    )
+    has_video = "constant.EndpointTypeOpenAIVideo:" in text
+    has_audio = "constant.EndpointTypeAudioSpeech:" in text
+    if not has_video:
+        snippet = '\tconstant.EndpointTypeOpenAIVideo:           {Path: "/v1/videos", Method: "POST"},\n'
+        if not has_audio:
+            snippet += '\tconstant.EndpointTypeAudioSpeech:           {Path: "/v1/audio/speech", Method: "POST"},\n'
+        text = ensure_after_regex(
+            text,
+            r'^\s*constant\.EndpointTypeEmbeddings\s*:\s*\{Path:\s*"/v1/embeddings",\s*Method:\s*"POST"\},\s*\n',
+            snippet,
+            "endpoint defaults embeddings",
+        )
+    elif not has_audio:
+        text = ensure_after_regex(
+            text,
+            r'^\s*constant\.EndpointTypeOpenAIVideo\s*:\s*\{Path:\s*"/v1/videos",\s*Method:\s*"POST"\},\s*\n',
+            '\tconstant.EndpointTypeAudioSpeech:           {Path: "/v1/audio/speech", Method: "POST"},\n',
+            "audio endpoint defaults",
+        )
     write(rel, text)
 
 
@@ -55,9 +102,9 @@ def patch_model_capabilities() -> None:
     rel = "common/model.go"
     text = read(rel)
     if "VideoGenerationModels = []string{" not in text:
-        text = ensure_after(
+        text = ensure_after_regex(
             text,
-            '\tOpenAITextModels = []string{\n\t\t"gpt-",\n\t\t"o1",\n\t\t"o3",\n\t\t"o4",\n\t\t"chatgpt",\n\t}\n',
+            r'^\s*OpenAITextModels\s*=\s*\[\]string\s*\{(?:.|\n)*?^\s*\}\s*\n',
             '\tVideoGenerationModels = []string{\n'
             '\t\t"sora",\n\t\t"t2v",\n\t\t"i2v",\n\t\t"r2v",\n\t\t"kf2v",\n'
             '\t\t"video",\n\t\t"hailuo",\n\t\t"kling",\n\t\t"vidu",\n\t\t"happyhorse",\n\t\t"wan",\n\t}\n'
@@ -98,9 +145,9 @@ func IsAudioSpeechModel(modelName string) bool {
     rel = "common/endpoint_type.go"
     text = read(rel)
     if "IsVideoGenerationModel(modelName)" not in text:
-        text = ensure_after(
+        text = ensure_after_regex(
             text,
-            '\tif IsImageGenerationModel(modelName) {\n\t\t// add to first\n\t\tendpointTypes = append([]constant.EndpointType{constant.EndpointTypeImageGeneration}, endpointTypes...)\n\t}\n',
+            r'^\s*if IsImageGenerationModel\(modelName\)\s*\{\n(?:.|\n)*?^\s*\}\s*\n',
             '\tif IsVideoGenerationModel(modelName) {\n\t\tendpointTypes = append([]constant.EndpointType{constant.EndpointTypeOpenAIVideo}, endpointTypes...)\n\t}\n'
             '\tif IsAudioSpeechModel(modelName) {\n\t\tendpointTypes = append([]constant.EndpointType{constant.EndpointTypeAudioSpeech}, endpointTypes...)\n\t}\n',
             "video/audio endpoint capability append",
@@ -114,20 +161,50 @@ def patch_advanced_custom_endpoints() -> None:
         if not path.exists():
             continue
         text = read(rel)
-        text = ensure_after(
-            text,
-            '\tadvancedCustomEndpointPathImageGenerationAsync   = "/v1/image-tasks/generations"\n',
-            '\tadvancedCustomEndpointPathOpenAIVideo            = "/v1/videos"\n'
-            '\tadvancedCustomEndpointPathAudioSpeech            = "/v1/audio/speech"\n',
-            f"{rel} video/audio advanced custom constants",
-        )
-        if "advancedCustomEndpointPathOpenAIVideo:" not in text:
-            text = text.replace(
-                "case advancedCustomEndpointPathImageGeneration, advancedCustomEndpointPathImageGenerationAsync:\n\t\treturn constant.EndpointTypeImageGeneration, true\n",
-                "case advancedCustomEndpointPathImageGeneration, advancedCustomEndpointPathImageGenerationAsync:\n\t\treturn constant.EndpointTypeImageGeneration, true\n"
+        has_video = re.search(r'advancedCustomEndpointPathOpenAIVideo\s*=', text) is not None
+        has_audio = re.search(r'advancedCustomEndpointPathAudioSpeech\s*=', text) is not None
+        if not has_video:
+            snippet = '\tadvancedCustomEndpointPathOpenAIVideo            = "/v1/videos"\n'
+            if not has_audio:
+                snippet += '\tadvancedCustomEndpointPathAudioSpeech            = "/v1/audio/speech"\n'
+            text = ensure_after_regex(
+                text,
+                r'^\s*advancedCustomEndpointPathImageGenerationAsync\s*=\s*"/v1/image-tasks/generations"\s*\n',
+                snippet,
+                f"{rel} image async advanced custom constant",
+            )
+        elif not has_audio:
+            text = ensure_after_regex(
+                text,
+                r'^\s*advancedCustomEndpointPathOpenAIVideo\s*=\s*"/v1/videos"\s*\n',
+                '\tadvancedCustomEndpointPathAudioSpeech            = "/v1/audio/speech"\n',
+                f"{rel} audio advanced custom constant",
+            )
+        has_video_case = "case advancedCustomEndpointPathOpenAIVideo:" in text
+        has_audio_case = "case advancedCustomEndpointPathAudioSpeech:" in text
+        if not has_video_case and not has_audio_case:
+            text = replace_once_regex(
+                text,
+                r'(case advancedCustomEndpointPathImageGeneration,\s*advancedCustomEndpointPathImageGenerationAsync:\s*\n\s*return constant\.EndpointTypeImageGeneration,\s*true\s*\n)',
+                r'\g<1>'
                 "case advancedCustomEndpointPathOpenAIVideo:\n\t\treturn constant.EndpointTypeOpenAIVideo, true\n"
                 "case advancedCustomEndpointPathAudioSpeech:\n\t\treturn constant.EndpointTypeAudioSpeech, true\n",
-                1,
+                f"{rel} video/audio advanced custom switch",
+            )
+        elif not has_video_case:
+            text = replace_once_regex(
+                text,
+                r'(case advancedCustomEndpointPathImageGeneration,\s*advancedCustomEndpointPathImageGenerationAsync:\s*\n\s*return constant\.EndpointTypeImageGeneration,\s*true\s*\n)',
+                r'\g<1>'
+                "case advancedCustomEndpointPathOpenAIVideo:\n\t\treturn constant.EndpointTypeOpenAIVideo, true\n",
+                f"{rel} video advanced custom switch",
+            )
+        elif not has_audio_case:
+            text = ensure_after_regex(
+                text,
+                r'^\s*case advancedCustomEndpointPathOpenAIVideo:\s*\n\s*return constant\.EndpointTypeOpenAIVideo,\s*true\s*\n',
+                "case advancedCustomEndpointPathAudioSpeech:\n\t\treturn constant.EndpointTypeAudioSpeech, true\n",
+                f"{rel} audio advanced custom switch",
             )
         write(rel, text)
 
@@ -376,27 +453,32 @@ def patch_ali_audio_adaptor() -> None:
     rel = "relay/channel/ali/adaptor.go"
     text = read(rel)
     if "RelayModeAudioSpeech" not in text.split("case constant.RelayModeEmbeddings:", 1)[0]:
-        text = text.replace(
+        text = replace_once(
+            text,
             "\t\tcase constant.RelayModeEmbeddings:\n",
             '\t\tcase constant.RelayModeAudioSpeech:\n\t\t\tfullRequestURL = fmt.Sprintf("%s/api/v1/services/audio/tts/SpeechSynthesizer", info.ChannelBaseUrl)\n\t\tcase constant.RelayModeEmbeddings:\n',
-            1,
+            "Ali TTS request URL",
         )
     if 'info.RelayMode == constant.RelayModeAudioSpeech' not in text:
-        text = text.replace(
+        text = replace_once(
+            text,
             '\treq.Set("Authorization", "Bearer "+info.ApiKey)\n',
             '\treq.Set("Authorization", "Bearer "+info.ApiKey)\n\tif info.RelayMode == constant.RelayModeAudioSpeech {\n\t\treq.Set("Content-Type", "application/json")\n\t}\n',
-            1,
+            "Ali TTS content-type header",
         )
-    text = text.replace(
-        'func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.AudioRequest) (io.Reader, error) {\n\t//TODO implement me\n\treturn nil, errors.New("not implemented")\n}',
-        'func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.AudioRequest) (io.Reader, error) {\n\treturn convertAliAudioRequest(info, request)\n}',
-        1,
-    )
+    if "return convertAliAudioRequest(info, request)" not in text:
+        text = replace_once_regex(
+            text,
+            r'func \(a \*Adaptor\) ConvertAudioRequest\(c \*gin\.Context, info \*relaycommon\.RelayInfo, request dto\.AudioRequest\) \(io\.Reader, error\) \{\n(?:.|\n)*?\n\}',
+            'func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.AudioRequest) (io.Reader, error) {\n\treturn convertAliAudioRequest(info, request)\n}',
+            "Ali ConvertAudioRequest",
+        )
     if "aliTTSSpeechHandler" not in text:
-        text = text.replace(
+        text = replace_once(
+            text,
             "\t\tcase constant.RelayModeImagesEdits:\n\t\t\terr, usage = aliImageHandler(a, c, resp, info)\n",
             "\t\tcase constant.RelayModeImagesEdits:\n\t\t\terr, usage = aliImageHandler(a, c, resp, info)\n\t\tcase constant.RelayModeAudioSpeech:\n\t\t\tusage, err = aliTTSSpeechHandler(c, resp, info)\n",
-            1,
+            "Ali TTS response handler",
         )
     write(rel, text)
 
