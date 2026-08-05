@@ -48,11 +48,21 @@ def replace_once_regex(text: str, pattern: str, repl: str, label: str) -> str:
     return new_text
 
 
+def has_endpoint_type_const(text: str, name: str, value: str) -> bool:
+    pattern = rf'^\s*{re.escape(name)}\s+EndpointType\s*=\s*"{re.escape(value)}"\s*$'
+    return re.search(pattern, text, flags=re.MULTILINE) is not None
+
+
+def has_endpoint_default(text: str, name: str) -> bool:
+    pattern = rf'^\s*constant\.{re.escape(name)}\s*:'
+    return re.search(pattern, text, flags=re.MULTILINE) is not None
+
+
 def patch_endpoint_types() -> None:
     rel = "constant/endpoint_type.go"
     text = read(rel)
-    has_video = "EndpointTypeOpenAIVideo" in text
-    has_audio = "EndpointTypeAudioSpeech" in text
+    has_video = has_endpoint_type_const(text, "EndpointTypeOpenAIVideo", "openai-video")
+    has_audio = has_endpoint_type_const(text, "EndpointTypeAudioSpeech", "audio-speech")
     if not has_video:
         snippet = '\tEndpointTypeOpenAIVideo           EndpointType = "openai-video"\n'
         if not has_audio:
@@ -76,8 +86,8 @@ def patch_endpoint_types() -> None:
 def patch_endpoint_defaults() -> None:
     rel = "common/endpoint_defaults.go"
     text = read(rel)
-    has_video = "constant.EndpointTypeOpenAIVideo:" in text
-    has_audio = "constant.EndpointTypeAudioSpeech:" in text
+    has_video = has_endpoint_default(text, "EndpointTypeOpenAIVideo")
+    has_audio = has_endpoint_default(text, "EndpointTypeAudioSpeech")
     if not has_video:
         snippet = '\tconstant.EndpointTypeOpenAIVideo:           {Path: "/v1/videos", Method: "POST"},\n'
         if not has_audio:
