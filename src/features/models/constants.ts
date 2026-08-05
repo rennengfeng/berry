@@ -171,6 +171,22 @@ export const ENDPOINT_TEMPLATES: Record<
   gemini: { path: '/v1beta/models/{model}:generateContent', method: 'POST' },
   'jina-rerank': { path: '/rerank', method: 'POST' },
   'image-generation': { path: '/v1/images/generations', method: 'POST' },
+  'image-generation-async': {
+    path: '/v1/image-tasks/generations',
+    method: 'POST',
+  },
+  'dashscope-native-qwen-image': {
+    path: '/api/v1/services/aigc/multimodal-generation/generation',
+    method: 'POST',
+  },
+  'dashscope-native-wan-image': {
+    path: '/api/v1/services/aigc/text2image/image-synthesis',
+    method: 'POST',
+  },
+  'dashscope-native-video': {
+    path: '/api/v1/services/aigc/video-generation/video-synthesis',
+    method: 'POST',
+  },
   embeddings: { path: '/v1/embeddings', method: 'POST' },
 }
 

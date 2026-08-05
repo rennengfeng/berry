@@ -42,8 +42,16 @@ const TEXT_INPUT_ENDPOINTS = new Set([
   'jina-rerank',
 ])
 
-const IMAGE_OUTPUT_ENDPOINTS = new Set(['image-generation'])
-const VIDEO_OUTPUT_ENDPOINTS = new Set(['openai-video'])
+const IMAGE_OUTPUT_ENDPOINTS = new Set([
+  'image-generation',
+  'image-generation-async',
+  'dashscope-native-qwen-image',
+  'dashscope-native-wan-image',
+])
+const VIDEO_OUTPUT_ENDPOINTS = new Set([
+  'openai-video',
+  'dashscope-native-video',
+])
 const EMBEDDING_ENDPOINTS = new Set(['embeddings', 'jina-rerank'])
 
 const REASONING_NAME_PATTERNS = [
@@ -215,12 +223,15 @@ function inferCapabilities(
 ): ModelCapability[] {
   const set = new Set<ModelCapability>()
 
-  if (outputs.includes('text') && !endpoints.includes('image-generation')) {
+  if (
+    outputs.includes('text') &&
+    !endpoints.some((endpoint) => IMAGE_OUTPUT_ENDPOINTS.has(endpoint))
+  ) {
     set.add('streaming')
     set.add('system_prompt')
   }
   if (
-    !endpoints.includes('image-generation') &&
+    !endpoints.some((endpoint) => IMAGE_OUTPUT_ENDPOINTS.has(endpoint)) &&
     !endpoints.includes('embeddings') &&
     !endpoints.includes('jina-rerank')
   ) {
@@ -258,7 +269,7 @@ function inferContextAndOutputs(
     return { context: 8_192, maxOutput: 0 }
   }
   if (
-    endpoints.includes('image-generation') ||
+    endpoints.some((endpoint) => IMAGE_OUTPUT_ENDPOINTS.has(endpoint)) ||
     endpoints.includes('openai-video')
   ) {
     return { context: 4_096, maxOutput: 0 }

@@ -438,7 +438,19 @@ function buildSample(
   if (endpointType === 'gemini') return buildGeminiSample(lang, ctx)
   if (endpointType === 'embeddings' || endpointType === 'jina-rerank')
     return buildEmbeddingSample(lang, ctx)
-  if (endpointType === 'image-generation') return buildImageSample(lang, ctx)
+  if (
+    endpointType === 'image-generation' ||
+    endpointType === 'image-generation-async' ||
+    endpointType === 'dashscope-native-qwen-image' ||
+    endpointType === 'dashscope-native-wan-image'
+  )
+    return buildImageSample(lang, {
+      ...ctx,
+      endpointPath:
+        endpointType === 'image-generation-async'
+          ? '/v1/image-tasks/generations'
+          : ctx.endpointPath,
+    })
   return buildChatSample(lang, ctx)
 }
 

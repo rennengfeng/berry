@@ -200,7 +200,15 @@ function getModelCapability(model: ModelOption): ChatMode | 'video' | 'audio' {
   const endpointList = (model.endpoints ?? []).map((item) => item.toLowerCase())
 
   if (endpointList.length > 0) {
-    if (endpointList.includes('image-generation') || endpointList.includes('image-generation-async')) return 'image'
+    if (
+      endpointList.some(
+        (item) =>
+          item.includes('image') ||
+          item.includes('text2image') ||
+          item.includes('image2image')
+      )
+    )
+      return 'image'
     if (endpointList.some((item) => item.includes('video'))) return 'video'
     if (endpointList.some((item) => /(audio|speech|tts|asr)/i.test(item))) return 'audio'
   }
