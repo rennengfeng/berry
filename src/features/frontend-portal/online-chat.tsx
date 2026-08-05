@@ -239,9 +239,9 @@ function getImageAspectOptions(provider: ImageProvider): ImageAspectRatio[] {
 
 function getImageResolutionOptions(provider: ImageProvider, model: string): ImageResolutionTier[] {
   if (provider === 'gpt') return GPT_RESOLUTION_OPTIONS
-  if (provider === 'gemini' && !/4k/i.test(model)) return ['1K', '2K', '4K']
   if (provider === 'gemini') return GEMINI_RESOLUTION_OPTIONS
   if (provider === 'qwen') return QWEN_RESOLUTION_OPTIONS
+  void model
   return ['1K', '2K', '4K']
 }
 
@@ -259,7 +259,7 @@ function resolveGenericSize(aspectRatio: ImageAspectRatio, resolution: ImageReso
   const [wRaw, hRaw] = aspectRatio.split(':')
   const w = Number(wRaw) || 1
   const h = Number(hRaw) || 1
-  const longEdge = resolution === '4K' ? 3840 : resolution === '1K' ? 1024 : 2048
+  const longEdge = resolution === '4K' ? 4096 : resolution === '1K' ? 1024 : 2048
   if (w >= h) {
     const height = Math.round(longEdge * (h / w))
     return `${longEdge}x${height}`
@@ -366,8 +366,8 @@ function imageChipClass(selected: boolean): string {
   return cn(
     'inline-flex min-w-0 items-center justify-center rounded-lg border text-sm transition',
     selected
-      ? 'border-violet-400/70 bg-violet-500/20 text-white shadow-[0_0_0_1px_rgba(139,92,246,0.25)]'
-      : 'border-white/10 bg-white/[0.04] text-white/60 hover:border-violet-400/40 hover:bg-violet-500/10 hover:text-white'
+      ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+      : 'border-white/10 bg-white/[0.04] text-white/65 hover:border-primary/50 hover:bg-primary/15 hover:text-white'
   )
 }
 
