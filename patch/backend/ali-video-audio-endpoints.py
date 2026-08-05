@@ -539,7 +539,18 @@ func aliTTSContentType(info *relaycommon.RelayInfo) string {
 
 
 def patch_ali_audio_adaptor() -> None:
-    write("relay/channel/ali/audio.go", ALI_AUDIO_GO)
+    audio_go = ALI_AUDIO_GO
+    if (ROOT / "relaykit/dto").is_dir():
+        audio_go = audio_go.replace(
+            '"github.com/QuantumNous/new-api/dto"',
+            '"github.com/QuantumNous/new-api/relaykit/dto"',
+        )
+    if (ROOT / "relaykit/types").is_dir():
+        audio_go = audio_go.replace(
+            '"github.com/QuantumNous/new-api/types"',
+            '"github.com/QuantumNous/new-api/relaykit/types"',
+        )
+    write("relay/channel/ali/audio.go", audio_go)
     rel = "relay/channel/ali/adaptor.go"
     text = read(rel)
     if "RelayModeAudioSpeech" not in text.split("case constant.RelayModeEmbeddings:", 1)[0]:
