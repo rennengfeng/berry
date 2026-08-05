@@ -584,9 +584,43 @@ def patch_ali_audio_adaptor() -> None:
     write(rel, text)
 
 
+def price_helper_type_names(text: str) -> tuple[str, str, str]:
+    price_data_type = "types.PriceData"
+    model_sig = re.search(r'func\s+ModelPriceHelper\s*\([^)]*\)\s*\(([^,]+),\s*error\)', text)
+    if model_sig:
+        price_data_type = model_sig.group(1).strip()
+
+    group_ratio_type = "types.GroupRatioInfo"
+    group_sig = re.search(r'func\s+HandleGroupRatio\s*\([^)]*\)\s*([^\s{]+)\s*\{', text)
+    if group_sig:
+        group_ratio_type = group_sig.group(1).strip()
+
+    token_meta_type = "types.TokenCountMeta"
+    if "meta *hosttypes.TokenCountMeta" in text:
+        token_meta_type = "hosttypes.TokenCountMeta"
+    return price_data_type, group_ratio_type, token_meta_type
+
+
+def ensure_price_helper_imports(text: str, imports: list[str]) -> str:
+    missing = [item for item in imports if item not in text]
+    if not missing:
+        return text
+    import_match = re.search(r'import\s*\(\s*\n', text)
+    if import_match:
+        return text[: import_match.end()] + "".join(f"\t{item}\n" for item in missing) + text[import_match.end() :]
+    single_import_match = re.search(r'import\s+([^\n]+)\n', text)
+    if not single_import_match:
+        raise SystemExit("Ali video/audio endpoint patch failed: price helper import block not found")
+    existing_import = single_import_match.group(1).strip()
+    import_block = "import (\n\t" + existing_import + "\n" + "".join(f"\t{item}\n" for item in missing) + ")\n"
+    return text[: single_import_match.start()] + import_block + text[single_import_match.end() :]
+
+
 def patch_dashscope_native_task_pricing() -> None:
     rel = "relay/helper/price.go"
     text = read(rel)
+    price_data_type, group_ratio_type, token_meta_type = price_helper_type_names(text)
+    text = ensure_price_helper_imports(text, ['"github.com/QuantumNous/new-api/constant"'])
     if '"unicode/utf8"' not in text:
         text = replace_once(
             text,
@@ -595,9 +629,9 @@ def patch_dashscope_native_task_pricing() -> None:
             "price helper utf8 import",
         )
     if "func relayInfoChannelType(" not in text:
-        text = replace_once(
+        text = insert_before_regex(
             text,
-            "func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo types.GroupRatioInfo) (types.PriceData, error) {\n",
+            r'^func modelPriceHelperDashScopeNative\(info \*relaycommon\.RelayInfo, groupRatioInfo [^)]+\) \([^)]+, error\) \{\s*$',
             '''func relayInfoChannelType(c *gin.Context, info *relaycommon.RelayInfo) int {
 	if info != nil && info.ChannelMeta != nil {
 		return info.ChannelType
@@ -608,15 +642,11 @@ def patch_dashscope_native_task_pricing() -> None:
 	return 0
 }
 
-func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo types.GroupRatioInfo) (types.PriceData, error) {
 ''',
             "DashScope Native relay channel type helper",
         )
     if "func applyDashScopeNativeRelayRatios(" not in text:
-        text = replace_once(
-            text,
-            "func maxFloat64(values ...float64) float64 {\n",
-            '''func applyDashScopeNativeRelayRatios(info *relaycommon.RelayInfo, priceData *types.PriceData, promptTokens int, meta *types.TokenCountMeta) {
+        snippet = '''func applyDashScopeNativeRelayRatios(info *relaycommon.RelayInfo, priceData *__PRICE_DATA_TYPE__, promptTokens int, meta *__TOKEN_META_TYPE__) {
 	if info == nil || priceData == nil {
 		return
 	}
@@ -644,32 +674,124 @@ func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo
 	}
 }
 
-func maxFloat64(values ...float64) float64 {
-''',
+'''.replace("__PRICE_DATA_TYPE__", price_data_type).replace("__TOKEN_META_TYPE__", token_meta_type)
+        if "func dashScopeNativeMaxFloat64(" in text:
+            text = insert_before_regex(
+                text,
+                r'^func dashScopeNativeMaxFloat64\(values \.\.\.float64\) float64 \{\s*$',
+                snippet + "\n",
+                "DashScope Native relay quantity ratios",
+            )
+        else:
+            text = insert_before_regex(
+                text,
+                r'^func maxFloat64\(values \.\.\.float64\) float64 \{\s*$',
+                snippet + "\n",
+                "DashScope Native relay quantity ratios",
+            )
+    if "func modelPriceHelperDashScopeNative(" not in text:
+        helpers = r'''
+func relayInfoChannelType(c *gin.Context, info *relaycommon.RelayInfo) int {
+	if info != nil && info.ChannelMeta != nil {
+		return info.ChannelType
+	}
+	if c != nil {
+		return common.GetContextKeyInt(c, constant.ContextKeyChannelType)
+	}
+	return 0
+}
+
+func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo __GROUP_RATIO_TYPE__) (__PRICE_DATA_TYPE__, error) {
+	spec, ok := billing_setting.GetDashScopeNativePricing(info.OriginModelName)
+	if !ok {
+		return __PRICE_DATA_TYPE__{}, modelPriceNotConfiguredError(info.OriginModelName, info.UserId)
+	}
+
+	referencePrice := spec.Price
+	if spec.Unit == "token_input_output" {
+		referencePrice = dashScopeNativeMaxFloat64(spec.InputPrice, spec.OutputPrice, spec.CacheReadPrice, spec.CacheWritePrice)
+	}
+	if referencePrice <= 0 {
+		for _, price := range spec.Prices {
+			if price > 0 {
+				referencePrice = price
+				break
+			}
+		}
+	}
+	if referencePrice <= 0 {
+		return __PRICE_DATA_TYPE__{}, fmt.Errorf("DashScope Native price is not configured for model %q", info.OriginModelName)
+	}
+
+	priceData := __PRICE_DATA_TYPE__{
+		ModelPrice:     referencePrice,
+		UsePrice:       true,
+		GroupRatioInfo: groupRatioInfo,
+	}
+	info.PriceData = priceData
+	return priceData, nil
+}
+
+func applyDashScopeNativeRelayRatios(info *relaycommon.RelayInfo, priceData *__PRICE_DATA_TYPE__, promptTokens int, meta *__TOKEN_META_TYPE__) {
+	if info == nil || priceData == nil {
+		return
+	}
+	spec, ok := billing_setting.GetDashScopeNativePricing(info.OriginModelName)
+	if !ok {
+		return
+	}
+	switch strings.TrimSpace(spec.Unit) {
+	case "character":
+		quantity := promptTokens
+		if quantity <= 0 && meta != nil {
+			quantity = utf8.RuneCountInString(meta.CombineText)
+		}
+		if quantity <= 0 {
+			quantity = 1
+		}
+		priceData.AddOtherRatio("native_quantity", float64(quantity))
+	case "image":
+		if meta != nil {
+			for name, ratio := range meta.BillingRatios {
+				priceData.AddOtherRatio(name, ratio)
+			}
+		}
+	case "request", "video_task", "token_input_output":
+	}
+}
+
+func dashScopeNativeMaxFloat64(values ...float64) float64 {
+	result := 0.0
+	for _, value := range values {
+		if value > result {
+			result = value
+		}
+	}
+	return result
+}
+
+'''.replace("__PRICE_DATA_TYPE__", price_data_type).replace("__GROUP_RATIO_TYPE__", group_ratio_type).replace("__TOKEN_META_TYPE__", token_meta_type)
+        text = insert_before_regex(
+            text,
+            r'^(?:// ModelPriceHelperPerCall.*\n)?func ModelPriceHelperPerCall\(',
+            helpers,
             "DashScope Native relay quantity ratios",
         )
     if "applyDashScopeNativeRelayRatios(info, &priceData, promptTokens, meta)" not in text:
-        text = replace_once_regex(
-            text,
-            r'\tif billingMode == billing_setting\.BillingModeDashScopeNative \{\n'
-            r'\t\tif info\.ChannelType != constant\.ChannelTypeAliDashScopeNative \|\| !info\.IsChannelTest \{\n'
-            r'\t\t\treturn types\.PriceData\{\}, fmt\.Errorf\("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info\.OriginModelName\)\n'
-            r'\t\t\}\n'
-            r'\t\treturn modelPriceHelperDashScopeNative\(info, groupRatioInfo\)\n'
-            r'\t\}\n',
-            '''	if billingMode == billing_setting.BillingModeDashScopeNative {
+        native_relay_branch = '''	if billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeDashScopeNative {
+		groupRatioInfo := HandleGroupRatio(c, info)
 		if relayInfoChannelType(c, info) != constant.ChannelTypeAliDashScopeNative {
-			return types.PriceData{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
+			return __PRICE_DATA_TYPE__{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
 		}
 		priceData, err := modelPriceHelperDashScopeNative(info, groupRatioInfo)
 		if err != nil {
-			return types.PriceData{}, err
+			return __PRICE_DATA_TYPE__{}, err
 		}
 		applyDashScopeNativeRelayRatios(info, &priceData, promptTokens, meta)
 		quotaToPreConsume := priceData.ApplyOtherRatiosToFloat(priceData.ModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
 		quota, err := common.QuotaFromFloatStrict(quotaToPreConsume)
 		if err != nil {
-			return types.PriceData{}, err
+			return __PRICE_DATA_TYPE__{}, err
 		}
 		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
 			if groupRatioInfo.GroupRatio == 0 || priceData.ModelPrice == 0 {
@@ -681,20 +803,32 @@ func maxFloat64(values ...float64) float64 {
 		info.PriceData = priceData
 		return priceData, nil
 	}
-''',
-            "DashScope Native relay pre-consume pricing",
+'''.replace("__PRICE_DATA_TYPE__", price_data_type)
+        text, count = re.subn(
+            r'\tif (?:billingMode|billing_setting\.GetBillingMode\(info\.OriginModelName\)) == billing_setting\.BillingModeDashScopeNative \{\n(?:\t\t.*\n)*?\t\treturn modelPriceHelperDashScopeNative\(info, groupRatioInfo\)\n\t\}\n',
+            native_relay_branch,
+            text,
+            count=1,
+            flags=re.MULTILINE,
         )
+        if count == 0:
+            text = insert_before_regex(
+                text,
+                r'^\s*var preConsumedQuota int\s*$',
+                native_relay_branch + "\n",
+                "DashScope Native relay pre-consume pricing",
+            )
     per_call_branch = '''	if billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeDashScopeNative {
 		if relayInfoChannelType(c, info) != constant.ChannelTypeAliDashScopeNative {
-			return types.PriceData{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
+			return __PRICE_DATA_TYPE__{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
 		}
 		priceData, err := modelPriceHelperDashScopeNative(info, groupRatioInfo)
 		if err != nil {
-			return types.PriceData{}, err
+			return __PRICE_DATA_TYPE__{}, err
 		}
 		quota, err := common.QuotaFromFloatStrict(priceData.ModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
 		if err != nil {
-			return types.PriceData{}, err
+			return __PRICE_DATA_TYPE__{}, err
 		}
 		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
 			if groupRatioInfo.GroupRatio == 0 || priceData.ModelPrice == 0 {
@@ -707,18 +841,35 @@ func maxFloat64(values ...float64) float64 {
 		return priceData, nil
 	}
 
-'''
+'''.replace("__PRICE_DATA_TYPE__", price_data_type)
     if per_call_branch.strip() not in text:
-        text = text.replace(
-            "\tif info.ChannelType != constant.ChannelTypeAliDashScopeNative {\n",
-            "\tif relayInfoChannelType(c, info) != constant.ChannelTypeAliDashScopeNative {\n",
-            1,
+        text = replace_once_regex(
+            text,
+            r'(func ModelPriceHelperPerCall\(c \*gin\.Context, info \*relaycommon\.RelayInfo\) \([^)]+, error\) \{\n\tgroupRatioInfo := HandleGroupRatio\(c, info\)\n\n)',
+            r'\g<1>' + per_call_branch,
+            "DashScope Native task per-call pricing",
         )
+    if "billingMode := billing_setting.GetBillingMode(modelName)" not in text:
         text = replace_once(
             text,
-            "func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types.PriceData, error) {\n\tgroupRatioInfo := HandleGroupRatio(c, info)\n\n\tmodelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)\n",
-            "func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types.PriceData, error) {\n\tgroupRatioInfo := HandleGroupRatio(c, info)\n\n" + per_call_branch + "\tmodelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)\n",
-            "DashScope Native task per-call pricing",
+            '''	if billing_setting.GetBillingMode(modelName) != billing_setting.BillingModeTieredExpr {
+		return false
+	}
+	expr, ok := billing_setting.GetBillingExpr(modelName)
+	return ok && strings.TrimSpace(expr) != ""
+''',
+            '''	billingMode := billing_setting.GetBillingMode(modelName)
+	if billingMode == billing_setting.BillingModeDashScopeNative {
+		_, ok := billing_setting.GetDashScopeNativePricing(modelName)
+		return ok
+	}
+	if billingMode != billing_setting.BillingModeTieredExpr {
+		return false
+	}
+	expr, ok := billing_setting.GetBillingExpr(modelName)
+	return ok && strings.TrimSpace(expr) != ""
+''',
+            "DashScope Native billing config detector",
         )
     write(rel, text)
 
