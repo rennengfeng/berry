@@ -584,11 +584,388 @@ def patch_ali_audio_adaptor() -> None:
     write(rel, text)
 
 
+def patch_dashscope_native_task_pricing() -> None:
+    rel = "relay/helper/price.go"
+    text = read(rel)
+    if '"unicode/utf8"' not in text:
+        text = replace_once(
+            text,
+            '\t"strings"\n',
+            '\t"strings"\n\t"unicode/utf8"\n',
+            "price helper utf8 import",
+        )
+    if "func relayInfoChannelType(" not in text:
+        text = replace_once(
+            text,
+            "func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo types.GroupRatioInfo) (types.PriceData, error) {\n",
+            '''func relayInfoChannelType(c *gin.Context, info *relaycommon.RelayInfo) int {
+	if info != nil && info.ChannelMeta != nil {
+		return info.ChannelType
+	}
+	if c != nil {
+		return common.GetContextKeyInt(c, constant.ContextKeyChannelType)
+	}
+	return 0
+}
+
+func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo types.GroupRatioInfo) (types.PriceData, error) {
+''',
+            "DashScope Native relay channel type helper",
+        )
+    if "func applyDashScopeNativeRelayRatios(" not in text:
+        text = replace_once(
+            text,
+            "func maxFloat64(values ...float64) float64 {\n",
+            '''func applyDashScopeNativeRelayRatios(info *relaycommon.RelayInfo, priceData *types.PriceData, promptTokens int, meta *types.TokenCountMeta) {
+	if info == nil || priceData == nil {
+		return
+	}
+	spec, ok := billing_setting.GetDashScopeNativePricing(info.OriginModelName)
+	if !ok {
+		return
+	}
+	switch strings.TrimSpace(spec.Unit) {
+	case "character":
+		quantity := promptTokens
+		if quantity <= 0 && meta != nil {
+			quantity = utf8.RuneCountInString(meta.CombineText)
+		}
+		if quantity <= 0 {
+			quantity = 1
+		}
+		priceData.AddOtherRatio("native_quantity", float64(quantity))
+	case "image":
+		if meta != nil {
+			for name, ratio := range meta.BillingRatios {
+				priceData.AddOtherRatio(name, ratio)
+			}
+		}
+	case "request", "video_task", "token_input_output":
+	}
+}
+
+func maxFloat64(values ...float64) float64 {
+''',
+            "DashScope Native relay quantity ratios",
+        )
+    if "applyDashScopeNativeRelayRatios(info, &priceData, promptTokens, meta)" not in text:
+        text = replace_once_regex(
+            text,
+            r'\tif billingMode == billing_setting\.BillingModeDashScopeNative \{\n'
+            r'\t\tif info\.ChannelType != constant\.ChannelTypeAliDashScopeNative \|\| !info\.IsChannelTest \{\n'
+            r'\t\t\treturn types\.PriceData\{\}, fmt\.Errorf\("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info\.OriginModelName\)\n'
+            r'\t\t\}\n'
+            r'\t\treturn modelPriceHelperDashScopeNative\(info, groupRatioInfo\)\n'
+            r'\t\}\n',
+            '''	if billingMode == billing_setting.BillingModeDashScopeNative {
+		if relayInfoChannelType(c, info) != constant.ChannelTypeAliDashScopeNative {
+			return types.PriceData{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
+		}
+		priceData, err := modelPriceHelperDashScopeNative(info, groupRatioInfo)
+		if err != nil {
+			return types.PriceData{}, err
+		}
+		applyDashScopeNativeRelayRatios(info, &priceData, promptTokens, meta)
+		quotaToPreConsume := priceData.ApplyOtherRatiosToFloat(priceData.ModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
+		quota, err := common.QuotaFromFloatStrict(quotaToPreConsume)
+		if err != nil {
+			return types.PriceData{}, err
+		}
+		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
+			if groupRatioInfo.GroupRatio == 0 || priceData.ModelPrice == 0 {
+				quota = 0
+				priceData.FreeModel = true
+			}
+		}
+		priceData.QuotaToPreConsume = quota
+		info.PriceData = priceData
+		return priceData, nil
+	}
+''',
+            "DashScope Native relay pre-consume pricing",
+        )
+    per_call_branch = '''	if billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeDashScopeNative {
+		if relayInfoChannelType(c, info) != constant.ChannelTypeAliDashScopeNative {
+			return types.PriceData{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
+		}
+		priceData, err := modelPriceHelperDashScopeNative(info, groupRatioInfo)
+		if err != nil {
+			return types.PriceData{}, err
+		}
+		quota, err := common.QuotaFromFloatStrict(priceData.ModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
+		if err != nil {
+			return types.PriceData{}, err
+		}
+		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
+			if groupRatioInfo.GroupRatio == 0 || priceData.ModelPrice == 0 {
+				quota = 0
+				priceData.FreeModel = true
+			}
+		}
+		priceData.Quota = quota
+		info.PriceData = priceData
+		return priceData, nil
+	}
+
+'''
+    if per_call_branch.strip() not in text:
+        text = text.replace(
+            "\tif info.ChannelType != constant.ChannelTypeAliDashScopeNative {\n",
+            "\tif relayInfoChannelType(c, info) != constant.ChannelTypeAliDashScopeNative {\n",
+            1,
+        )
+        text = replace_once(
+            text,
+            "func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types.PriceData, error) {\n\tgroupRatioInfo := HandleGroupRatio(c, info)\n\n\tmodelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)\n",
+            "func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types.PriceData, error) {\n\tgroupRatioInfo := HandleGroupRatio(c, info)\n\n" + per_call_branch + "\tmodelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)\n",
+            "DashScope Native task per-call pricing",
+        )
+    write(rel, text)
+
+    rel = "service/quota.go"
+    text = read(rel)
+    if "OtherRatioMultiplier float64" not in text:
+        text = replace_once(
+            text,
+            '''type QuotaInfo struct {
+	InputDetails  TokenDetails
+	OutputDetails TokenDetails
+	ModelName     string
+	UsePrice      bool
+	ModelPrice    float64
+	ModelRatio    float64
+	GroupRatio    float64
+}
+''',
+            '''type QuotaInfo struct {
+	InputDetails         TokenDetails
+	OutputDetails        TokenDetails
+	ModelName            string
+	UsePrice             bool
+	ModelPrice           float64
+	ModelRatio           float64
+	GroupRatio           float64
+	OtherRatioMultiplier float64
+}
+''',
+            "audio quota info native ratio field",
+        )
+    if "otherRatio := decimal.NewFromFloat(info.OtherRatioMultiplier)" not in text:
+        text = replace_once(
+            text,
+            '''		groupRatio := decimal.NewFromFloat(info.GroupRatio)
+
+		quota := modelPrice.Mul(quotaPerUnit).Mul(groupRatio)
+''',
+            '''		groupRatio := decimal.NewFromFloat(info.GroupRatio)
+		otherRatio := decimal.NewFromFloat(info.OtherRatioMultiplier)
+		if info.OtherRatioMultiplier <= 0 {
+			otherRatio = decimal.NewFromInt(1)
+		}
+
+		quota := modelPrice.Mul(quotaPerUnit).Mul(groupRatio).Mul(otherRatio)
+''',
+            "audio fixed price native ratio multiplier",
+        )
+    if "quotaInfo.OtherRatioMultiplier = relayInfo.PriceData.OtherRatioMultiplier()" not in text:
+        text = replace_once(
+            text,
+            '''		UsePrice:   usePrice,
+		ModelRatio: modelRatio,
+		GroupRatio: groupRatio,
+	}
+
+	quota, clamp := calculateAudioQuota(quotaInfo)
+''',
+            '''		UsePrice:   usePrice,
+		ModelRatio: modelRatio,
+		GroupRatio: groupRatio,
+	}
+	if usePrice {
+		quotaInfo.OtherRatioMultiplier = relayInfo.PriceData.OtherRatioMultiplier()
+	}
+
+	quota, clamp := calculateAudioQuota(quotaInfo)
+''',
+            "post audio native ratio multiplier",
+        )
+    write(rel, text)
+
+    rel = "relay/channel/task/ali/adaptor.go"
+    text = read(rel)
+    if '"github.com/QuantumNous/new-api/constant"' not in text:
+        text = replace_once(
+            text,
+            '\t"github.com/QuantumNous/new-api/common"\n',
+            '\t"github.com/QuantumNous/new-api/common"\n\t"github.com/QuantumNous/new-api/constant"\n',
+            "Ali task constant import",
+        )
+    if '"github.com/QuantumNous/new-api/setting/billing_setting"' not in text:
+        text = replace_once(
+            text,
+            '\t"github.com/QuantumNous/new-api/service"\n',
+            '\t"github.com/QuantumNous/new-api/service"\n\t"github.com/QuantumNous/new-api/setting/billing_setting"\n',
+            "Ali task billing setting import",
+        )
+
+    native_helpers = r'''
+func normalizeAliVideoSize(size string) string {
+	normalized := strings.TrimSpace(size)
+	normalized = strings.ReplaceAll(normalized, "×", "*")
+	normalized = strings.ReplaceAll(normalized, "X", "*")
+	normalized = strings.ReplaceAll(normalized, "x", "*")
+	return normalized
+}
+
+func dashScopeNativeVideoResolution(aliReq *AliVideoRequest) string {
+	if aliReq == nil || aliReq.Parameters == nil {
+		return ""
+	}
+	if aliReq.Parameters.Size != "" {
+		if resolution, err := sizeToResolution(normalizeAliVideoSize(aliReq.Parameters.Size)); err == nil {
+			return resolution
+		}
+	}
+	resolution := strings.ToUpper(strings.TrimSpace(aliReq.Parameters.Resolution))
+	if resolution == "" {
+		return ""
+	}
+	if !strings.HasSuffix(resolution, "P") {
+		resolution += "P"
+	}
+	return resolution
+}
+
+func selectDashScopeNativeVideoTierPrice(prices map[string]float64, aliReq *AliVideoRequest) (float64, string) {
+	if len(prices) == 0 {
+		return 0, ""
+	}
+	candidates := []string{
+		dashScopeNativeVideoResolution(aliReq),
+		"default",
+	}
+	for _, candidate := range candidates {
+		candidate = strings.ToLower(strings.TrimSpace(candidate))
+		if candidate == "" {
+			continue
+		}
+		for key, price := range prices {
+			if strings.ToLower(strings.TrimSpace(key)) == candidate && price > 0 {
+				return price, key
+			}
+		}
+	}
+	return 0, ""
+}
+
+func (a *TaskAdaptor) dashScopeNativeBillingRatios(info *relaycommon.RelayInfo, aliReq *AliVideoRequest) map[string]float64 {
+	if info == nil || aliReq == nil || aliReq.Parameters == nil {
+		return nil
+	}
+	if info.ChannelType != constant.ChannelTypeAliDashScopeNative {
+		return nil
+	}
+	if billing_setting.GetBillingMode(info.OriginModelName) != billing_setting.BillingModeDashScopeNative {
+		return nil
+	}
+	spec, ok := billing_setting.GetDashScopeNativePricing(info.OriginModelName)
+	if !ok {
+		return nil
+	}
+	otherRatios := map[string]float64{}
+	switch strings.TrimSpace(spec.Unit) {
+	case "video_second":
+		duration := aliReq.Parameters.Duration
+		if duration <= 0 {
+			duration = 1
+		}
+		otherRatios["seconds"] = float64(min(duration, relaycommon.MaxTaskDurationSeconds))
+	case "request", "video_task":
+	default:
+		return nil
+	}
+	if price, tierKey := selectDashScopeNativeVideoTierPrice(spec.Prices, aliReq); price > 0 && info.PriceData.ModelPrice > 0 {
+		otherRatios["dashscope_native_tier_"+tierKey] = price / info.PriceData.ModelPrice
+	}
+	return otherRatios
+}
+'''
+    if "func normalizeAliVideoSize(" not in text:
+        text = replace_once(
+            text,
+            "func ProcessAliOtherRatios(aliReq *AliVideoRequest) (map[string]float64, error) {\n",
+            native_helpers + "\nfunc ProcessAliOtherRatios(aliReq *AliVideoRequest) (map[string]float64, error) {\n",
+            "Ali DashScope Native video billing helpers",
+        )
+
+    old_size_block = '''	if req.Size != "" {
+		// text to video size must be contained *
+		if strings.Contains(req.Model, "t2v") && !strings.Contains(req.Size, "*") {
+			return nil, fmt.Errorf("invalid size: %s, example: %s", req.Size, "1920*1080")
+		}
+		if strings.Contains(req.Size, "*") {
+			aliReq.Parameters.Size = req.Size
+		} else {
+			resolution := strings.ToUpper(req.Size)
+			// 支持 480p, 720p, 1080p 或 480P, 720P, 1080P
+			if !strings.HasSuffix(resolution, "P") {
+				resolution = resolution + "P"
+			}
+			aliReq.Parameters.Resolution = resolution
+		}
+'''
+    new_size_block = '''	if req.Size != "" {
+		normalizedSize := normalizeAliVideoSize(req.Size)
+		if strings.Contains(normalizedSize, "*") {
+			if strings.Contains(req.Model, "t2v") {
+				aliReq.Parameters.Size = normalizedSize
+			} else {
+				resolution, err := sizeToResolution(normalizedSize)
+				if err != nil {
+					return nil, err
+				}
+				aliReq.Parameters.Resolution = resolution
+			}
+		} else {
+			resolution := strings.ToUpper(normalizedSize)
+			// 支持 480p, 720p, 1080p 或 480P, 720P, 1080P
+			if !strings.HasSuffix(resolution, "P") {
+				resolution = resolution + "P"
+			}
+			aliReq.Parameters.Resolution = resolution
+		}
+'''
+    if "normalizedSize := normalizeAliVideoSize(req.Size)" not in text:
+        text = replace_once(text, old_size_block, new_size_block, "Ali video x size normalization")
+
+    native_estimate_branch = '''	if nativeRatios := a.dashScopeNativeBillingRatios(info, aliReq); len(nativeRatios) > 0 {
+		return nativeRatios
+	}
+'''
+    if native_estimate_branch.strip() not in text:
+        text = replace_once(
+            text,
+            '''	otherRatios := map[string]float64{
+		"seconds": float64(min(aliReq.Parameters.Duration, relaycommon.MaxTaskDurationSeconds)),
+	}
+	ratios, err := ProcessAliOtherRatios(aliReq)
+''',
+            '''	otherRatios := map[string]float64{
+		"seconds": float64(min(aliReq.Parameters.Duration, relaycommon.MaxTaskDurationSeconds)),
+	}
+''' + native_estimate_branch + '''	ratios, err := ProcessAliOtherRatios(aliReq)
+''',
+            "Ali native video estimate billing",
+        )
+    write(rel, text)
+
+
 def main() -> None:
     patch_endpoint_types()
     patch_endpoint_defaults()
     patch_model_capabilities()
     patch_advanced_custom_endpoints()
+    patch_dashscope_native_task_pricing()
     patch_ali_audio_adaptor()
     print("applied Ali video/audio endpoint and HTTP TTS backend patch")
 
