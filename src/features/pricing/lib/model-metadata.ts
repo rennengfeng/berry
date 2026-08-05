@@ -52,6 +52,7 @@ const VIDEO_OUTPUT_ENDPOINTS = new Set([
   'openai-video',
   'dashscope-native-video',
 ])
+const AUDIO_OUTPUT_ENDPOINTS = new Set(['audio-speech'])
 const EMBEDDING_ENDPOINTS = new Set(['embeddings', 'jina-rerank'])
 
 const REASONING_NAME_PATTERNS = [
@@ -200,6 +201,7 @@ function inferOutputModalities(
 
   if (endpoints.some((e) => IMAGE_OUTPUT_ENDPOINTS.has(e))) set.add('image')
   if (endpoints.some((e) => VIDEO_OUTPUT_ENDPOINTS.has(e))) set.add('video')
+  if (endpoints.some((e) => AUDIO_OUTPUT_ENDPOINTS.has(e))) set.add('audio')
   if (endpoints.some((e) => EMBEDDING_ENDPOINTS.has(e))) set.add('text')
 
   if (

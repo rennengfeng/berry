@@ -175,6 +175,9 @@ export const ENDPOINT_TEMPLATES: Record<
     path: '/v1/image-tasks/generations',
     method: 'POST',
   },
+  'openai-video': { path: '/v1/videos', method: 'POST' },
+  'openai-video-legacy': { path: '/v1/video/generations', method: 'POST' },
+  'audio-speech': { path: '/v1/audio/speech', method: 'POST' },
   'dashscope-native-qwen-image': {
     path: '/api/v1/services/aigc/multimodal-generation/generation',
     method: 'POST',
@@ -185,6 +188,10 @@ export const ENDPOINT_TEMPLATES: Record<
   },
   'dashscope-native-video': {
     path: '/api/v1/services/aigc/video-generation/video-synthesis',
+    method: 'POST',
+  },
+  'dashscope-native-audio-tts': {
+    path: '/api/v1/services/audio/tts/SpeechSynthesizer',
     method: 'POST',
   },
   embeddings: { path: '/v1/embeddings', method: 'POST' },
