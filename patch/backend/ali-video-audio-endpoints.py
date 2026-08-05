@@ -222,49 +222,78 @@ def patch_advanced_custom_endpoints() -> None:
         if not path.exists():
             continue
         text = read(rel)
+        endpoint_ref = "types" if "relaykit/types" in text or rel.startswith("relaykit/") else "constant"
         has_video = re.search(r'advancedCustomEndpointPathOpenAIVideo\s*=', text) is not None
         has_audio = re.search(r'advancedCustomEndpointPathAudioSpeech\s*=', text) is not None
         if not has_video:
             snippet = '\tadvancedCustomEndpointPathOpenAIVideo            = "/v1/videos"\n'
             if not has_audio:
                 snippet += '\tadvancedCustomEndpointPathAudioSpeech            = "/v1/audio/speech"\n'
-            text = ensure_after_regex(
-                text,
+            const_anchor_patterns = (
                 r'^\s*advancedCustomEndpointPathImageGenerationAsync\s*=\s*"/v1/image-tasks/generations"\s*\n',
-                snippet,
-                f"{rel} image async advanced custom constant",
+                r'^\s*advancedCustomEndpointPathImageGeneration\s*=\s*"/v1/images/generations"\s*\n',
+                r'^\s*advancedCustomEndpointPathEmbeddings\s*=\s*"/v1/embeddings"\s*\n',
             )
+            for pattern in const_anchor_patterns:
+                if re.search(pattern, text, flags=re.MULTILINE):
+                    text = ensure_after_regex(text, pattern, snippet, f"{rel} video/audio advanced custom constant")
+                    break
+            else:
+                text = insert_before_regex(text, r'^\s*\)\s*$', snippet, f"{rel} endpoint path const block end")
         elif not has_audio:
-            text = ensure_after_regex(
-                text,
-                r'^\s*advancedCustomEndpointPathOpenAIVideo\s*=\s*"/v1/videos"\s*\n',
-                '\tadvancedCustomEndpointPathAudioSpeech            = "/v1/audio/speech"\n',
-                f"{rel} audio advanced custom constant",
-            )
+            video_const_pattern = r'^\s*advancedCustomEndpointPathOpenAIVideo\s*=\s*"/v1/videos"\s*\n'
+            if re.search(video_const_pattern, text, flags=re.MULTILINE):
+                text = ensure_after_regex(
+                    text,
+                    video_const_pattern,
+                    '\tadvancedCustomEndpointPathAudioSpeech            = "/v1/audio/speech"\n',
+                    f"{rel} audio advanced custom constant",
+                )
+            else:
+                text = insert_before_regex(
+                    text,
+                    r'^\s*\)\s*$',
+                    '\tadvancedCustomEndpointPathAudioSpeech            = "/v1/audio/speech"\n',
+                    f"{rel} endpoint path const block end",
+                )
         has_video_case = "case advancedCustomEndpointPathOpenAIVideo:" in text
         has_audio_case = "case advancedCustomEndpointPathAudioSpeech:" in text
         if not has_video_case and not has_audio_case:
-            text = replace_once_regex(
-                text,
-                r'(case advancedCustomEndpointPathImageGeneration,\s*advancedCustomEndpointPathImageGenerationAsync:\s*\n\s*return constant\.EndpointTypeImageGeneration,\s*true\s*\n)',
-                r'\g<1>'
-                "case advancedCustomEndpointPathOpenAIVideo:\n\t\treturn constant.EndpointTypeOpenAIVideo, true\n"
-                "case advancedCustomEndpointPathAudioSpeech:\n\t\treturn constant.EndpointTypeAudioSpeech, true\n",
-                f"{rel} video/audio advanced custom switch",
+            image_case_patterns = (
+                r'(case advancedCustomEndpointPathImageGeneration,\s*advancedCustomEndpointPathImageGenerationAsync:\s*\n\s*return (?:constant|types)\.EndpointTypeImageGeneration,\s*true\s*\n)',
+                r'(case advancedCustomEndpointPathImageGeneration:\s*\n\s*return (?:constant|types)\.EndpointTypeImageGeneration,\s*true\s*\n)',
             )
+            for pattern in image_case_patterns:
+                if re.search(pattern, text, flags=re.MULTILINE):
+                    text = replace_once_regex(
+                        text,
+                        pattern,
+                        r'\g<1>'
+                        f"case advancedCustomEndpointPathOpenAIVideo:\n\t\treturn {endpoint_ref}.EndpointTypeOpenAIVideo, true\n"
+                        f"case advancedCustomEndpointPathAudioSpeech:\n\t\treturn {endpoint_ref}.EndpointTypeAudioSpeech, true\n",
+                        f"{rel} video/audio advanced custom switch",
+                    )
+                    break
+            else:
+                text = insert_before_regex(
+                    text,
+                    r'^\s*default:\s*\n',
+                    f"case advancedCustomEndpointPathOpenAIVideo:\n\t\treturn {endpoint_ref}.EndpointTypeOpenAIVideo, true\n"
+                    f"case advancedCustomEndpointPathAudioSpeech:\n\t\treturn {endpoint_ref}.EndpointTypeAudioSpeech, true\n",
+                    f"{rel} advanced custom switch default",
+                )
         elif not has_video_case:
-            text = replace_once_regex(
+            text = insert_before_regex(
                 text,
-                r'(case advancedCustomEndpointPathImageGeneration,\s*advancedCustomEndpointPathImageGenerationAsync:\s*\n\s*return constant\.EndpointTypeImageGeneration,\s*true\s*\n)',
-                r'\g<1>'
-                "case advancedCustomEndpointPathOpenAIVideo:\n\t\treturn constant.EndpointTypeOpenAIVideo, true\n",
-                f"{rel} video advanced custom switch",
+                r'^\s*default:\s*\n',
+                f"case advancedCustomEndpointPathOpenAIVideo:\n\t\treturn {endpoint_ref}.EndpointTypeOpenAIVideo, true\n",
+                f"{rel} video advanced custom switch default",
             )
         elif not has_audio_case:
             text = ensure_after_regex(
                 text,
-                r'^\s*case advancedCustomEndpointPathOpenAIVideo:\s*\n\s*return constant\.EndpointTypeOpenAIVideo,\s*true\s*\n',
-                "case advancedCustomEndpointPathAudioSpeech:\n\t\treturn constant.EndpointTypeAudioSpeech, true\n",
+                r'^\s*case advancedCustomEndpointPathOpenAIVideo:\s*\n\s*return (?:constant|types)\.EndpointTypeOpenAIVideo,\s*true\s*\n',
+                f"case advancedCustomEndpointPathAudioSpeech:\n\t\treturn {endpoint_ref}.EndpointTypeAudioSpeech, true\n",
                 f"{rel} audio advanced custom switch",
             )
         write(rel, text)
