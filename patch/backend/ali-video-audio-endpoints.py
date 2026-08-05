@@ -628,67 +628,6 @@ def patch_dashscope_native_task_pricing() -> None:
             '\t"strings"\n\t"unicode/utf8"\n',
             "price helper utf8 import",
         )
-    if "func relayInfoChannelType(" not in text:
-        text = insert_before_regex(
-            text,
-            r'^func modelPriceHelperDashScopeNative\(info \*relaycommon\.RelayInfo, groupRatioInfo [^)]+\) \([^)]+, error\) \{\s*$',
-            '''func relayInfoChannelType(c *gin.Context, info *relaycommon.RelayInfo) int {
-	if info != nil && info.ChannelMeta != nil {
-		return info.ChannelType
-	}
-	if c != nil {
-		return common.GetContextKeyInt(c, constant.ContextKeyChannelType)
-	}
-	return 0
-}
-
-''',
-            "DashScope Native relay channel type helper",
-        )
-    if "func applyDashScopeNativeRelayRatios(" not in text:
-        snippet = '''func applyDashScopeNativeRelayRatios(info *relaycommon.RelayInfo, priceData *__PRICE_DATA_TYPE__, promptTokens int, meta *__TOKEN_META_TYPE__) {
-	if info == nil || priceData == nil {
-		return
-	}
-	spec, ok := billing_setting.GetDashScopeNativePricing(info.OriginModelName)
-	if !ok {
-		return
-	}
-	switch strings.TrimSpace(spec.Unit) {
-	case "character":
-		quantity := promptTokens
-		if quantity <= 0 && meta != nil {
-			quantity = utf8.RuneCountInString(meta.CombineText)
-		}
-		if quantity <= 0 {
-			quantity = 1
-		}
-		priceData.AddOtherRatio("native_quantity", float64(quantity))
-	case "image":
-		if meta != nil {
-			for name, ratio := range meta.BillingRatios {
-				priceData.AddOtherRatio(name, ratio)
-			}
-		}
-	case "request", "video_task", "token_input_output":
-	}
-}
-
-'''.replace("__PRICE_DATA_TYPE__", price_data_type).replace("__TOKEN_META_TYPE__", token_meta_type)
-        if "func dashScopeNativeMaxFloat64(" in text:
-            text = insert_before_regex(
-                text,
-                r'^func dashScopeNativeMaxFloat64\(values \.\.\.float64\) float64 \{\s*$',
-                snippet + "\n",
-                "DashScope Native relay quantity ratios",
-            )
-        else:
-            text = insert_before_regex(
-                text,
-                r'^func maxFloat64\(values \.\.\.float64\) float64 \{\s*$',
-                snippet + "\n",
-                "DashScope Native relay quantity ratios",
-            )
     if "func modelPriceHelperDashScopeNative(" not in text:
         helpers = r'''
 func relayInfoChannelType(c *gin.Context, info *relaycommon.RelayInfo) int {
@@ -777,6 +716,68 @@ func dashScopeNativeMaxFloat64(values ...float64) float64 {
             helpers,
             "DashScope Native relay quantity ratios",
         )
+    else:
+        if "func relayInfoChannelType(" not in text:
+            text = insert_before_regex(
+                text,
+                r'^func modelPriceHelperDashScopeNative\(info \*relaycommon\.RelayInfo, groupRatioInfo [^)]+\) \([^)]+, error\) \{\s*$',
+                '''func relayInfoChannelType(c *gin.Context, info *relaycommon.RelayInfo) int {
+	if info != nil && info.ChannelMeta != nil {
+		return info.ChannelType
+	}
+	if c != nil {
+		return common.GetContextKeyInt(c, constant.ContextKeyChannelType)
+	}
+	return 0
+}
+
+''',
+                "DashScope Native relay channel type helper",
+            )
+        if "func applyDashScopeNativeRelayRatios(" not in text:
+            snippet = '''func applyDashScopeNativeRelayRatios(info *relaycommon.RelayInfo, priceData *__PRICE_DATA_TYPE__, promptTokens int, meta *__TOKEN_META_TYPE__) {
+	if info == nil || priceData == nil {
+		return
+	}
+	spec, ok := billing_setting.GetDashScopeNativePricing(info.OriginModelName)
+	if !ok {
+		return
+	}
+	switch strings.TrimSpace(spec.Unit) {
+	case "character":
+		quantity := promptTokens
+		if quantity <= 0 && meta != nil {
+			quantity = utf8.RuneCountInString(meta.CombineText)
+		}
+		if quantity <= 0 {
+			quantity = 1
+		}
+		priceData.AddOtherRatio("native_quantity", float64(quantity))
+	case "image":
+		if meta != nil {
+			for name, ratio := range meta.BillingRatios {
+				priceData.AddOtherRatio(name, ratio)
+			}
+		}
+	case "request", "video_task", "token_input_output":
+	}
+}
+
+'''.replace("__PRICE_DATA_TYPE__", price_data_type).replace("__TOKEN_META_TYPE__", token_meta_type)
+            if "func dashScopeNativeMaxFloat64(" in text:
+                text = insert_before_regex(
+                    text,
+                    r'^func dashScopeNativeMaxFloat64\(values \.\.\.float64\) float64 \{\s*$',
+                    snippet + "\n",
+                    "DashScope Native relay quantity ratios",
+                )
+            else:
+                text = insert_before_regex(
+                    text,
+                    r'^func maxFloat64\(values \.\.\.float64\) float64 \{\s*$',
+                    snippet + "\n",
+                    "DashScope Native relay quantity ratios",
+                )
     if "applyDashScopeNativeRelayRatios(info, &priceData, promptTokens, meta)" not in text:
         native_relay_branch = '''	if billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeDashScopeNative {
 		groupRatioInfo := HandleGroupRatio(c, info)
