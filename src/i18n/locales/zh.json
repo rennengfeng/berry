@@ -4957,6 +4957,8 @@
     "No DashScope Native pricing configured": "尚未配置 DashScope 原生定价",
     "Add condition price": "添加条件价格",
     "Characters": "字符",
+    "10K characters": "万字符",
+    "per 10K characters": "每万字符",
     "Audio seconds": "音频秒",
     "Images": "图片张数",
     "Video seconds": "视频秒",

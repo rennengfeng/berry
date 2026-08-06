@@ -173,8 +173,8 @@ const (
 
 var dashScopeNativeOfficialPricingCatalog = map[string]map[string]billing_setting.DashScopeNativePricing{
 	dashScopeNativePricingRegionDomestic: {
-		"cosyvoice-v3.5-plus": {Unit: "character", Price: 1.5 / ratio_setting.USD2RMB / 10000},
-		"cosyvoice-v3.5-flash": {Unit: "character", Price: 0.8 / ratio_setting.USD2RMB / 10000},
+		"cosyvoice-v3.5-plus": {Unit: "character", Price: 1.5 / ratio_setting.USD2RMB},
+		"cosyvoice-v3.5-flash": {Unit: "character", Price: 0.8 / ratio_setting.USD2RMB},
 		"qwen-image-2.0":      {Unit: "image", Price: 0.2 / ratio_setting.USD2RMB},
 		"qwen-image-2.0-2026-03-03": {Unit: "image", Price: 0.2 / ratio_setting.USD2RMB},
 		"qwen-image-2.0-pro":  {Unit: "image", Price: 0.5 / ratio_setting.USD2RMB},
@@ -252,7 +252,7 @@ var dashScopeNativeOfficialPricingCatalog = map[string]map[string]billing_settin
 		"wanx2.1-i2v-plus": {Unit: "video_second", Prices: map[string]float64{"720P": 0.7 / ratio_setting.USD2RMB}},
 	},
 	dashScopeNativePricingRegionIntl: {
-		"cosyvoice-v3.5-plus": {Unit: "character", Price: 1.5 / ratio_setting.USD2RMB / 10000},
+		"cosyvoice-v3.5-plus": {Unit: "character", Price: 1.5 / ratio_setting.USD2RMB},
 		"qwen-image-2.0":      {Unit: "image", Price: 0.256873 / ratio_setting.USD2RMB},
 		"qwen-image-2.0-pro":  {Unit: "image", Price: 0.5 / ratio_setting.USD2RMB},
 		"happyhorse-1.1-i2v": {
@@ -485,9 +485,9 @@ def patch_existing_pricing_catalog_file() -> None:
     text = read(rel)
     if '"cosyvoice-v3.5-flash"' not in text:
         text = text.replace(
-            '\t\t"cosyvoice-v3.5-plus": {Unit: "character", Price: 1.5 / ratio_setting.USD2RMB / 10000},\n',
-            '\t\t"cosyvoice-v3.5-plus":  {Unit: "character", Price: 1.5 / ratio_setting.USD2RMB / 10000},\n'
-            '\t\t"cosyvoice-v3.5-flash": {Unit: "character", Price: 0.8 / ratio_setting.USD2RMB / 10000},\n',
+            '\t\t"cosyvoice-v3.5-plus": {Unit: "character", Price: 1.5 / ratio_setting.USD2RMB},\n',
+            '\t\t"cosyvoice-v3.5-plus":  {Unit: "character", Price: 1.5 / ratio_setting.USD2RMB},\n'
+            '\t\t"cosyvoice-v3.5-flash": {Unit: "character", Price: 0.8 / ratio_setting.USD2RMB},\n',
             1,
         )
     additions = {
@@ -681,6 +681,8 @@ func dashScopeNativeMaxFloat64(values ...float64) float64 {
 def patch_billing_setting() -> None:
     rel = "setting/billing_setting/tiered_billing.go"
     text = read(rel)
+    if '"strings"' not in text:
+        text = text.replace('\t"fmt"\n', '\t"fmt"\n\t"strings"\n', 1)
     if "BillingModeDashScopeNative" not in text:
         text, count = re.subn(
             r'(\tBillingModeTieredExpr\s*=\s*"tiered_expr"\n)',
@@ -699,6 +701,37 @@ def patch_billing_setting() -> None:
         )
         if count != 1:
             raise SystemExit("DashScope Native price sync patch failed: DashScopeNativePricing OutputPrice anchor not found")
+    if "func DashScopeNativeCharacterUnitDivisor(" not in text:
+        helper = '''
+func DashScopeNativeCharacterUnitDivisor(unit string) float64 {
+\tswitch strings.TrimSpace(unit) {
+\tcase "character", "character_10k":
+\t\treturn 10000
+\tdefault:
+\t\treturn 0
+\t}
+}
+
+func IsDashScopeNativeCharacterUnit(unit string) bool {
+\treturn DashScopeNativeCharacterUnitDivisor(unit) > 0
+}
+
+func DashScopeNativeCharacterQuantity(unit string, characters int) float64 {
+\tif characters <= 0 {
+\t\treturn 0
+\t}
+\tdivisor := DashScopeNativeCharacterUnitDivisor(unit)
+\tif divisor <= 0 {
+\t\treturn 0
+\t}
+\treturn float64(characters) / divisor
+}
+
+'''
+        anchor = "func init() {\n"
+        if anchor not in text:
+            raise SystemExit("DashScope Native price sync patch failed: billing init anchor not found")
+        text = text.replace(anchor, helper + anchor, 1)
     write(rel, text)
 
 

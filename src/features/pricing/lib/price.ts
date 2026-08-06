@@ -167,8 +167,10 @@ export function getDashScopeNativeUnitLabel(unit?: string): string {
       return 'per video second'
     case 'audio_second':
       return 'per audio second'
+    case 'character_10k':
+      return 'per 10K characters'
     case 'character':
-      return 'per character'
+      return 'per 10K characters'
     case 'video_task':
       return 'per video task'
     default:

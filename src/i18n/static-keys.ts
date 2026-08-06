@@ -529,6 +529,8 @@ export const STATIC_I18N_KEYS = [
   'No DashScope Native pricing configured',
   'Add condition price',
   'Characters',
+  '10K characters',
+  'per 10K characters',
   'Audio seconds',
   'Images',
   'Video seconds',

@@ -130,7 +130,7 @@ type DashScopeNativePricingProps = {
 }
 
 const UNIT_OPTIONS: Array<{ value: NativeUnit; label: string }> = [
-  { value: 'character', label: 'Characters' },
+  { value: 'character', label: '10K characters' },
   { value: 'audio_second', label: 'Audio seconds' },
   { value: 'image', label: 'Images' },
   { value: 'video_second', label: 'Video seconds' },
@@ -140,11 +140,11 @@ const UNIT_OPTIONS: Array<{ value: NativeUnit; label: string }> = [
 ]
 
 const DEFAULT_PRICING: Record<string, NativePricingSpec> = {
-  'cosyvoice-v3.5-plus': { unit: 'character', price: 0.000022 },
+  'cosyvoice-v3.5-plus': { unit: 'character', price: 0.205479 },
 }
 
 function isNativeUnit(value: unknown): value is NativeUnit {
-  return UNIT_OPTIONS.some((option) => option.value === value)
+  return UNIT_OPTIONS.some((option) => option.value === value) || value === 'character_10k'
 }
 
 function parsePricing(rawValue: string | undefined): Record<string, NativePricingSpec> {
@@ -884,6 +884,8 @@ def patch_i18n(root: Path) -> None:
         "Conditional prices": "条件价格",
         "No DashScope Native pricing configured": "尚未配置 DashScope 原生定价",
         "Characters": "字符",
+        "10K characters": "万字符",
+        "per 10K characters": "每万字符",
         "Audio seconds": "音频秒",
         "Images": "图片张数",
         "Video seconds": "视频秒",

@@ -418,15 +418,19 @@ func isAliQwen3TTSModel(modelName string) bool {
 	return strings.Contains(normalized, "qwen3-tts")
 }
 
-func isAliNativeTTSBillingUnit(info *relaycommon.RelayInfo, unit string) bool {
+func aliNativeTTSCharacterQuantity(info *relaycommon.RelayInfo, characters int) (float64, bool) {
 	if info == nil {
-		return false
+		return 0, false
 	}
 	if billing_setting.GetBillingMode(info.OriginModelName) != billing_setting.BillingModeDashScopeNative {
-		return false
+		return 0, false
 	}
 	spec, ok := billing_setting.GetDashScopeNativePricing(info.OriginModelName)
-	return ok && strings.TrimSpace(spec.Unit) == unit
+	if !ok || !billing_setting.IsDashScopeNativeCharacterUnit(spec.Unit) {
+		return 0, false
+	}
+	quantity := billing_setting.DashScopeNativeCharacterQuantity(spec.Unit, characters)
+	return quantity, quantity > 0
 }
 
 func convertAliAudioRequest(info *relaycommon.RelayInfo, request dto.AudioRequest) (io.Reader, error) {
@@ -649,8 +653,8 @@ func aliTTSSpeechHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	}
 	if aliResp.Usage.Characters > 0 {
 		info.SetEstimatePromptTokens(aliResp.Usage.Characters)
-		if isAliNativeTTSBillingUnit(info, "character") {
-			info.PriceData.AddOtherRatio("native_quantity", float64(aliResp.Usage.Characters))
+		if quantity, ok := aliNativeTTSCharacterQuantity(info, aliResp.Usage.Characters); ok {
+			info.PriceData.AddOtherRatio("native_quantity", quantity)
 		}
 	}
 	audioBytes, contentType, err := resolveAliTTSAudio(c, info, aliResp)
@@ -1081,6 +1085,52 @@ def ensure_price_helper_imports(text: str, imports: list[str]) -> str:
     return text[: single_import_match.start()] + import_block + text[single_import_match.end() :]
 
 
+def patch_dashscope_native_character_units() -> None:
+    rel = "setting/billing_setting/tiered_billing.go"
+    text = read(rel)
+    if '"strings"' not in text:
+        text = replace_once(
+            text,
+            '\t"fmt"\n',
+            '\t"fmt"\n\t"strings"\n',
+            "billing setting strings import",
+        )
+    if "func DashScopeNativeCharacterUnitDivisor(" not in text:
+        helper = '''
+func DashScopeNativeCharacterUnitDivisor(unit string) float64 {
+\tswitch strings.TrimSpace(unit) {
+\tcase "character", "character_10k":
+\t\treturn 10000
+\tdefault:
+\t\treturn 0
+\t}
+}
+
+func IsDashScopeNativeCharacterUnit(unit string) bool {
+\treturn DashScopeNativeCharacterUnitDivisor(unit) > 0
+}
+
+func DashScopeNativeCharacterQuantity(unit string, characters int) float64 {
+\tif characters <= 0 {
+\t\treturn 0
+\t}
+\tdivisor := DashScopeNativeCharacterUnitDivisor(unit)
+\tif divisor <= 0 {
+\t\treturn 0
+\t}
+\treturn float64(characters) / divisor
+}
+
+'''
+        text = replace_once(
+            text,
+            "func init() {\n",
+            helper + "func init() {\n",
+            "DashScope Native character unit helpers",
+        )
+    write(rel, text)
+
+
 def patch_dashscope_native_task_pricing() -> None:
     rel = "relay/helper/price.go"
     text = read(rel)
@@ -1146,7 +1196,7 @@ func applyDashScopeNativeRelayRatios(info *relaycommon.RelayInfo, priceData *__P
 		return
 	}
 	switch strings.TrimSpace(spec.Unit) {
-	case "character":
+	case "character", "character_10k":
 		quantity := promptTokens
 		if quantity <= 0 && meta != nil {
 			quantity = utf8.RuneCountInString(meta.CombineText)
@@ -1154,7 +1204,10 @@ func applyDashScopeNativeRelayRatios(info *relaycommon.RelayInfo, priceData *__P
 		if quantity <= 0 {
 			quantity = 1
 		}
-		priceData.AddOtherRatio("native_quantity", float64(quantity))
+		priceData.AddOtherRatio(
+			"native_quantity",
+			billing_setting.DashScopeNativeCharacterQuantity(spec.Unit, quantity),
+		)
 	case "image":
 		if meta != nil {
 			for name, ratio := range meta.BillingRatios {
@@ -1210,7 +1263,7 @@ func dashScopeNativeMaxFloat64(values ...float64) float64 {
 		return
 	}
 	switch strings.TrimSpace(spec.Unit) {
-	case "character":
+	case "character", "character_10k":
 		quantity := promptTokens
 		if quantity <= 0 && meta != nil {
 			quantity = utf8.RuneCountInString(meta.CombineText)
@@ -1218,7 +1271,10 @@ func dashScopeNativeMaxFloat64(values ...float64) float64 {
 		if quantity <= 0 {
 			quantity = 1
 		}
-		priceData.AddOtherRatio("native_quantity", float64(quantity))
+		priceData.AddOtherRatio(
+			"native_quantity",
+			billing_setting.DashScopeNativeCharacterQuantity(spec.Unit, quantity),
+		)
 	case "image":
 		if meta != nil {
 			for name, ratio := range meta.BillingRatios {
@@ -1729,6 +1785,7 @@ def main() -> None:
     patch_endpoint_defaults()
     patch_model_capabilities()
     patch_advanced_custom_endpoints()
+    patch_dashscope_native_character_units()
     patch_audio_pricing_meta()
     patch_dashscope_native_task_pricing()
     patch_ali_audio_adaptor()

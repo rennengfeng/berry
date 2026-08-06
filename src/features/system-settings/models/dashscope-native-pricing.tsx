@@ -58,6 +58,7 @@ const DASH_SCOPE_NATIVE_BILLING_MODE = 'dashscope_native'
 
 type NativeUnit =
   | 'character'
+  | 'character_10k'
   | 'audio_second'
   | 'image'
   | 'video_second'
@@ -118,7 +119,7 @@ const UNIT_OPTIONS: Array<{ value: NativeUnit; label: string }> = [
   { value: 'video_second', label: 'Video seconds' },
   { value: 'audio_second', label: 'Audio seconds' },
   { value: 'image', label: 'Images' },
-  { value: 'character', label: 'Characters' },
+  { value: 'character', label: '10K characters' },
 ]
 
 const VIDEO_CONDITION_OPTIONS = ['480P', '720P', '1080P']
@@ -127,11 +128,11 @@ const IMAGE_CONDITION_OPTIONS = ['1K', '2K', '4K', 'standard', 'high']
 const DEFAULT_PRICING: Record<string, NativePricingSpec> = {
   'cosyvoice-v3.5-plus': {
     unit: 'character',
-    price: 1.5 / 7.3 / 10000,
+    price: 1.5 / 7.3,
   },
   'cosyvoice-v3.5-flash': {
     unit: 'character',
-    price: 0.8 / 7.3 / 10000,
+    price: 0.8 / 7.3,
   },
   'qwen-image-2.0': {
     unit: 'image',
@@ -338,7 +339,7 @@ function numberValue(value: unknown): number {
 }
 
 function isNativeUnit(value: unknown): value is NativeUnit {
-  return UNIT_OPTIONS.some((option) => option.value === value)
+  return UNIT_OPTIONS.some((option) => option.value === value) || value === 'character_10k'
 }
 
 function conditionOptions(unit: NativeUnit, currentKey?: string): string[] {
