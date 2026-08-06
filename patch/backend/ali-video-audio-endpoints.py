@@ -899,6 +899,49 @@ func defaultAudioSpeechTestVoice(modelName string, channel *model.Channel) strin
     write(rel, text)
 
 
+def patch_audio_pricing_meta() -> None:
+    rel = "controller/relay.go"
+    path = ROOT / rel
+    if path.exists():
+        text = read(rel)
+        if "TTS fixed/character pricing needs the input text" not in text:
+            text = replace_once(
+                text,
+                '''	case *dto.ImageRequest:
+		// Pricing for image requests depends on ImagePriceRatio; safe to compute even when CountToken is disabled.
+		return r.GetTokenCountMeta()
+	default:
+''',
+                '''	case *dto.ImageRequest:
+		// Pricing for image requests depends on ImagePriceRatio; safe to compute even when CountToken is disabled.
+		return r.GetTokenCountMeta()
+	case *dto.AudioRequest:
+		// TTS fixed/character pricing needs the input text even when full token counting is disabled.
+		return r.GetTokenCountMeta()
+	default:
+''',
+                "audio request fast pricing meta",
+            )
+            write(rel, text)
+
+    rel = "relay/helper/price.go"
+    text = read(rel)
+    if "meta = &types.TokenCountMeta{}" not in text:
+        text = replace_once_regex(
+            text,
+            r'(func ModelPriceHelper\(c \*gin\.Context, info \*relaycommon\.RelayInfo, promptTokens int, meta \*[^)]+\) \([^)]+, error\) \{\n)',
+            r'\g<1>	if meta == nil {\n\t\tmeta = &types.TokenCountMeta{}\n\t}\n',
+            "ModelPriceHelper nil token meta guard",
+        )
+        text = replace_once_regex(
+            text,
+            r'(func modelPriceHelperTiered\(c \*gin\.Context, info \*relaycommon\.RelayInfo, promptTokens int, meta \*[^,]+, groupRatioInfo [^)]+\) \([^)]+, error\) \{\n)',
+            r'\g<1>	if meta == nil {\n\t\tmeta = &types.TokenCountMeta{}\n\t}\n',
+            "tiered price nil token meta guard",
+        )
+        write(rel, text)
+
+
 def price_helper_type_names(text: str) -> tuple[str, str, str]:
     price_data_type = "types.PriceData"
     model_sig = re.search(r'func\s+ModelPriceHelper\s*\([^)]*\)\s*\(([^,]+),\s*error\)', text)
@@ -1537,6 +1580,7 @@ def main() -> None:
     patch_endpoint_defaults()
     patch_model_capabilities()
     patch_advanced_custom_endpoints()
+    patch_audio_pricing_meta()
     patch_dashscope_native_task_pricing()
     patch_ali_audio_adaptor()
     patch_channel_test_audio_default_voice()

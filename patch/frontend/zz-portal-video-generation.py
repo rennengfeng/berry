@@ -427,16 +427,16 @@ function formatVideoResolutionLabel(resolution: VideoResolutionTier): string {
                     <SlidersHorizontalIcon className="h-3.5 w-3.5" />
                     <span className="whitespace-nowrap">{resolveVideoRequestSettings(videoAspectRatio, videoResolution, videoDuration).summary.replace(/ · /g, ' ')}</span>
                   </PopoverTrigger>
-                  <PopoverContent side="top" align="end" sideOffset={10} className="w-[min(92vw,34rem)] rounded-2xl border border-white/10 bg-[#151124]/95 p-4 text-white shadow-2xl backdrop-blur-xl">
+                  <PopoverContent side="top" align="end" sideOffset={10} className="w-[min(94vw,34rem)] rounded-xl border border-white/10 bg-[#151124]/95 p-3 text-white shadow-2xl backdrop-blur-xl">
                     <div className="space-y-4">
-                      <div className="space-y-2"><div className="text-xs text-white/55">比例</div><div className="grid grid-cols-3 gap-2">
-                        {VIDEO_ASPECT_OPTIONS.map((ratio) => <button key={ratio} type="button" className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[3.7rem] flex-col gap-1 px-1.5')} onClick={() => setVideoAspectRatio(ratio)}><span className={cn('rounded-[3px] border', aspectPreviewClass(ratio), videoAspectRatio === ratio ? 'border-violet-200 bg-violet-200/40' : 'border-white/30 bg-white/10')} /><span className="text-[11px] leading-none">{ratio}</span></button>)}
+                      <div className="space-y-2"><div className="text-xs text-white/55">比例</div><div className="grid grid-cols-6 gap-1.5 rounded-xl bg-white/[0.04] p-1.5">
+                        {VIDEO_ASPECT_OPTIONS.map((ratio) => <button key={ratio} type="button" aria-pressed={videoAspectRatio === ratio} className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[4.25rem] min-w-0 flex-col gap-1 px-1')} onClick={() => setVideoAspectRatio(ratio)}><span className={cn('rounded-[3px] border', aspectPreviewClass(ratio), videoAspectRatio === ratio ? 'border-violet-200 bg-violet-200/40' : 'border-white/30 bg-white/10')} /><span className="text-[10px] leading-none">{ratio}</span></button>)}
                       </div></div>
                       <div className="space-y-2"><div className="text-xs text-white/55">分辨率</div><div className="grid grid-cols-3 gap-2">
-                        {VIDEO_RESOLUTION_OPTIONS.map((resolution) => <button key={resolution} type="button" className={cn(imageChipClass(videoResolution === resolution), 'h-10 px-3')} onClick={() => setVideoResolution(resolution)}>{formatVideoResolutionLabel(resolution)}</button>)}
+                        {VIDEO_RESOLUTION_OPTIONS.map((resolution) => <button key={resolution} type="button" aria-pressed={videoResolution === resolution} className={cn(imageChipClass(videoResolution === resolution), 'h-10 px-3')} onClick={() => setVideoResolution(resolution)}>{resolution}P</button>)}
                       </div></div>
                       <div className="space-y-2"><div className="text-xs text-white/55">时长</div><div className="grid grid-cols-3 gap-2">
-                        {VIDEO_DURATION_OPTIONS.map((duration) => <button key={duration} type="button" className={cn(imageChipClass(videoDuration === duration), 'h-10 px-3')} onClick={() => setVideoDuration(duration)}>{duration}s</button>)}
+                        {VIDEO_DURATION_OPTIONS.map((duration) => <button key={duration} type="button" aria-pressed={videoDuration === duration} className={cn(imageChipClass(videoDuration === duration), 'h-10 px-3')} onClick={() => setVideoDuration(duration)}>{duration}s</button>)}
                       </div></div>
                     </div>
                   </PopoverContent>

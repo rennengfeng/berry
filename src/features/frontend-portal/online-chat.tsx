@@ -438,7 +438,7 @@ function imageChipClass(selected: boolean): string {
   )
 }
 
-function aspectPreviewClass(ratio: ImageAspectRatio): string {
+function aspectPreviewClass(ratio: ImageAspectRatio | VideoAspectRatio): string {
   if (ratio === 'auto') return 'aspect-square w-7'
   const [wRaw, hRaw] = ratio.split(':')
   const w = Math.max(1, Number(wRaw) || 1)
@@ -1822,17 +1822,18 @@ export function OnlineChat() {
                     side="top"
                     align="end"
                     sideOffset={10}
-                    className="w-[min(92vw,34rem)] rounded-2xl border border-white/10 bg-[#151124]/95 p-4 text-white shadow-2xl backdrop-blur-xl"
+                    className="w-[min(94vw,34rem)] rounded-xl border border-white/10 bg-[#151124]/95 p-3 text-white shadow-2xl backdrop-blur-xl"
                   >
                     <div className="space-y-4">
                       <div className="space-y-2">
                         <div className="text-xs text-white/55">比例</div>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-6 gap-1.5 rounded-xl bg-white/[0.04] p-1.5">
                           {VIDEO_ASPECT_OPTIONS.map((ratio) => (
                             <button
                               key={ratio}
                               type="button"
-                              className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[3.7rem] flex-col gap-1 px-1.5')}
+                              aria-pressed={videoAspectRatio === ratio}
+                              className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[4.25rem] min-w-0 flex-col gap-1 px-1')}
                               onClick={() => setVideoAspectRatio(ratio)}
                             >
                               <span
@@ -1842,7 +1843,7 @@ export function OnlineChat() {
                                   videoAspectRatio === ratio ? 'border-violet-200 bg-violet-200/40' : 'border-white/30 bg-white/10'
                                 )}
                               />
-                              <span className="text-[11px] leading-none">{ratio}</span>
+                              <span className="text-[10px] leading-none">{ratio}</span>
                             </button>
                           ))}
                         </div>
@@ -1855,10 +1856,11 @@ export function OnlineChat() {
                             <button
                               key={resolution}
                               type="button"
+                              aria-pressed={videoResolution === resolution}
                               className={cn(imageChipClass(videoResolution === resolution), 'h-10 px-3')}
                               onClick={() => setVideoResolution(resolution)}
                             >
-                              {formatVideoResolutionLabel(resolution)}
+                              {resolution}P
                             </button>
                           ))}
                         </div>
@@ -1871,6 +1873,7 @@ export function OnlineChat() {
                             <button
                               key={duration}
                               type="button"
+                              aria-pressed={videoDuration === duration}
                               className={cn(imageChipClass(videoDuration === duration), 'h-10 px-3')}
                               onClick={() => setVideoDuration(duration)}
                             >
