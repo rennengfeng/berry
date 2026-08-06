@@ -947,6 +947,16 @@ def patch_audio_pricing_meta() -> None:
 
     rel = "relay/helper/price.go"
     text = read(rel)
+    price_data_type, _, token_meta_type = price_helper_type_names(text)
+    price_data_zero = go_zero_value(price_data_type)
+    text = text.replace(
+        'return types.PriceData{}, fmt.Errorf("relay info is nil while pricing request")',
+        f'return {price_data_zero}, fmt.Errorf("relay info is nil while pricing request")',
+    )
+    text = text.replace(
+        "meta = &types.TokenCountMeta{}",
+        f"meta = &{token_meta_type}{{}}",
+    )
     if "if relayInfo == nil {\n\t\treturn groupRatioInfo\n\t}" not in text:
         text = replace_once_regex(
             text,
@@ -965,21 +975,21 @@ def patch_audio_pricing_meta() -> None:
         text = replace_once_regex(
             text,
             r'(func ModelPriceHelper\(c \*gin\.Context, info \*relaycommon\.RelayInfo, promptTokens int, meta \*[^)]+\) \([^)]+, error\) \{\n)',
-            r'\g<1>	if info == nil {\n\t\treturn types.PriceData{}, fmt.Errorf("relay info is nil while pricing request")\n\t}\n',
+            rf'\g<1>	if info == nil {{\n\t\treturn {price_data_zero}, fmt.Errorf("relay info is nil while pricing request")\n\t}}\n',
             "ModelPriceHelper nil relay info guard",
         )
-    if not re.search(r'func ModelPriceHelper\([\s\S]*?if meta == nil \{[\s\S]*?meta = &types.TokenCountMeta\{\}[\s\S]*?modelPrice, usePrice', text):
+    if not re.search(r'func ModelPriceHelper\([\s\S]*?if meta == nil \{[\s\S]*?meta = &[\w.]+TokenCountMeta\{\}[\s\S]*?modelPrice, usePrice', text):
         text = replace_once_regex(
             text,
             r'(func ModelPriceHelper\(c \*gin\.Context, info \*relaycommon\.RelayInfo, promptTokens int, meta \*[^)]+\) \([^)]+, error\) \{\n)',
-            r'\g<1>	if meta == nil {\n\t\tmeta = &types.TokenCountMeta{}\n\t}\n',
+            rf'\g<1>	if meta == nil {{\n\t\tmeta = &{token_meta_type}{{}}\n\t}}\n',
             "ModelPriceHelper nil token meta guard",
         )
-    if not re.search(r'func modelPriceHelperTiered\([\s\S]*?if meta == nil \{[\s\S]*?meta = &types.TokenCountMeta\{\}[\s\S]*?billingRequestInput', text):
+    if not re.search(r'func modelPriceHelperTiered\([\s\S]*?if meta == nil \{[\s\S]*?meta = &[\w.]+TokenCountMeta\{\}[\s\S]*?billingRequestInput', text):
         text = replace_once_regex(
             text,
             r'(func modelPriceHelperTiered\(c \*gin\.Context, info \*relaycommon\.RelayInfo, promptTokens int, meta \*[^,]+, groupRatioInfo [^)]+\) \([^)]+, error\) \{\n)',
-            r'\g<1>	if meta == nil {\n\t\tmeta = &types.TokenCountMeta{}\n\t}\n',
+            rf'\g<1>	if meta == nil {{\n\t\tmeta = &{token_meta_type}{{}}\n\t}}\n',
             "tiered price nil token meta guard",
         )
     write(rel, text)
@@ -987,19 +997,44 @@ def patch_audio_pricing_meta() -> None:
 
 def price_helper_type_names(text: str) -> tuple[str, str, str]:
     price_data_type = "types.PriceData"
-    model_sig = re.search(r'func\s+ModelPriceHelper\s*\([^)]*\)\s*\(([^,]+),\s*error\)', text)
+    model_sig = re.search(r'func\s+ModelPriceHelper\s*\([^)]*\)\s*\(([^)]*)\)', text)
     if model_sig:
-        price_data_type = model_sig.group(1).strip()
+        return_parts = [part.strip() for part in model_sig.group(1).split(",")]
+        for part in return_parts:
+            if "error" not in part:
+                price_data_type = normalize_go_type(part)
+                break
 
     group_ratio_type = "types.GroupRatioInfo"
     group_sig = re.search(r'func\s+HandleGroupRatio\s*\([^)]*\)\s*([^\s{]+)\s*\{', text)
     if group_sig:
-        group_ratio_type = group_sig.group(1).strip()
+        group_ratio_type = normalize_go_type(group_sig.group(1))
 
     token_meta_type = "types.TokenCountMeta"
-    if "meta *hosttypes.TokenCountMeta" in text:
+    meta_sig = re.search(r'func\s+ModelPriceHelper\s*\([^)]*\bmeta\s+\*([^,\s)]+)', text)
+    if meta_sig:
+        token_meta_type = meta_sig.group(1).strip()
+    elif "meta *hosttypes.TokenCountMeta" in text:
         token_meta_type = "hosttypes.TokenCountMeta"
     return price_data_type, group_ratio_type, token_meta_type
+
+
+def normalize_go_type(type_expr: str) -> str:
+    type_expr = type_expr.strip()
+    if not type_expr:
+        return type_expr
+    # Named returns look like "priceData hosttypes.PriceData"; the last token is
+    # the actual type. Plain returns already have a single token.
+    if " " in type_expr:
+        type_expr = type_expr.split()[-1]
+    return type_expr.strip()
+
+
+def go_zero_value(type_name: str) -> str:
+    type_name = type_name.strip()
+    if type_name.startswith("*") or type_name in {"any", "interface{}"}:
+        return "nil"
+    return f"{type_name}{{}}"
 
 
 def ensure_price_helper_imports(text: str, imports: list[str]) -> str:
