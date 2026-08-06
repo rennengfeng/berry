@@ -410,19 +410,6 @@ function resolveVideoRequestSettings(
   }
 }
 
-function formatVideoResolutionLabel(resolution: VideoResolutionTier): string {
-  switch (resolution) {
-    case '480':
-      return '标清 480P'
-    case '720':
-      return '高清 720P'
-    case '1080':
-      return '超清 1080P'
-    default:
-      return `${resolution}P`
-  }
-}
-
 function getImageSizePreview(size: string): { width: string; height: string } | null {
   const match = size.match(/^(\d+)[x*](\d+)$/)
   if (!match) return null

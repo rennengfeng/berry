@@ -926,20 +926,21 @@ def patch_audio_pricing_meta() -> None:
 
     rel = "relay/helper/price.go"
     text = read(rel)
-    if "meta = &types.TokenCountMeta{}" not in text:
+    if not re.search(r'func ModelPriceHelper\([^)]*\)[^{]*\{\n\s*if meta == nil \{', text):
         text = replace_once_regex(
             text,
             r'(func ModelPriceHelper\(c \*gin\.Context, info \*relaycommon\.RelayInfo, promptTokens int, meta \*[^)]+\) \([^)]+, error\) \{\n)',
             r'\g<1>	if meta == nil {\n\t\tmeta = &types.TokenCountMeta{}\n\t}\n',
             "ModelPriceHelper nil token meta guard",
         )
+    if not re.search(r'func modelPriceHelperTiered\([^)]*\)[^{]*\{\n\s*if meta == nil \{', text):
         text = replace_once_regex(
             text,
             r'(func modelPriceHelperTiered\(c \*gin\.Context, info \*relaycommon\.RelayInfo, promptTokens int, meta \*[^,]+, groupRatioInfo [^)]+\) \([^)]+, error\) \{\n)',
             r'\g<1>	if meta == nil {\n\t\tmeta = &types.TokenCountMeta{}\n\t}\n',
             "tiered price nil token meta guard",
         )
-        write(rel, text)
+    write(rel, text)
 
 
 def price_helper_type_names(text: str) -> tuple[str, str, str]:
