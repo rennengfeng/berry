@@ -1247,28 +1247,28 @@ func dashScopeNativeMaxFloat64(values ...float64) float64 {
     if "applyDashScopeNativeRelayRatios(info, &priceData, promptTokens, meta)" not in text:
         native_relay_branch = '''	if billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeDashScopeNative {
 		groupRatioInfo := HandleGroupRatio(c, info)
-		if relayInfoChannelType(c, info) != constant.ChannelTypeAliDashScopeNative {
-			return __PRICE_DATA_TYPE__{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
-		}
-		priceData, err := modelPriceHelperDashScopeNative(info, groupRatioInfo)
-		if err != nil {
-			return __PRICE_DATA_TYPE__{}, err
-		}
-		applyDashScopeNativeRelayRatios(info, &priceData, promptTokens, meta)
-		quotaToPreConsume := priceData.ApplyOtherRatiosToFloat(priceData.ModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
-		quota, err := common.QuotaFromFloatStrict(quotaToPreConsume)
-		if err != nil {
-			return __PRICE_DATA_TYPE__{}, err
-		}
-		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
-			if groupRatioInfo.GroupRatio == 0 || priceData.ModelPrice == 0 {
-				quota = 0
-				priceData.FreeModel = true
+		channelType := relayInfoChannelType(c, info)
+		if channelType == constant.ChannelTypeAliDashScopeNative {
+			priceData, err := modelPriceHelperDashScopeNative(info, groupRatioInfo)
+			if err != nil {
+				return __PRICE_DATA_TYPE__{}, err
 			}
+			applyDashScopeNativeRelayRatios(info, &priceData, promptTokens, meta)
+			quotaToPreConsume := priceData.ApplyOtherRatiosToFloat(priceData.ModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
+			quota, err := common.QuotaFromFloatStrict(quotaToPreConsume)
+			if err != nil {
+				return __PRICE_DATA_TYPE__{}, err
+			}
+			if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
+				if groupRatioInfo.GroupRatio == 0 || priceData.ModelPrice == 0 {
+					quota = 0
+					priceData.FreeModel = true
+				}
+			}
+			priceData.QuotaToPreConsume = quota
+			info.PriceData = priceData
+			return priceData, nil
 		}
-		priceData.QuotaToPreConsume = quota
-		info.PriceData = priceData
-		return priceData, nil
 	}
 '''.replace("__PRICE_DATA_TYPE__", price_data_type)
         text, count = re.subn(
@@ -1286,26 +1286,26 @@ func dashScopeNativeMaxFloat64(values ...float64) float64 {
                 "DashScope Native relay pre-consume pricing",
             )
     per_call_branch = '''	if billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeDashScopeNative {
-		if relayInfoChannelType(c, info) != constant.ChannelTypeAliDashScopeNative {
-			return __PRICE_DATA_TYPE__{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
-		}
-		priceData, err := modelPriceHelperDashScopeNative(info, groupRatioInfo)
-		if err != nil {
-			return __PRICE_DATA_TYPE__{}, err
-		}
-		quota, err := common.QuotaFromFloatStrict(priceData.ModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
-		if err != nil {
-			return __PRICE_DATA_TYPE__{}, err
-		}
-		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
-			if groupRatioInfo.GroupRatio == 0 || priceData.ModelPrice == 0 {
-				quota = 0
-				priceData.FreeModel = true
+		channelType := relayInfoChannelType(c, info)
+		if channelType == constant.ChannelTypeAliDashScopeNative {
+			priceData, err := modelPriceHelperDashScopeNative(info, groupRatioInfo)
+			if err != nil {
+				return __PRICE_DATA_TYPE__{}, err
 			}
+			quota, err := common.QuotaFromFloatStrict(priceData.ModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
+			if err != nil {
+				return __PRICE_DATA_TYPE__{}, err
+			}
+			if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
+				if groupRatioInfo.GroupRatio == 0 || priceData.ModelPrice == 0 {
+					quota = 0
+					priceData.FreeModel = true
+				}
+			}
+			priceData.Quota = quota
+			info.PriceData = priceData
+			return priceData, nil
 		}
-		priceData.Quota = quota
-		info.PriceData = priceData
-		return priceData, nil
 	}
 
 '''.replace("__PRICE_DATA_TYPE__", price_data_type)
