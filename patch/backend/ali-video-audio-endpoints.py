@@ -948,34 +948,18 @@ def patch_audio_pricing_meta() -> None:
     rel = "relay/helper/price.go"
     text = read(rel)
     if "if relayInfo == nil {\n\t\treturn groupRatioInfo\n\t}" not in text:
-        text = replace_once(
+        text = replace_once_regex(
             text,
-            '''func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.GroupRatioInfo {
-	groupRatioInfo := types.GroupRatioInfo{
-		GroupRatio:        1.0, // default ratio
-		GroupSpecialRatio: -1,
-	}
-
-	// check auto group
-	autoGroup, exists := ctx.Get("auto_group")
-''',
-            '''func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.GroupRatioInfo {
-	groupRatioInfo := types.GroupRatioInfo{
-		GroupRatio:        1.0, // default ratio
-		GroupSpecialRatio: -1,
-	}
-	if relayInfo == nil {
-		return groupRatioInfo
-	}
-
-	// check auto group
-	var autoGroup any
-	var exists bool
-	if ctx != nil {
-		autoGroup, exists = ctx.Get("auto_group")
-	}
-''',
+            r'(func HandleGroupRatio\([^)]*\)\s+[^{]+\{\n\s*groupRatioInfo\s*:=\s*[^{}]+?\{[\s\S]*?\n\s*\}\n)',
+            r'\g<1>	if relayInfo == nil {\n\t\treturn groupRatioInfo\n\t}\n',
             "group ratio nil relay info guard",
+        )
+    if 'autoGroup, exists := ctx.Get("auto_group")' in text:
+        text = replace_once_regex(
+            text,
+            r'\n\s*autoGroup,\s*exists\s*:=\s*ctx\.Get\("auto_group"\)\n',
+            '\n\tvar autoGroup any\n\tvar exists bool\n\tif ctx != nil {\n\t\tautoGroup, exists = ctx.Get("auto_group")\n\t}\n',
+            "group ratio safe auto group lookup",
         )
     if not re.search(r'func ModelPriceHelper\([\s\S]*?if info == nil \{[\s\S]*?relay info is nil while pricing request[\s\S]*?modelPrice, usePrice', text):
         text = replace_once_regex(
