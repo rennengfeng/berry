@@ -318,6 +318,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -347,6 +348,22 @@ type aliTTSResponse struct {
 	RequestID string `json:"request_id"`
 }
 
+func isAliQwen3TTSModel(modelName string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(modelName))
+	return strings.Contains(normalized, "qwen3-tts")
+}
+
+func isAliNativeTTSBillingUnit(info *relaycommon.RelayInfo, unit string) bool {
+	if info == nil {
+		return false
+	}
+	if billing_setting.GetBillingMode(info.OriginModelName) != billing_setting.BillingModeDashScopeNative {
+		return false
+	}
+	spec, ok := billing_setting.GetDashScopeNativePricing(info.OriginModelName)
+	return ok && strings.TrimSpace(spec.Unit) == unit
+}
+
 func convertAliAudioRequest(info *relaycommon.RelayInfo, request dto.AudioRequest) (io.Reader, error) {
 	if info == nil {
 		return nil, errors.New("relay info is nil")
@@ -363,6 +380,9 @@ func convertAliAudioRequest(info *relaycommon.RelayInfo, request dto.AudioReques
 	}
 	if modelName == "" {
 		return nil, errors.New("model is required")
+	}
+	if isAliQwen3TTSModel(modelName) {
+		return convertAliQwen3AudioRequest(modelName, request)
 	}
 	input := map[string]any{
 		"text": request.Input,
@@ -391,6 +411,34 @@ func convertAliAudioRequest(info *relaycommon.RelayInfo, request dto.AudioReques
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal Ali TTS request: %w", err)
+	}
+	return bytes.NewReader(body), nil
+}
+
+func convertAliQwen3AudioRequest(modelName string, request dto.AudioRequest) (io.Reader, error) {
+	input := map[string]any{
+		"text":          request.Input,
+		"language_type": "Auto",
+	}
+	if strings.TrimSpace(request.Voice) != "" {
+		input["voice"] = request.Voice
+	}
+	if strings.TrimSpace(request.Instructions) != "" {
+		input["instructions"] = request.Instructions
+	}
+	if request.Speed != nil {
+		input["rate"] = *request.Speed
+	}
+	mergeAliTTSMetadata(input, request.Metadata)
+	if err := validateAliTTSModelVoice(modelName, input); err != nil {
+		return nil, err
+	}
+	body, err := common.Marshal(map[string]any{
+		"model": modelName,
+		"input": input,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal Ali Qwen3 TTS request: %w", err)
 	}
 	return bytes.NewReader(body), nil
 }
@@ -536,6 +584,9 @@ func aliTTSSpeechHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	}
 	if aliResp.Usage.Characters > 0 {
 		info.SetEstimatePromptTokens(aliResp.Usage.Characters)
+		if isAliNativeTTSBillingUnit(info, "character") {
+			info.PriceData.AddOtherRatio("native_quantity", float64(aliResp.Usage.Characters))
+		}
 	}
 	audioBytes, contentType, err := resolveAliTTSAudio(c, info, aliResp)
 	if err != nil {
@@ -654,11 +705,15 @@ def patch_ali_audio_adaptor() -> None:
     write("relay/channel/ali/audio.go", audio_go)
     rel = "relay/channel/ali/adaptor.go"
     text = read(rel)
+    old_audio_url = '\t\tcase constant.RelayModeAudioSpeech:\n\t\t\tfullRequestURL = fmt.Sprintf("%s/api/v1/services/audio/tts/SpeechSynthesizer", info.ChannelBaseUrl)\n'
+    new_audio_url = '\t\tcase constant.RelayModeAudioSpeech:\n\t\t\tif isAliQwen3TTSModel(info.OriginModelName) || isAliQwen3TTSModel(info.UpstreamModelName) {\n\t\t\t\tfullRequestURL = fmt.Sprintf("%s/api/v1/services/aigc/multimodal-generation/generation", info.ChannelBaseUrl)\n\t\t\t} else {\n\t\t\t\tfullRequestURL = fmt.Sprintf("%s/api/v1/services/audio/tts/SpeechSynthesizer", info.ChannelBaseUrl)\n\t\t\t}\n'
+    if "isAliQwen3TTSModel(info.OriginModelName)" not in text and old_audio_url in text:
+        text = text.replace(old_audio_url, new_audio_url, 1)
     if "RelayModeAudioSpeech" not in text.split("case constant.RelayModeEmbeddings:", 1)[0]:
         text = replace_once(
             text,
             "\t\tcase constant.RelayModeEmbeddings:\n",
-            '\t\tcase constant.RelayModeAudioSpeech:\n\t\t\tfullRequestURL = fmt.Sprintf("%s/api/v1/services/audio/tts/SpeechSynthesizer", info.ChannelBaseUrl)\n\t\tcase constant.RelayModeEmbeddings:\n',
+            new_audio_url + "\t\tcase constant.RelayModeEmbeddings:\n",
             "Ali TTS request URL",
         )
     if 'info.RelayMode == constant.RelayModeAudioSpeech' not in text:
@@ -695,7 +750,71 @@ def patch_ali_audio_adaptor() -> None:
             "\t\t\tnewAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, true)\n",
             "Ali TTS upstream error body",
         )
+    if "audio adaptor returned invalid usage" not in text:
+        text = replace_once(
+            text,
+            '''	if usage.(*dto.Usage).CompletionTokenDetails.AudioTokens > 0 || usage.(*dto.Usage).PromptTokensDetails.AudioTokens > 0 {
+		service.PostAudioConsumeQuota(c, info, usage.(*dto.Usage), "")
+	} else {
+		service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
+	}
+''',
+            '''	audioUsage, ok := usage.(*dto.Usage)
+	if !ok || audioUsage == nil {
+		return types.NewError(errors.New("audio adaptor returned invalid usage"), types.ErrorCodeBadResponseBody, types.ErrOptionWithSkipRetry())
+	}
+	if audioUsage.PromptTokens == 0 {
+		audioUsage.PromptTokens = info.GetEstimatePromptTokens()
+	}
+	if audioUsage.TotalTokens == 0 {
+		audioUsage.TotalTokens = audioUsage.PromptTokens + audioUsage.CompletionTokens
+	}
+	if audioUsage.CompletionTokenDetails.AudioTokens > 0 || audioUsage.PromptTokensDetails.AudioTokens > 0 {
+		service.PostAudioConsumeQuota(c, info, audioUsage, "")
+	} else {
+		service.PostTextConsumeQuota(c, info, audioUsage, nil)
+	}
+''',
+            "audio usage nil guard",
+        )
     write(rel, text)
+
+    rel = "relay/channel/api_request.go"
+    path = ROOT / rel
+    if path.exists():
+        text = read(rel)
+        if "info != nil && info.ChannelMeta != nil" not in text:
+            text = replace_once(
+                text,
+                '''	var client *http.Client
+	var err error
+	if info.ChannelSetting.Proxy != "" {
+		client, err = service.GetHttpClientWithProxy(info.ChannelSetting.Proxy)
+		if err != nil {
+			return nil, fmt.Errorf("new proxy http client failed: %w", err)
+		}
+	} else {
+		client = service.GetHttpClient()
+	}
+''',
+                '''	var client *http.Client
+	var err error
+	proxy := ""
+	if info != nil && info.ChannelMeta != nil {
+		proxy = info.ChannelSetting.Proxy
+	}
+	if proxy != "" {
+		client, err = service.GetHttpClientWithProxy(proxy)
+		if err != nil {
+			return nil, fmt.Errorf("new proxy http client failed: %w", err)
+		}
+	} else {
+		client = service.GetHttpClient()
+	}
+''',
+                "safe proxy lookup in request helper",
+            )
+            write(rel, text)
 
 
 def patch_channel_test_audio_default_voice() -> None:
