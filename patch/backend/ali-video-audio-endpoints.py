@@ -947,6 +947,7 @@ def patch_audio_pricing_meta() -> None:
 
     rel = "relay/helper/price.go"
     text = read(rel)
+    text = remove_legacy_dashscope_native_entry_branch(text)
     price_data_type, _, token_meta_type = price_helper_type_names(text)
     price_data_zero = go_zero_value(price_data_type)
     text = text.replace(
@@ -1051,6 +1052,20 @@ def go_zero_value(type_name: str) -> str:
     return f"{type_name}{{}}"
 
 
+def remove_legacy_dashscope_native_entry_branch(text: str) -> str:
+    """Remove the old unsafe entry branch from early DashScope Native patches."""
+    legacy_pattern = (
+        r'\n\tif billing_setting\.GetBillingMode\(info\.OriginModelName\) == billing_setting\.BillingModeDashScopeNative \{\n'
+        r'\t\tgroupRatioInfo := HandleGroupRatio\(c, info\)\n'
+        r'\t\tif info\.ChannelType != constant\.ChannelTypeAliDashScopeNative(?: \|\| !info\.IsChannelTest)? \{\n'
+        r'\t\t\treturn [^{}]+(?:\{\})?, fmt\.Errorf\("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info\.OriginModelName\)\n'
+        r'\t\t\}\n'
+        r'\t\treturn modelPriceHelperDashScopeNative\(info, groupRatioInfo\)\n'
+        r'\t\}\n'
+    )
+    return re.sub(legacy_pattern, "\n", text, count=1)
+
+
 def ensure_price_helper_imports(text: str, imports: list[str]) -> str:
     missing = [item for item in imports if item not in text]
     if not missing:
@@ -1069,6 +1084,7 @@ def ensure_price_helper_imports(text: str, imports: list[str]) -> str:
 def patch_dashscope_native_task_pricing() -> None:
     rel = "relay/helper/price.go"
     text = read(rel)
+    text = remove_legacy_dashscope_native_entry_branch(text)
     price_data_type, group_ratio_type, token_meta_type = price_helper_type_names(text)
     text = ensure_price_helper_imports(text, ['"github.com/QuantumNous/new-api/constant"'])
     if '"unicode/utf8"' not in text:
@@ -1506,7 +1522,7 @@ func (a *TaskAdaptor) dashScopeNativeBillingRatios(info *relaycommon.RelayInfo, 
 	if info == nil || aliReq == nil || aliReq.Parameters == nil {
 		return nil
 	}
-	if info.ChannelType != constant.ChannelTypeAliDashScopeNative {
+	if info.ChannelMeta == nil || info.ChannelType != constant.ChannelTypeAliDashScopeNative {
 		return nil
 	}
 	if billing_setting.GetBillingMode(info.OriginModelName) != billing_setting.BillingModeDashScopeNative {

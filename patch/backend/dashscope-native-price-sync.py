@@ -590,7 +590,6 @@ def patch_price_helper() -> None:
     rel = "relay/helper/price.go"
     text = read(rel)
     required_imports = [
-        '"github.com/QuantumNous/new-api/constant"',
         '"github.com/QuantumNous/new-api/setting/billing_setting"',
     ]
     missing_imports = [item for item in required_imports if item not in text]
@@ -615,20 +614,22 @@ def patch_price_helper() -> None:
     if group_ratio_match:
         group_ratio_type = group_ratio_match.group(1).strip()
 
-    native_branch = '''\tif billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeDashScopeNative {
-\t\tgroupRatioInfo := HandleGroupRatio(c, info)
-\t\tif info.ChannelType != constant.ChannelTypeAliDashScopeNative || !info.IsChannelTest {
-\t\t\treturn __PRICE_DATA_TYPE__{}, fmt.Errorf("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info.OriginModelName)
-\t\t}
-\t\treturn modelPriceHelperDashScopeNative(info, groupRatioInfo)
-\t}
-
-'''.replace("__PRICE_DATA_TYPE__", price_data_type)
-    if "return modelPriceHelperDashScopeNative(info, groupRatioInfo)" not in text:
-        entry_match = re.search(r'func\s+ModelPriceHelper\s*\([^)]*\)\s*(?:\([^)]*\)|[^{\s]+)?\s*\{\n', text)
-        if not entry_match:
-            raise SystemExit("DashScope Native price sync patch failed: ModelPriceHelper entry not found")
-        text = text[:entry_match.end()] + native_branch + text[entry_match.end():]
+    # This hook only syncs DashScope Native pricing structures/helpers. Normal
+    # relay routing is owned by ali-video-audio-endpoints.py, where channel meta
+    # can be read safely. Do not insert a ModelPriceHelper entry branch here:
+    # direct info.ChannelType access panics before RelayInfo.InitChannelMeta().
+    text = re.sub(
+        r'\n\tif billing_setting\.GetBillingMode\(info\.OriginModelName\) == billing_setting\.BillingModeDashScopeNative \{\n'
+        r'\t\tgroupRatioInfo := HandleGroupRatio\(c, info\)\n'
+        r'\t\tif info\.ChannelType != constant\.ChannelTypeAliDashScopeNative(?: \|\| !info\.IsChannelTest)? \{\n'
+        r'\t\t\treturn [^{}]+(?:\{\})?, fmt\.Errorf\("model %s uses dashscope_native billing and can only be billed through Ali SDK / DashScope Native native routes", info\.OriginModelName\)\n'
+        r'\t\t\}\n'
+        r'\t\treturn modelPriceHelperDashScopeNative\(info, groupRatioInfo\)\n'
+        r'\t\}\n',
+        "\n",
+        text,
+        count=1,
+    )
     if "func modelPriceHelperDashScopeNative(" not in text:
         helper = r'''
 func modelPriceHelperDashScopeNative(info *relaycommon.RelayInfo, groupRatioInfo __GROUP_RATIO_TYPE__) (__PRICE_DATA_TYPE__, error) {
