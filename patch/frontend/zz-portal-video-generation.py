@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 from pathlib import Path
 import re
 import sys
@@ -33,6 +34,118 @@ def replace_once_regex(text: str, pattern: str, replacement: str, label: str) ->
     if count != 1:
         raise SystemExit(f"portal video patch failed: {label} anchor not found")
     return new_text
+
+
+ONLINE_CHAT_I18N_REPLACEMENTS = {
+    "label: '视频生成'": "label: t('Video Generation')",
+    "label: 'Agent 模式'": "label: t('Agent Mode')",
+    "label: '音乐生成'": "label: t('Music Generation')",
+    "label: '配音生成'": "label: t('Voice Generation')",
+    "label: '数字人'": "label: t('Digital Human')",
+    "label: '动作模仿'": "label: t('Motion Imitation')",
+    "'视频任务已提交，但没有返回视频地址。'": "t('Video task submitted, but no video URL was returned.')",
+    "'视频生成失败'": "t('Video generation failed')",
+    "'请描述这张图片'": "t('Please describe this image')",
+    "function cleanErrorMessage(raw: string): string {": "function cleanErrorMessage(raw: string, translate: (key: string) => string = (key) => key): string {",
+    "msg += '\\n如果您是订阅客户，请确认当前模型在订阅分组中可用。'": "msg += `\\n${translate('If you are a subscriber, please confirm that this model is available in your subscription group.')}`",
+    "msg = '订阅余额仅可用于对应的订阅分组。请确认当前模型在订阅分组中可用。'": "msg = translate('Subscription balance can only be used with the corresponding subscription group. Please confirm that this model is available there.')",
+    "msg = '当前模型暂时不可用，请稍后重试或切换其他模型。'": "msg = translate('This model is temporarily unavailable. Please try again later or switch to another model.')",
+    "cleanErrorMessage(errorMessage)": "cleanErrorMessage(errorMessage, t)",
+    "cleanErrorMessage(rawMsg)": "cleanErrorMessage(rawMsg, t)",
+    "function formatImageSize(size: string): string {": "function formatImageSize(size: string, translate: (key: string) => string = (key) => key): string {",
+    "if (size === 'auto' || size === '') return '智能'": "if (size === 'auto' || size === '') return translate('Smart')",
+    "function formatImageQualityLabel(quality: string): string {": "function formatImageQualityLabel(quality: string, translate: (key: string) => string): string {",
+    "return '低'": "return translate('Low')",
+    "return '中'": "return translate('Medium')",
+    "return '高'": "return translate('High')",
+    "return '自动'": "return translate('Auto')",
+    "function formatImageResolutionLabel(resolution: ImageResolutionTier): string {": "function formatImageResolutionLabel(resolution: ImageResolutionTier, translate: (key: string) => string): string {",
+    "return '标清 1K'": "return translate('Standard 1K')",
+    "return '高清 2K'": "return translate('HD 2K')",
+    "return '超清 4K'": "return translate('Ultra 4K')",
+    "let errorMessage = '请求失败'": "let errorMessage = t('Request failed')",
+    "'图像生成失败'": "t('Image generation failed')",
+    "formatImageQualityLabel(quality)": "formatImageQualityLabel(quality, t)",
+    "formatImageResolutionLabel(resolution)": "formatImageResolutionLabel(resolution, t)",
+    "formatImageSize(imageRequestSettings.detail)": "formatImageSize(imageRequestSettings.detail, t)",
+    "chatMode === 'video' ? '视频生成' : chatMode === 'image' ? '图片对话' : '新对话'": "chatMode === 'video' ? t('Video Generation') : chatMode === 'image' ? t('Image Generation') : t('New Chat')",
+    "? '描述你想生成的视频'": "? t('Describe the video you want to generate')",
+    "? '描述你想生成的视频...'": "? t('Describe the video you want...')",
+    ">创作类型</div>": ">{t('Creation Type')}</div>",
+    'title="视频参数"': "title={t('Video Parameters')}",
+    'title="视频生成"': "title={t('Video Generation')}",
+    ">比例</div>": ">{t('Aspect ratio')}</div>",
+    ">分辨率</div>": ">{t('Resolution')}</div>",
+    ">时长</div>": ">{t('Video Duration')}</div>",
+    "[activeModel, resolveRequestGroup]": "[activeModel, resolveRequestGroup, t]",
+    "[activeModel, selectedApiKeyId, resolveRequestGroup, imageAspectRatio, imageResolution, imageCount, imageQuality, imageOutputFormat, imageProvider, pendingImages]": "[activeModel, selectedApiKeyId, resolveRequestGroup, imageAspectRatio, imageResolution, imageCount, imageQuality, imageOutputFormat, imageProvider, pendingImages, t]",
+    "[activeModel, selectedApiKeyId, resolveRequestGroup, videoAspectRatio, videoResolution, videoDuration, pendingImages]": "[activeModel, selectedApiKeyId, resolveRequestGroup, videoAspectRatio, videoResolution, videoDuration, pendingImages, t]",
+    "[inputText, pendingImages, selectedGroups, activeSessionId, chatMode, messages, sendChat, sendImage, sendVideo]": "[inputText, pendingImages, selectedGroups, activeSessionId, chatMode, messages, sendChat, sendImage, sendVideo, t]",
+}
+
+
+I18N_EN = {
+    "Agent Mode": "Agent Mode",
+    "Aspect ratio": "Aspect ratio",
+    "Creation Type": "Creation Type",
+    "Describe the video you want to generate": "Describe the video you want to generate",
+    "Describe the video you want...": "Describe the video you want...",
+    "Digital Human": "Digital Human",
+    "HD 2K": "HD 2K",
+    "High": "High",
+    "Image generation failed": "Image generation failed",
+    "Low": "Low",
+    "Medium": "Medium",
+    "Motion Imitation": "Motion Imitation",
+    "Music Generation": "Music Generation",
+    "New Chat": "New Chat",
+    "Please describe this image": "Please describe this image",
+    "Resolution": "Resolution",
+    "Smart": "Smart",
+    "Standard 1K": "Standard 1K",
+    "Ultra 4K": "Ultra 4K",
+    "Video Duration": "Duration",
+    "Video Generation": "Video Generation",
+    "Video Parameters": "Video Parameters",
+    "Video generation failed": "Video generation failed",
+    "Video task submitted, but no video URL was returned.": "Video task submitted, but no video URL was returned.",
+    "Voice Generation": "Voice Generation",
+    "If you are a subscriber, please confirm that this model is available in your subscription group.": "If you are a subscriber, please confirm that this model is available in your subscription group.",
+    "Subscription balance can only be used with the corresponding subscription group. Please confirm that this model is available there.": "Subscription balance can only be used with the corresponding subscription group. Please confirm that this model is available there.",
+    "This model is temporarily unavailable. Please try again later or switch to another model.": "This model is temporarily unavailable. Please try again later or switch to another model.",
+}
+
+
+I18N_ZH = {
+    "Agent Mode": "Agent 模式",
+    "Aspect ratio": "比例",
+    "Creation Type": "创作类型",
+    "Describe the video you want to generate": "描述你想生成的视频",
+    "Describe the video you want...": "描述你想生成的视频...",
+    "Digital Human": "数字人",
+    "HD 2K": "高清 2K",
+    "High": "高",
+    "Image generation failed": "图像生成失败",
+    "Low": "低",
+    "Medium": "中",
+    "Motion Imitation": "动作模仿",
+    "Music Generation": "音乐生成",
+    "New Chat": "发起新对话",
+    "Please describe this image": "请描述这张图片",
+    "Resolution": "分辨率",
+    "Smart": "智能",
+    "Standard 1K": "标清 1K",
+    "Ultra 4K": "超清 4K",
+    "Video Duration": "时长",
+    "Video Generation": "视频生成",
+    "Video Parameters": "视频参数",
+    "Video generation failed": "视频生成失败",
+    "Video task submitted, but no video URL was returned.": "视频任务已提交，但没有返回视频地址。",
+    "Voice Generation": "配音生成",
+    "If you are a subscriber, please confirm that this model is available in your subscription group.": "如果您是订阅客户，请确认当前模型在订阅分组中可用。",
+    "Subscription balance can only be used with the corresponding subscription group. Please confirm that this model is available there.": "订阅余额仅可用于对应的订阅分组。请确认当前模型在订阅分组中可用。",
+    "This model is temporarily unavailable. Please try again later or switch to another model.": "当前模型暂时不可用，请稍后重试或切换其他模型。",
+}
 
 
 def patch_api() -> None:
@@ -427,14 +540,14 @@ const VIDEO_SIZE_BY_RESOLUTION_RATIO: Record<VideoResolutionTier, Record<VideoAs
         text = replace_once(text, "                  {/* Generated images */}\n", video_render + "                  {/* Generated images */}\n", "video result render")
         video_popover = """              {chatMode === 'video' && (
                 <Popover open={videoSettingsOpen} onOpenChange={setVideoSettingsOpen}>
-                  <PopoverTrigger render={<Button variant="outline" size="sm" className="h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs" disabled={isGenerating} title="视频参数" />}>
+                  <PopoverTrigger render={<Button variant="outline" size="sm" className={cn('h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs', videoSettingsOpen ? 'border-[#8B5CF6]/70 bg-[#7C3AED]/20 text-white shadow-sm shadow-[#7C3AED]/20 hover:bg-[#7C3AED]/30' : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-[#8B5CF6]/60 hover:bg-[#7C3AED]/15')} disabled={isGenerating} title="视频参数" />}>
                     <SlidersHorizontalIcon className="h-3.5 w-3.5" />
                     <span className="whitespace-nowrap">{resolveVideoRequestSettings(videoAspectRatio, videoResolution, videoDuration).summary.replace(/ · /g, ' ')}</span>
                   </PopoverTrigger>
-                  <PopoverContent side="top" align="end" sideOffset={10} className="w-[min(94vw,34rem)] rounded-xl border border-white/10 bg-[#151124]/95 p-3 text-white shadow-2xl backdrop-blur-xl">
+                  <PopoverContent side="top" align="end" sideOffset={10} className="w-[min(94vw,34rem)] rounded-xl border border-[#8B5CF6]/25 bg-[#151124]/95 p-3 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl">
                     <div className="space-y-4">
                       <div className="space-y-2"><div className="text-xs text-white/55">比例</div><div className="grid grid-cols-6 gap-1.5 rounded-xl bg-white/[0.04] p-1.5">
-                        {VIDEO_ASPECT_OPTIONS.map((ratio) => <button key={ratio} type="button" aria-pressed={videoAspectRatio === ratio} className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[4.25rem] min-w-0 flex-col gap-1 px-1')} onClick={() => setVideoAspectRatio(ratio)}><span className={cn('rounded-[3px] border', aspectPreviewClass(ratio), videoAspectRatio === ratio ? 'border-violet-200 bg-violet-200/40' : 'border-white/30 bg-white/10')} /><span className="text-[10px] leading-none">{ratio}</span></button>)}
+                        {VIDEO_ASPECT_OPTIONS.map((ratio) => <button key={ratio} type="button" aria-pressed={videoAspectRatio === ratio} className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[4.25rem] min-w-0 flex-col gap-1 px-1')} onClick={() => setVideoAspectRatio(ratio)}><span className={cn('rounded-[3px] border', aspectPreviewClass(ratio), videoAspectRatio === ratio ? 'border-[#8B5CF6] bg-[#7C3AED]/45' : 'border-white/30 bg-white/10')} /><span className="text-[10px] leading-none">{ratio}</span></button>)}
                       </div></div>
                       <div className="space-y-2"><div className="text-xs text-white/55">分辨率</div><div className="grid grid-cols-3 gap-2">
                         {VIDEO_RESOLUTION_OPTIONS.map((resolution) => <button key={resolution} type="button" aria-pressed={videoResolution === resolution} className={cn(imageChipClass(videoResolution === resolution), 'h-10 px-3')} onClick={() => setVideoResolution(resolution)}>{resolution}P</button>)}
@@ -632,13 +745,13 @@ function getImageSizePreview""",
             "{ key: 'video', label: '视频生成', Icon: VideoIcon, mode: 'video' as const }",
             "disabled video mode option",
         )
-    if "if (chatMode === 'video') return { label: '视频生成', Icon: VideoIcon }" not in text:
-        text = replace_once(
-            text,
-            "      if (chatMode === 'image') return { label: t('Image Generation'), Icon: ImageIcon }\n      return { label: t('Chat'), Icon: MessageSquareIcon }\n",
-            "      if (chatMode === 'image') return { label: t('Image Generation'), Icon: ImageIcon }\n      if (chatMode === 'video') return { label: '视频生成', Icon: VideoIcon }\n      return { label: t('Chat'), Icon: MessageSquareIcon }\n",
-            "missing active video mode label",
-        )
+    if (
+        "if (chatMode === 'video') return { label: t('Video Generation'), Icon: VideoIcon }" not in text
+        and "if (chatMode === 'video') return { label: '视频生成', Icon: VideoIcon }" not in text
+    ):
+        anchor = "      if (chatMode === 'image') return { label: t('Image Generation'), Icon: ImageIcon }\n      return { label: t('Chat'), Icon: MessageSquareIcon }\n"
+        replacement = "      if (chatMode === 'image') return { label: t('Image Generation'), Icon: ImageIcon }\n      if (chatMode === 'video') return { label: t('Video Generation'), Icon: VideoIcon }\n      return { label: t('Chat'), Icon: MessageSquareIcon }\n"
+        text = replace_once(text, anchor, replacement, "missing active video mode label")
     if "const sendVideo = useCallback(" not in text:
         send_video = """  // Send video generation
   const sendVideo = useCallback(
@@ -734,14 +847,14 @@ function getImageSizePreview""",
     if "{chatMode === 'video' && (" not in text:
         video_popover = """              {chatMode === 'video' && (
                 <Popover open={videoSettingsOpen} onOpenChange={setVideoSettingsOpen}>
-                  <PopoverTrigger render={<Button variant="outline" size="sm" className="h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs" disabled={isGenerating} title="视频参数" />}>
+                  <PopoverTrigger render={<Button variant="outline" size="sm" className={cn('h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs', videoSettingsOpen ? 'border-[#8B5CF6]/70 bg-[#7C3AED]/20 text-white shadow-sm shadow-[#7C3AED]/20 hover:bg-[#7C3AED]/30' : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-[#8B5CF6]/60 hover:bg-[#7C3AED]/15')} disabled={isGenerating} title="视频参数" />}>
                     <SlidersHorizontalIcon className="h-3.5 w-3.5" />
                     <span className="whitespace-nowrap">{videoRequestSettings.summary.replace(/ · /g, ' ')}</span>
                   </PopoverTrigger>
-                  <PopoverContent side="top" align="end" sideOffset={10} className="w-[min(94vw,34rem)] rounded-xl border border-white/10 bg-[#151124]/95 p-3 text-white shadow-2xl backdrop-blur-xl">
+                  <PopoverContent side="top" align="end" sideOffset={10} className="w-[min(94vw,34rem)] rounded-xl border border-[#8B5CF6]/25 bg-[#151124]/95 p-3 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl">
                     <div className="space-y-4">
                       <div className="space-y-2"><div className="text-xs text-white/55">比例</div><div className="grid grid-cols-6 gap-1.5 rounded-xl bg-white/[0.04] p-1.5">
-                        {VIDEO_ASPECT_OPTIONS.map((ratio) => <button key={ratio} type="button" aria-pressed={videoAspectRatio === ratio} className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[4.25rem] min-w-0 flex-col gap-1 px-1')} onClick={() => setVideoAspectRatio(ratio)}><span className={cn('rounded-[3px] border', aspectPreviewClass(ratio), videoAspectRatio === ratio ? 'border-violet-200 bg-violet-200/40' : 'border-white/30 bg-white/10')} /><span className="text-[10px] leading-none">{ratio}</span></button>)}
+                        {VIDEO_ASPECT_OPTIONS.map((ratio) => <button key={ratio} type="button" aria-pressed={videoAspectRatio === ratio} className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[4.25rem] min-w-0 flex-col gap-1 px-1')} onClick={() => setVideoAspectRatio(ratio)}><span className={cn('rounded-[3px] border', aspectPreviewClass(ratio), videoAspectRatio === ratio ? 'border-[#8B5CF6] bg-[#7C3AED]/45' : 'border-white/30 bg-white/10')} /><span className="text-[10px] leading-none">{ratio}</span></button>)}
                       </div></div>
                       <div className="space-y-2"><div className="text-xs text-white/55">分辨率</div><div className="grid grid-cols-3 gap-2">
                         {VIDEO_RESOLUTION_OPTIONS.map((resolution) => <button key={resolution} type="button" aria-pressed={videoResolution === resolution} className={cn(imageChipClass(videoResolution === resolution), 'h-10 px-3')} onClick={() => setVideoResolution(resolution)}>{resolution}P</button>)}
@@ -756,12 +869,67 @@ function getImageSizePreview""",
               )}
 """
         text = replace_once(text, "            </div>\n          </div>\n        </div>\n      </div>\n      </div>\n    </div>", video_popover + "            </div>\n          </div>\n        </div>\n      </div>\n      </div>\n    </div>", "missing video settings popover")
+    style_replacements = {
+        "'border-violet-300/80 bg-violet-500/85 text-white shadow-sm'": "'border-[#8B5CF6] bg-[#7C3AED] text-white shadow-sm shadow-[#7C3AED]/35 hover:bg-[#6D28D9]'",
+        "'border-primary bg-primary text-white shadow-sm shadow-primary/25 hover:bg-primary/90'": "'border-[#8B5CF6] bg-[#7C3AED] text-white shadow-sm shadow-[#7C3AED]/35 hover:bg-[#6D28D9]'",
+        "'border-white/10 bg-white/[0.04] text-white/65 hover:border-primary/50 hover:bg-primary/15 hover:text-white'": "'border-white/10 bg-white/[0.04] text-white/70 hover:border-[#8B5CF6]/70 hover:bg-[#7C3AED]/20 hover:text-white'",
+        "'border-primary/15 bg-primary/5 text-white/70 hover:border-primary/40 hover:bg-primary/10 hover:text-white'": "'border-white/10 bg-white/[0.04] text-white/70 hover:border-[#8B5CF6]/70 hover:bg-[#7C3AED]/20 hover:text-white'",
+        "border border-white/10 bg-[#151124]/95 p-4 text-white shadow-2xl backdrop-blur-xl": "border border-[#8B5CF6]/25 bg-[#151124]/95 p-4 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl",
+        "border border-primary/20 bg-[#151124]/95 p-4 text-white shadow-2xl shadow-primary/10 backdrop-blur-xl": "border border-[#8B5CF6]/25 bg-[#151124]/95 p-4 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl",
+        "border border-white/10 bg-[#151124]/95 p-3 text-white shadow-2xl backdrop-blur-xl": "border border-[#8B5CF6]/25 bg-[#151124]/95 p-3 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl",
+        "border border-primary/20 bg-[#151124]/95 p-3 text-white shadow-2xl shadow-primary/10 backdrop-blur-xl": "border border-[#8B5CF6]/25 bg-[#151124]/95 p-3 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl",
+        "'border-violet-200 bg-violet-200/40' : 'border-white/30 bg-white/10'": "'border-[#8B5CF6] bg-[#7C3AED]/45' : 'border-white/30 bg-white/10'",
+        "'border-white/80 bg-white/45' : 'border-primary/20 bg-primary/10'": "'border-[#8B5CF6] bg-[#7C3AED]/45' : 'border-white/30 bg-white/10'",
+    }
+    for old, new in style_replacements.items():
+        text = text.replace(old, new)
+    for old, new in ONLINE_CHAT_I18N_REPLACEMENTS.items():
+        text = text.replace(old, new)
     write(rel, text)
+
+
+def patch_locale_file(rel: str, entries: dict[str, str]) -> None:
+    path = ROOT / rel
+    if not path.exists():
+        return
+    data = json.loads(path.read_text(encoding="utf-8"))
+    translations = data.setdefault("translation", {})
+    changed = False
+    for key, value in entries.items():
+        if translations.get(key) != value:
+            translations[key] = value
+            changed = True
+    if changed:
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def patch_static_i18n_keys() -> None:
+    rel = "src/i18n/static-keys.ts"
+    path = ROOT / rel
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    missing = [key for key in I18N_EN if f"'{key}'" not in text]
+    if not missing:
+        return
+    block = "".join(f"  '{key}',\n" for key in missing)
+    if "  // Roles\n" in text:
+        text = text.replace("  // Roles\n", block + "\n  // Roles\n", 1)
+    else:
+        text = text.replace("]\n", block + "]\n", 1)
+    path.write_text(text, encoding="utf-8")
+
+
+def patch_i18n() -> None:
+    patch_locale_file("src/i18n/locales/en.json", I18N_EN)
+    patch_locale_file("src/i18n/locales/zh.json", I18N_ZH)
+    patch_static_i18n_keys()
 
 
 def main() -> None:
     patch_api()
     patch_online_chat()
+    patch_i18n()
     print("applied portal video generation frontend patch")
 
 

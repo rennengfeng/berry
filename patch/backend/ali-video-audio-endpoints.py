@@ -904,6 +904,27 @@ def patch_audio_pricing_meta() -> None:
     path = ROOT / rel
     if path.exists():
         text = read(rel)
+        if 'if relayInfo == nil {\n\t\tnewAPIError = types.NewError(fmt.Errorf("failed to build relay info"), types.ErrorCodeGenRelayInfoFailed)' not in text:
+            text = replace_once(
+                text,
+                '''	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, request, ws)
+	if err != nil {
+		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
+		return
+	}
+''',
+                '''	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, request, ws)
+	if err != nil {
+		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
+		return
+	}
+	if relayInfo == nil {
+		newAPIError = types.NewError(fmt.Errorf("failed to build relay info"), types.ErrorCodeGenRelayInfoFailed)
+		return
+	}
+''',
+                "nil relay info guard",
+            )
         if "TTS fixed/character pricing needs the input text" not in text:
             text = replace_once(
                 text,
@@ -926,14 +947,51 @@ def patch_audio_pricing_meta() -> None:
 
     rel = "relay/helper/price.go"
     text = read(rel)
-    if not re.search(r'func ModelPriceHelper\([^)]*\)[^{]*\{\n\s*if meta == nil \{', text):
+    if "if relayInfo == nil {\n\t\treturn groupRatioInfo\n\t}" not in text:
+        text = replace_once(
+            text,
+            '''func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.GroupRatioInfo {
+	groupRatioInfo := types.GroupRatioInfo{
+		GroupRatio:        1.0, // default ratio
+		GroupSpecialRatio: -1,
+	}
+
+	// check auto group
+	autoGroup, exists := ctx.Get("auto_group")
+''',
+            '''func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.GroupRatioInfo {
+	groupRatioInfo := types.GroupRatioInfo{
+		GroupRatio:        1.0, // default ratio
+		GroupSpecialRatio: -1,
+	}
+	if relayInfo == nil {
+		return groupRatioInfo
+	}
+
+	// check auto group
+	var autoGroup any
+	var exists bool
+	if ctx != nil {
+		autoGroup, exists = ctx.Get("auto_group")
+	}
+''',
+            "group ratio nil relay info guard",
+        )
+    if not re.search(r'func ModelPriceHelper\([\s\S]*?if info == nil \{[\s\S]*?relay info is nil while pricing request[\s\S]*?modelPrice, usePrice', text):
+        text = replace_once_regex(
+            text,
+            r'(func ModelPriceHelper\(c \*gin\.Context, info \*relaycommon\.RelayInfo, promptTokens int, meta \*[^)]+\) \([^)]+, error\) \{\n)',
+            r'\g<1>	if info == nil {\n\t\treturn types.PriceData{}, fmt.Errorf("relay info is nil while pricing request")\n\t}\n',
+            "ModelPriceHelper nil relay info guard",
+        )
+    if not re.search(r'func ModelPriceHelper\([\s\S]*?if meta == nil \{[\s\S]*?meta = &types.TokenCountMeta\{\}[\s\S]*?modelPrice, usePrice', text):
         text = replace_once_regex(
             text,
             r'(func ModelPriceHelper\(c \*gin\.Context, info \*relaycommon\.RelayInfo, promptTokens int, meta \*[^)]+\) \([^)]+, error\) \{\n)',
             r'\g<1>	if meta == nil {\n\t\tmeta = &types.TokenCountMeta{}\n\t}\n',
             "ModelPriceHelper nil token meta guard",
         )
-    if not re.search(r'func modelPriceHelperTiered\([^)]*\)[^{]*\{\n\s*if meta == nil \{', text):
+    if not re.search(r'func modelPriceHelperTiered\([\s\S]*?if meta == nil \{[\s\S]*?meta = &types.TokenCountMeta\{\}[\s\S]*?billingRequestInput', text):
         text = replace_once_regex(
             text,
             r'(func modelPriceHelperTiered\(c \*gin\.Context, info \*relaycommon\.RelayInfo, promptTokens int, meta \*[^,]+, groupRatioInfo [^)]+\) \([^)]+, error\) \{\n)',
@@ -1533,13 +1591,14 @@ func (a *TaskAdaptor) dashScopeNativeBillingRatios(info *relaycommon.RelayInfo, 
     new_size_block = '''	if req.Size != "" {
 		normalizedSize := normalizeAliVideoSize(req.Size)
 		if strings.Contains(normalizedSize, "*") {
+			resolution, err := sizeToResolution(normalizedSize)
+			if err != nil {
+				return nil, err
+			}
 			if strings.Contains(req.Model, "t2v") {
 				aliReq.Parameters.Size = normalizedSize
+				aliReq.Parameters.Resolution = resolution
 			} else {
-				resolution, err := sizeToResolution(normalizedSize)
-				if err != nil {
-					return nil, err
-				}
 				aliReq.Parameters.Resolution = resolution
 			}
 		} else {
@@ -1553,6 +1612,46 @@ func (a *TaskAdaptor) dashScopeNativeBillingRatios(info *relaycommon.RelayInfo, 
 '''
     if "normalizedSize := normalizeAliVideoSize(req.Size)" not in text:
         text = replace_once(text, old_size_block, new_size_block, "Ali video x size normalization")
+    elif '''		if strings.Contains(normalizedSize, "*") {
+			if strings.Contains(req.Model, "t2v") {
+				aliReq.Parameters.Size = normalizedSize
+			} else {
+				resolution, err := sizeToResolution(normalizedSize)
+				if err != nil {
+					return nil, err
+				}
+				aliReq.Parameters.Resolution = resolution
+			}
+		} else {
+''' in text:
+        text = text.replace(
+            '''		if strings.Contains(normalizedSize, "*") {
+			if strings.Contains(req.Model, "t2v") {
+				aliReq.Parameters.Size = normalizedSize
+			} else {
+				resolution, err := sizeToResolution(normalizedSize)
+				if err != nil {
+					return nil, err
+				}
+				aliReq.Parameters.Resolution = resolution
+			}
+		} else {
+''',
+            '''		if strings.Contains(normalizedSize, "*") {
+			resolution, err := sizeToResolution(normalizedSize)
+			if err != nil {
+				return nil, err
+			}
+			if strings.Contains(req.Model, "t2v") {
+				aliReq.Parameters.Size = normalizedSize
+				aliReq.Parameters.Resolution = resolution
+			} else {
+				aliReq.Parameters.Resolution = resolution
+			}
+		} else {
+''',
+            1,
+        )
 
     native_estimate_branch = '''	if nativeRatios := a.dashScopeNativeBillingRatios(info, aliReq); len(nativeRatios) > 0 {
 		return nativeRatios

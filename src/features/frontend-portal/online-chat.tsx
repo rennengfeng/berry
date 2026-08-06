@@ -363,34 +363,34 @@ function resolveImageRequestSettings(
   }
 }
 
-function formatImageSize(size: string): string {
-  if (size === 'auto' || size === '') return '智能'
+function formatImageSize(size: string, translate: (key: string) => string = (key) => key): string {
+  if (size === 'auto' || size === '') return translate('Smart')
   return size.replace('*', '×')
 }
 
-function formatImageQualityLabel(quality: string): string {
+function formatImageQualityLabel(quality: string, translate: (key: string) => string): string {
   switch (quality) {
     case 'low':
-      return '低'
+      return translate('Low')
     case 'medium':
-      return '中'
+      return translate('Medium')
     case 'high':
-      return '高'
+      return translate('High')
     case 'auto':
-      return '自动'
+      return translate('Auto')
     default:
       return quality
   }
 }
 
-function formatImageResolutionLabel(resolution: ImageResolutionTier): string {
+function formatImageResolutionLabel(resolution: ImageResolutionTier, translate: (key: string) => string): string {
   switch (resolution) {
     case '1K':
-      return '标清 1K'
+      return translate('Standard 1K')
     case '2K':
-      return '高清 2K'
+      return translate('HD 2K')
     case '4K':
-      return '超清 4K'
+      return translate('Ultra 4K')
     default:
       return resolution
   }
@@ -420,8 +420,8 @@ function imageChipClass(selected: boolean): string {
   return cn(
     'inline-flex min-w-0 items-center justify-center rounded-lg border text-sm transition',
     selected
-      ? 'border-violet-300/80 bg-violet-500/85 text-white shadow-sm'
-      : 'border-white/10 bg-white/[0.04] text-white/65 hover:border-primary/50 hover:bg-primary/15 hover:text-white'
+      ? 'border-[#8B5CF6] bg-[#7C3AED] text-white shadow-sm shadow-[#7C3AED]/35 hover:bg-[#6D28D9]'
+      : 'border-white/10 bg-white/[0.04] text-white/70 hover:border-[#8B5CF6]/70 hover:bg-[#7C3AED]/20 hover:text-white'
   )
 }
 
@@ -458,14 +458,14 @@ function getDisplayText(content: string | ContentPart[]): string {
   return textPart && 'text' in textPart ? textPart.text : ''
 }
 
-function getSessionTitle(messages: ChatMessage[]): string {
+function getSessionTitle(messages: ChatMessage[], fallbackTitle = 'New Chat'): string {
   const first = messages.find((m) => m.from === 'user')
-  if (!first) return '新对话'
+  if (!first) return fallbackTitle
   const text = getDisplayText(first.content)
-  return text.slice(0, 20) || '新对话'
+  return text.slice(0, 20) || fallbackTitle
 }
 
-function cleanErrorMessage(raw: string): string {
+function cleanErrorMessage(raw: string, translate: (key: string) => string = (key) => key): string {
   let msg = raw
     .replace(/\s*\(request id:[^)]*\)/gi, '')
     .replace(/\$\s*(\d+)\.(\d{2})\d+/g, (_, a, b) => `$${a}.${b}`)
@@ -476,13 +476,13 @@ function cleanErrorMessage(raw: string): string {
     .replace(/上游分组[：:\s]*\S+/gi, '')
   // 不把真实错误强行替换成“选择分组/密钥”，在线聊天走 cookie 鉴权，固定文案会掩盖真正原因。
   if (/额度不足|insufficient.*quota/i.test(msg)) {
-    msg += '\n如果您是订阅客户，请确认当前模型在订阅分组中可用。'
+    msg += `\n${translate('If you are a subscriber, please confirm that this model is available in your subscription group.')}`
   }
   if (/订阅余额仅可用于/i.test(msg)) {
-    msg = '订阅余额仅可用于对应的订阅分组。请确认当前模型在订阅分组中可用。'
+    msg = translate('Subscription balance can only be used with the corresponding subscription group. Please confirm that this model is available there.')
   }
   if (/all]?\s*channels?\s*(unavailable|failed|exhausted)/i.test(msg) || /所有渠道/.test(msg)) {
-    msg = '当前模型暂时不可用，请稍后重试或切换其他模型。'
+    msg = translate('This model is temporarily unavailable. Please try again later or switch to another model.')
   }
   return msg.trim()
 }
@@ -689,7 +689,7 @@ export function OnlineChat() {
   const activeModeMeta = useMemo(
     () => {
       if (chatMode === 'image') return { label: t('Image Generation'), Icon: ImageIcon }
-      if (chatMode === 'video') return { label: '视频生成', Icon: VideoIcon }
+      if (chatMode === 'video') return { label: t('Video Generation'), Icon: VideoIcon }
       return { label: t('Chat'), Icon: MessageSquareIcon }
     },
     [chatMode, t]
@@ -699,12 +699,12 @@ export function OnlineChat() {
     () => [
       { key: 'chat', label: t('Chat'), Icon: MessageSquareIcon, mode: 'chat' as const },
       { key: 'image', label: t('Image Generation'), Icon: ImageIcon, mode: 'image' as const },
-      { key: 'agent', label: 'Agent 模式', Icon: BotIcon, disabled: true },
-      { key: 'video', label: '视频生成', Icon: VideoIcon, mode: 'video' as const },
-      { key: 'music', label: '音乐生成', Icon: MusicIcon, disabled: true },
-      { key: 'voice', label: '配音生成', Icon: MicIcon, disabled: true },
-      { key: 'digital-human', label: '数字人', Icon: UserRoundIcon, disabled: true },
-      { key: 'motion', label: '动作模仿', Icon: PersonStandingIcon, disabled: true },
+      { key: 'agent', label: t('Agent Mode'), Icon: BotIcon, disabled: true },
+      { key: 'video', label: t('Video Generation'), Icon: VideoIcon, mode: 'video' as const },
+      { key: 'music', label: t('Music Generation'), Icon: MusicIcon, disabled: true },
+      { key: 'voice', label: t('Voice Generation'), Icon: MicIcon, disabled: true },
+      { key: 'digital-human', label: t('Digital Human'), Icon: UserRoundIcon, disabled: true },
+      { key: 'motion', label: t('Motion Imitation'), Icon: PersonStandingIcon, disabled: true },
     ],
     [t]
   )
@@ -807,14 +807,14 @@ export function OnlineChat() {
       setSessions((prev) =>
         prev.map((s) =>
           s.id === activeSessionId
-            ? { ...s, messages, title: getSessionTitle(messages) }
+            ? { ...s, messages, title: getSessionTitle(messages, t('New Chat')) }
             : s
         )
       )
     }
     const newSession: ChatSession = {
       id: nanoid(),
-      title: '新对话',
+      title: t('New Chat'),
       messages: [],
       mode: chatMode,
       createdAt: Date.now(),
@@ -822,7 +822,7 @@ export function OnlineChat() {
     setSessions((prev) => [newSession, ...prev])
     setActiveSessionId(newSession.id)
     setMessages([])
-  }, [activeSessionId, messages, chatMode])
+  }, [activeSessionId, messages, chatMode, t])
 
   // Switch session
   const switchSession = useCallback(
@@ -971,7 +971,7 @@ export function OnlineChat() {
         sseRef.current = null
         setIsGenerating(false)
 
-        let errorMessage = '请求失败'
+        let errorMessage = t('Request failed')
         const rawData = (e as { data?: string }).data
         if (rawData) {
           try {
@@ -981,7 +981,7 @@ export function OnlineChat() {
             errorMessage = rawData
           }
         }
-        errorMessage = cleanErrorMessage(errorMessage)
+        errorMessage = cleanErrorMessage(errorMessage, t)
 
         setMessages((prev) => {
           const last = prev[prev.length - 1]
@@ -1019,7 +1019,7 @@ export function OnlineChat() {
         sseRef.current = null
       }
     },
-    [activeModel, resolveRequestGroup]
+    [activeModel, resolveRequestGroup, t]
   )
 
   // Send image generation
@@ -1085,8 +1085,8 @@ export function OnlineChat() {
           return updated
         })
       } catch (err: unknown) {
-        const rawMsg = err instanceof Error ? err.message : '图像生成失败'
-        const msg = cleanErrorMessage(rawMsg)
+        const rawMsg = err instanceof Error ? err.message : t('Image generation failed')
+        const msg = cleanErrorMessage(rawMsg, t)
         setMessages((prev) => {
           const updated = [...prev]
           const last = updated[updated.length - 1]
@@ -1099,7 +1099,7 @@ export function OnlineChat() {
         setIsGenerating(false)
       }
     },
-    [activeModel, selectedApiKeyId, resolveRequestGroup, imageAspectRatio, imageResolution, imageCount, imageQuality, imageOutputFormat, imageProvider, pendingImages]
+    [activeModel, selectedApiKeyId, resolveRequestGroup, imageAspectRatio, imageResolution, imageCount, imageQuality, imageOutputFormat, imageProvider, pendingImages, t]
   )
 
   // Send video generation
@@ -1142,7 +1142,7 @@ export function OnlineChat() {
           if (last?.from === 'assistant') {
             updated[updated.length - 1] = {
               ...last,
-              content: videos.length > 0 ? prompt : '视频任务已提交，但没有返回视频地址。',
+              content: videos.length > 0 ? prompt : t('Video task submitted, but no video URL was returned.'),
               videos,
               status: videos.length > 0 ? 'complete' : 'error',
             }
@@ -1150,8 +1150,8 @@ export function OnlineChat() {
           return updated
         })
       } catch (err: unknown) {
-        const rawMsg = err instanceof Error ? err.message : '视频生成失败'
-        const msg = cleanErrorMessage(rawMsg)
+        const rawMsg = err instanceof Error ? err.message : t('Video generation failed')
+        const msg = cleanErrorMessage(rawMsg, t)
         setMessages((prev) => {
           const updated = [...prev]
           const last = updated[updated.length - 1]
@@ -1164,7 +1164,7 @@ export function OnlineChat() {
         setIsGenerating(false)
       }
     },
-    [activeModel, selectedApiKeyId, resolveRequestGroup, videoAspectRatio, videoResolution, videoDuration, pendingImages]
+    [activeModel, selectedApiKeyId, resolveRequestGroup, videoAspectRatio, videoResolution, videoDuration, pendingImages, t]
   )
 
   // Handle submit
@@ -1177,7 +1177,7 @@ export function OnlineChat() {
     if (!activeSessionId) {
       const newSession: ChatSession = {
         id: nanoid(),
-        title: text.slice(0, 20) || (chatMode === 'video' ? '视频生成' : chatMode === 'image' ? '图片对话' : '新对话'),
+        title: text.slice(0, 20) || (chatMode === 'video' ? t('Video Generation') : chatMode === 'image' ? t('Image Generation') : t('New Chat')),
         messages: [],
         mode: chatMode,
         createdAt: Date.now(),
@@ -1203,7 +1203,7 @@ export function OnlineChat() {
     let content: string | ContentPart[]
     if (pendingImages.length > 0) {
       content = [
-        { type: 'text' as const, text: text || '请描述这张图片' },
+        { type: 'text' as const, text: text || t('Please describe this image') },
         ...pendingImages.map((url) => ({
           type: 'image_url' as const,
           image_url: { url },
@@ -1218,7 +1218,7 @@ export function OnlineChat() {
     setMessages(newMessages)
     setPendingImages([])
     sendChat(newMessages)
-  }, [inputText, pendingImages, selectedGroups, activeSessionId, chatMode, messages, sendChat, sendImage, sendVideo])
+  }, [inputText, pendingImages, selectedGroups, activeSessionId, chatMode, messages, sendChat, sendImage, sendVideo, t])
 
   // Handle keyboard
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1383,7 +1383,7 @@ export function OnlineChat() {
                   {chatMode === 'chat'
                     ? t('Start a conversation')
                     : chatMode === 'video'
-                      ? '描述你想生成的视频'
+                      ? t('Describe the video you want to generate')
                       : t('Describe the image you want to generate')}
                 </p>
               </div>
@@ -1563,7 +1563,7 @@ export function OnlineChat() {
                   chatMode === 'chat'
                     ? t('Type a message, Enter to send, Shift+Enter for new line')
                     : chatMode === 'video'
-                      ? '描述你想生成的视频...'
+                      ? t('Describe the video you want...')
                       : t('Describe the image you want...')
                 }
                 className="field-sizing-content max-h-32 min-h-[2.5rem] flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
@@ -1611,7 +1611,7 @@ export function OnlineChat() {
                   <ChevronUpIcon className="h-3.5 w-3.5 shrink-0 opacity-60" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-60 rounded-2xl p-1.5 shadow-xl">
-                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">创作类型</div>
+                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{t('Creation Type')}</div>
                   {creationModeOptions.map((option, index) => (
                     <Fragment key={option.key}>
                       {index === 2 && <DropdownMenuSeparator />}
@@ -1668,7 +1668,12 @@ export function OnlineChat() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs"
+                        className={cn(
+                          'h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs',
+                          imageSettingsOpen
+                            ? 'border-[#8B5CF6]/70 bg-[#7C3AED]/20 text-white shadow-sm shadow-[#7C3AED]/20 hover:bg-[#7C3AED]/30'
+                            : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-[#8B5CF6]/60 hover:bg-[#7C3AED]/15'
+                        )}
                         disabled={isGenerating}
                         title={t('Settings')}
                       />
@@ -1681,7 +1686,7 @@ export function OnlineChat() {
                     side="top"
                     align="end"
                     sideOffset={10}
-                    className="w-[min(92vw,36rem)] rounded-2xl border border-white/10 bg-[#151124]/95 p-4 text-white shadow-2xl backdrop-blur-xl"
+                    className="w-[min(92vw,36rem)] rounded-2xl border border-[#8B5CF6]/25 bg-[#151124]/95 p-4 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl"
                   >
                     <div className="space-y-4">
                       <div className="space-y-2">
@@ -1698,7 +1703,7 @@ export function OnlineChat() {
                                 className={cn(
                                   'rounded-[3px] border',
                                   aspectPreviewClass(ratio),
-                                  imageAspectRatio === ratio ? 'border-violet-200 bg-violet-200/40' : 'border-white/30 bg-white/10'
+                                  imageAspectRatio === ratio ? 'border-[#8B5CF6] bg-[#7C3AED]/45' : 'border-white/30 bg-white/10'
                                 )}
                               />
                               <span className="text-[11px] leading-none">{ratio === 'auto' ? t('Auto') : ratio}</span>
@@ -1718,7 +1723,7 @@ export function OnlineChat() {
                                 className={cn(imageChipClass(imageQuality === quality), 'h-10 px-3')}
                                 onClick={() => setImageQuality(quality)}
                               >
-                                {formatImageQualityLabel(quality)}
+                                {formatImageQualityLabel(quality, t)}
                               </button>
                             ))}
                           </div>
@@ -1734,7 +1739,7 @@ export function OnlineChat() {
                                 className={cn(imageChipClass(imageResolution === resolution), 'h-10 px-3')}
                                 onClick={() => setImageResolution(resolution)}
                               >
-                                {formatImageResolutionLabel(resolution)}
+                                {formatImageResolutionLabel(resolution, t)}
                               </button>
                             ))}
                           </div>
@@ -1776,12 +1781,12 @@ export function OnlineChat() {
                       <div className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 text-xs text-white/45">
                         <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
                           <span className="mr-2">W</span>
-                          <span className="text-white">{imageSizePreview?.width ?? formatImageSize(imageRequestSettings.detail)}</span>
+                          <span className="text-white">{imageSizePreview?.width ?? formatImageSize(imageRequestSettings.detail, t)}</span>
                         </div>
                         <span className="text-white/45">×</span>
                         <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
                           <span className="mr-2">H</span>
-                          <span className="text-white">{imageSizePreview?.height ?? formatImageSize(imageRequestSettings.detail)}</span>
+                          <span className="text-white">{imageSizePreview?.height ?? formatImageSize(imageRequestSettings.detail, t)}</span>
                         </div>
                         <span>PX</span>
                       </div>
@@ -1796,9 +1801,14 @@ export function OnlineChat() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs"
+                        className={cn(
+                          'h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs',
+                          videoSettingsOpen
+                            ? 'border-[#8B5CF6]/70 bg-[#7C3AED]/20 text-white shadow-sm shadow-[#7C3AED]/20 hover:bg-[#7C3AED]/30'
+                            : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-[#8B5CF6]/60 hover:bg-[#7C3AED]/15'
+                        )}
                         disabled={isGenerating}
-                        title="视频参数"
+                        title={t('Video Parameters')}
                       />
                     }
                   >
@@ -1809,11 +1819,11 @@ export function OnlineChat() {
                     side="top"
                     align="end"
                     sideOffset={10}
-                    className="w-[min(94vw,34rem)] rounded-xl border border-white/10 bg-[#151124]/95 p-3 text-white shadow-2xl backdrop-blur-xl"
+                    className="w-[min(94vw,34rem)] rounded-xl border border-[#8B5CF6]/25 bg-[#151124]/95 p-3 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl"
                   >
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <div className="text-xs text-white/55">比例</div>
+                        <div className="text-xs text-white/55">{t('Aspect ratio')}</div>
                         <div className="grid grid-cols-6 gap-1.5 rounded-xl bg-white/[0.04] p-1.5">
                           {VIDEO_ASPECT_OPTIONS.map((ratio) => (
                             <button
@@ -1827,7 +1837,7 @@ export function OnlineChat() {
                                 className={cn(
                                   'rounded-[3px] border',
                                   aspectPreviewClass(ratio),
-                                  videoAspectRatio === ratio ? 'border-violet-200 bg-violet-200/40' : 'border-white/30 bg-white/10'
+                                  videoAspectRatio === ratio ? 'border-[#8B5CF6] bg-[#7C3AED]/45' : 'border-white/30 bg-white/10'
                                 )}
                               />
                               <span className="text-[10px] leading-none">{ratio}</span>
@@ -1837,7 +1847,7 @@ export function OnlineChat() {
                       </div>
 
                       <div className="space-y-2">
-                        <div className="text-xs text-white/55">分辨率</div>
+                        <div className="text-xs text-white/55">{t('Resolution')}</div>
                         <div className="grid grid-cols-3 gap-2">
                           {VIDEO_RESOLUTION_OPTIONS.map((resolution) => (
                             <button
@@ -1854,7 +1864,7 @@ export function OnlineChat() {
                       </div>
 
                       <div className="space-y-2">
-                        <div className="text-xs text-white/55">时长</div>
+                        <div className="text-xs text-white/55">{t('Video Duration')}</div>
                         <div className="grid grid-cols-3 gap-2">
                           {VIDEO_DURATION_OPTIONS.map((duration) => (
                             <button
@@ -1894,3 +1904,4 @@ export function OnlineChat() {
     </div>
   )
 }
+
