@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { nanoid } from 'nanoid'
 import { SSE } from 'sse.js'
@@ -423,6 +423,16 @@ function imageChipClass(selected: boolean): string {
       ? '!border-violet-400 !bg-violet-600 !text-white shadow-sm shadow-violet-600/35 hover:!bg-violet-700'
       : 'border-white/10 bg-white/[0.04] text-white/70 hover:border-violet-400/70 hover:bg-violet-600/20 hover:text-white'
   )
+}
+
+function imageChipStyle(selected: boolean): CSSProperties | undefined {
+  if (!selected) return undefined
+  return {
+    backgroundColor: 'rgba(124, 58, 237, 0.98)',
+    borderColor: 'rgba(167, 139, 250, 0.95)',
+    color: '#fff',
+    boxShadow: '0 10px 24px rgba(124, 58, 237, 0.32)',
+  }
 }
 
 function aspectPreviewClass(ratio: ImageAspectRatio | VideoAspectRatio): string {
@@ -1668,6 +1678,7 @@ export function OnlineChat() {
                       <Button
                         variant="outline"
                         size="sm"
+                        style={imageSettingsOpen ? imageChipStyle(true) : undefined}
                         className={cn(
                           'h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs',
                           imageSettingsOpen
@@ -1696,6 +1707,7 @@ export function OnlineChat() {
                             <button
                               key={ratio}
                               type="button"
+                              style={imageChipStyle(imageAspectRatio === ratio)}
                               className={cn(imageChipClass(imageAspectRatio === ratio), 'h-[3.7rem] w-[4.15rem] flex-col gap-1 px-1.5')}
                               onClick={() => setImageAspectRatio(ratio)}
                             >
@@ -1717,12 +1729,13 @@ export function OnlineChat() {
                           <div className="text-xs text-white/55">{t('Quality')}</div>
                           <div className="grid grid-cols-4 gap-2">
                             {IMAGE_QUALITY_OPTIONS.map((quality) => (
-                              <button
-                                key={quality}
-                                type="button"
-                                className={cn(imageChipClass(imageQuality === quality), 'h-10 px-3')}
-                                onClick={() => setImageQuality(quality)}
-                              >
+                            <button
+                              key={quality}
+                              type="button"
+                              style={imageChipStyle(imageQuality === quality)}
+                              className={cn(imageChipClass(imageQuality === quality), 'h-10 px-3')}
+                              onClick={() => setImageQuality(quality)}
+                            >
                                 {formatImageQualityLabel(quality, t)}
                               </button>
                             ))}
@@ -1733,12 +1746,13 @@ export function OnlineChat() {
                           <div className="text-xs text-white/55">{t('Resolution')}</div>
                           <div className="grid grid-cols-3 gap-2">
                             {imageResolutionOptions.map((resolution) => (
-                              <button
-                                key={resolution}
-                                type="button"
-                                className={cn(imageChipClass(imageResolution === resolution), 'h-10 px-3')}
-                                onClick={() => setImageResolution(resolution)}
-                              >
+                            <button
+                              key={resolution}
+                              type="button"
+                              style={imageChipStyle(imageResolution === resolution)}
+                              className={cn(imageChipClass(imageResolution === resolution), 'h-10 px-3')}
+                              onClick={() => setImageResolution(resolution)}
+                            >
                                 {formatImageResolutionLabel(resolution, t)}
                               </button>
                             ))}
@@ -1753,6 +1767,7 @@ export function OnlineChat() {
                             <button
                               key={count}
                               type="button"
+                              style={imageChipStyle(imageCount === count)}
                               className={cn(imageChipClass(imageCount === count), 'h-10 px-3')}
                               onClick={() => setImageCount(count)}
                             >
@@ -1769,6 +1784,7 @@ export function OnlineChat() {
                             <button
                               key={format}
                               type="button"
+                              style={imageChipStyle(imageOutputFormat === format)}
                               className={cn(imageChipClass(imageOutputFormat === format), 'h-10 px-3')}
                               onClick={() => setImageOutputFormat(format)}
                             >
@@ -1801,6 +1817,7 @@ export function OnlineChat() {
                       <Button
                         variant="outline"
                         size="sm"
+                        style={videoSettingsOpen ? imageChipStyle(true) : undefined}
                         className={cn(
                           'h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs',
                           videoSettingsOpen
@@ -1830,6 +1847,7 @@ export function OnlineChat() {
                               key={ratio}
                               type="button"
                               aria-pressed={videoAspectRatio === ratio}
+                              style={imageChipStyle(videoAspectRatio === ratio)}
                               className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[4.25rem] min-w-0 flex-col gap-1 px-1')}
                               onClick={() => setVideoAspectRatio(ratio)}
                             >
@@ -1854,6 +1872,7 @@ export function OnlineChat() {
                               key={resolution}
                               type="button"
                               aria-pressed={videoResolution === resolution}
+                              style={imageChipStyle(videoResolution === resolution)}
                               className={cn(imageChipClass(videoResolution === resolution), 'h-10 px-3')}
                               onClick={() => setVideoResolution(resolution)}
                             >
@@ -1871,6 +1890,7 @@ export function OnlineChat() {
                               key={duration}
                               type="button"
                               aria-pressed={videoDuration === duration}
+                              style={imageChipStyle(videoDuration === duration)}
                               className={cn(imageChipClass(videoDuration === duration), 'h-10 px-3')}
                               onClick={() => setVideoDuration(duration)}
                             >

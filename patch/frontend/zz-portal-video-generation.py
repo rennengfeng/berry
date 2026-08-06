@@ -36,6 +36,111 @@ def replace_once_regex(text: str, pattern: str, replacement: str, label: str) ->
     return new_text
 
 
+def ensure_selected_chip_inline_styles(text: str) -> str:
+    """Keep selected parameter chips purple even when global button styles win."""
+    if "function imageChipStyle(" not in text and "function aspectPreviewClass(" in text:
+        if "type CSSProperties" not in text:
+            text = text.replace("import { Fragment,", "import { Fragment, type CSSProperties,", 1)
+        text = text.replace(
+            "\nfunction aspectPreviewClass(",
+            """
+
+function imageChipStyle(selected: boolean): CSSProperties | undefined {
+  if (!selected) return undefined
+  return {
+    backgroundColor: 'rgba(124, 58, 237, 0.98)',
+    borderColor: 'rgba(167, 139, 250, 0.95)',
+    color: '#fff',
+    boxShadow: '0 10px 24px rgba(124, 58, 237, 0.32)',
+  }
+}
+
+function aspectPreviewClass(""",
+            1,
+        )
+
+    image_trigger = """<Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          'h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs',
+                          imageSettingsOpen
+                            ? '!border-violet-400/70 !bg-violet-600/20 !text-white shadow-sm shadow-violet-600/20 hover:!bg-violet-600/30'
+                            : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-violet-400/60 hover:bg-violet-600/15'
+                        )}
+                        disabled={isGenerating}
+                        title={t('Settings')}
+                      />"""
+    if "style={imageSettingsOpen ? imageChipStyle(true) : undefined}" not in text and image_trigger in text:
+        text = text.replace(
+            image_trigger,
+            """<Button
+                        variant="outline"
+                        size="sm"
+                        style={imageSettingsOpen ? imageChipStyle(true) : undefined}
+                        className={cn(
+                          'h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs',
+                          imageSettingsOpen
+                            ? '!border-violet-400/70 !bg-violet-600/20 !text-white shadow-sm shadow-violet-600/20 hover:!bg-violet-600/30'
+                            : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-violet-400/60 hover:bg-violet-600/15'
+                        )}
+                        disabled={isGenerating}
+                        title={t('Settings')}
+                      />""",
+            1,
+        )
+    video_trigger = """<Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          'h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs',
+                          videoSettingsOpen
+                            ? '!border-violet-400/70 !bg-violet-600/20 !text-white shadow-sm shadow-violet-600/20 hover:!bg-violet-600/30'
+                            : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-violet-400/60 hover:bg-violet-600/15'
+                        )}
+                        disabled={isGenerating}
+                        title={t('Video Parameters')}
+                      />"""
+    if "style={videoSettingsOpen ? imageChipStyle(true) : undefined}" not in text and video_trigger in text:
+        text = text.replace(
+            video_trigger,
+            """<Button
+                        variant="outline"
+                        size="sm"
+                        style={videoSettingsOpen ? imageChipStyle(true) : undefined}
+                        className={cn(
+                          'h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs',
+                          videoSettingsOpen
+                            ? '!border-violet-400/70 !bg-violet-600/20 !text-white shadow-sm shadow-violet-600/20 hover:!bg-violet-600/30'
+                            : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-violet-400/60 hover:bg-violet-600/15'
+                        )}
+                        disabled={isGenerating}
+                        title={t('Video Parameters')}
+                      />""",
+            1,
+        )
+
+    replacements = {
+        '<Button variant="outline" size="sm" className={cn(': '<Button variant="outline" size="sm" style={videoSettingsOpen ? imageChipStyle(true) : undefined} className={cn(',
+        'type="button"\n                              className={cn(imageChipClass(imageAspectRatio === ratio),': 'type="button"\n                              style={imageChipStyle(imageAspectRatio === ratio)}\n                              className={cn(imageChipClass(imageAspectRatio === ratio),',
+        'type="button"\n                                className={cn(imageChipClass(imageQuality === quality),': 'type="button"\n                                style={imageChipStyle(imageQuality === quality)}\n                                className={cn(imageChipClass(imageQuality === quality),',
+        'type="button"\n                                className={cn(imageChipClass(imageResolution === resolution),': 'type="button"\n                                style={imageChipStyle(imageResolution === resolution)}\n                                className={cn(imageChipClass(imageResolution === resolution),',
+        'type="button"\n                              className={cn(imageChipClass(imageCount === count),': 'type="button"\n                              style={imageChipStyle(imageCount === count)}\n                              className={cn(imageChipClass(imageCount === count),',
+        'type="button"\n                              className={cn(imageChipClass(imageOutputFormat === format),': 'type="button"\n                              style={imageChipStyle(imageOutputFormat === format)}\n                              className={cn(imageChipClass(imageOutputFormat === format),',
+        'type="button"\n                              className={cn(imageChipClass(imageOutputFormat === outputFormat),': 'type="button"\n                              style={imageChipStyle(imageOutputFormat === outputFormat)}\n                              className={cn(imageChipClass(imageOutputFormat === outputFormat),',
+        'type="button"\n                              aria-pressed={videoAspectRatio === ratio}\n                              className={cn(imageChipClass(videoAspectRatio === ratio),': 'type="button"\n                              aria-pressed={videoAspectRatio === ratio}\n                              style={imageChipStyle(videoAspectRatio === ratio)}\n                              className={cn(imageChipClass(videoAspectRatio === ratio),',
+        'type="button"\n                              aria-pressed={videoResolution === resolution}\n                              className={cn(imageChipClass(videoResolution === resolution),': 'type="button"\n                              aria-pressed={videoResolution === resolution}\n                              style={imageChipStyle(videoResolution === resolution)}\n                              className={cn(imageChipClass(videoResolution === resolution),',
+        'type="button"\n                              aria-pressed={videoDuration === duration}\n                              className={cn(imageChipClass(videoDuration === duration),': 'type="button"\n                              aria-pressed={videoDuration === duration}\n                              style={imageChipStyle(videoDuration === duration)}\n                              className={cn(imageChipClass(videoDuration === duration),',
+        'type="button" aria-pressed={videoAspectRatio === ratio} className={cn(imageChipClass(videoAspectRatio === ratio),': 'type="button" aria-pressed={videoAspectRatio === ratio} style={imageChipStyle(videoAspectRatio === ratio)} className={cn(imageChipClass(videoAspectRatio === ratio),',
+        'type="button" aria-pressed={videoResolution === resolution} className={cn(imageChipClass(videoResolution === resolution),': 'type="button" aria-pressed={videoResolution === resolution} style={imageChipStyle(videoResolution === resolution)} className={cn(imageChipClass(videoResolution === resolution),',
+        'type="button" aria-pressed={videoDuration === duration} className={cn(imageChipClass(videoDuration === duration),': 'type="button" aria-pressed={videoDuration === duration} style={imageChipStyle(videoDuration === duration)} className={cn(imageChipClass(videoDuration === duration),',
+    }
+    for old, new in replacements.items():
+        if new not in text:
+            text = text.replace(old, new)
+    return text
+
+
 ONLINE_CHAT_I18N_REPLACEMENTS = {
     "label: '视频生成'": "label: t('Video Generation')",
     "label: 'Agent 模式'": "label: t('Agent Mode')",
@@ -888,6 +993,7 @@ function getImageSizePreview""",
     }
     for old, new in style_replacements.items():
         text = text.replace(old, new)
+    text = ensure_selected_chip_inline_styles(text)
     for old, new in ONLINE_CHAT_I18N_REPLACEMENTS.items():
         text = text.replace(old, new)
     write(rel, text)
