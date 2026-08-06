@@ -57,6 +57,71 @@ def replace_once_regex(text: str, pattern: str, repl: str, label: str) -> str:
     return new_text
 
 
+def patch_safe_proxy_request_helper(text: str) -> str:
+    if "info != nil && info.ChannelMeta != nil" in text:
+        return text
+
+    old = '''	var client *http.Client
+	var err error
+	if info.ChannelSetting.Proxy != "" {
+		client, err = service.GetHttpClientWithProxy(info.ChannelSetting.Proxy)
+		if err != nil {
+			return nil, fmt.Errorf("new proxy http client failed: %w", err)
+		}
+	} else {
+		client = service.GetHttpClient()
+	}
+'''
+    new = '''	var client *http.Client
+	var err error
+	proxy := ""
+	if info != nil && info.ChannelMeta != nil {
+		proxy = info.ChannelSetting.Proxy
+	}
+	if proxy != "" {
+		client, err = service.GetHttpClientWithProxy(proxy)
+		if err != nil {
+			return nil, fmt.Errorf("new proxy http client failed: %w", err)
+		}
+	} else {
+		client = service.GetHttpClient()
+	}
+'''
+    if old in text:
+        return text.replace(old, new, 1)
+
+    pattern = (
+        r'(\nfunc doRequest\(c \*gin\.Context, req \*http\.Request, info \*common\.RelayInfo\) '
+        r'\(\*http\.Response, error\) \{\n\s*var client \*http\.Client\n\s*var err error\n)'
+        r'\s*if info\.ChannelSetting\.Proxy != "" \{\n'
+        r'\s*client, err = service\.GetHttpClientWithProxy\(info\.ChannelSetting\.Proxy\)\n'
+        r'\s*if err != nil \{\n'
+        r'\s*return nil, fmt\.Errorf\("new proxy http client failed: %w", err\)\n'
+        r'\s*\}\n'
+        r'\s*\} else \{\n'
+        r'\s*client = service\.GetHttpClient\(\)\n'
+        r'\s*\}\n'
+    )
+    replacement = r'\1' + '''	proxy := ""
+	if info != nil && info.ChannelMeta != nil {
+		proxy = info.ChannelSetting.Proxy
+	}
+	if proxy != "" {
+		client, err = service.GetHttpClientWithProxy(proxy)
+		if err != nil {
+			return nil, fmt.Errorf("new proxy http client failed: %w", err)
+		}
+	} else {
+		client = service.GetHttpClient()
+	}
+'''
+    new_text, count = re.subn(pattern, replacement, text, count=1, flags=re.MULTILINE)
+    if count == 0:
+        print("skip safe proxy lookup patch: request helper shape not recognized")
+        return text
+    return new_text
+
+
 def has_endpoint_type_const(text: str, name: str, value: str) -> bool:
     pattern = rf'^\s*{re.escape(name)}\s+EndpointType\s*=\s*"{re.escape(value)}"\s*$'
     return re.search(pattern, text, flags=re.MULTILINE) is not None
@@ -783,38 +848,9 @@ def patch_ali_audio_adaptor() -> None:
     path = ROOT / rel
     if path.exists():
         text = read(rel)
-        if "info != nil && info.ChannelMeta != nil" not in text:
-            text = replace_once(
-                text,
-                '''	var client *http.Client
-	var err error
-	if info.ChannelSetting.Proxy != "" {
-		client, err = service.GetHttpClientWithProxy(info.ChannelSetting.Proxy)
-		if err != nil {
-			return nil, fmt.Errorf("new proxy http client failed: %w", err)
-		}
-	} else {
-		client = service.GetHttpClient()
-	}
-''',
-                '''	var client *http.Client
-	var err error
-	proxy := ""
-	if info != nil && info.ChannelMeta != nil {
-		proxy = info.ChannelSetting.Proxy
-	}
-	if proxy != "" {
-		client, err = service.GetHttpClientWithProxy(proxy)
-		if err != nil {
-			return nil, fmt.Errorf("new proxy http client failed: %w", err)
-		}
-	} else {
-		client = service.GetHttpClient()
-	}
-''',
-                "safe proxy lookup in request helper",
-            )
-            write(rel, text)
+        patched = patch_safe_proxy_request_helper(text)
+        if patched != text:
+            write(rel, patched)
 
 
 def patch_channel_test_audio_default_voice() -> None:
