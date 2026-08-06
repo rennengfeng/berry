@@ -115,9 +115,9 @@ type DashScopeNativePricingProps = {
 const UNIT_OPTIONS: Array<{ value: NativeUnit; label: string }> = [
   { value: 'token_input_output', label: 'Input/output tokens' },
   { value: 'request', label: 'Requests' },
-  { value: 'video_task', label: 'Video tasks' },
-  { value: 'video_second', label: 'Video seconds' },
-  { value: 'audio_second', label: 'Audio seconds' },
+  { value: 'video_task', label: 'Video generation per task' },
+  { value: 'video_second', label: 'Video generation per second' },
+  { value: 'audio_second', label: 'Audio generation per second' },
   { value: 'image', label: 'Images' },
   { value: 'character', label: '10K characters' },
 ]

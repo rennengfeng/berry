@@ -117,15 +117,15 @@ function dashScopeNativeUnitLabel(unit: string | undefined, t: (key: string) => 
     case 'image':
       return t('per image')
     case 'video_second':
-      return t('per video second')
+      return t('Video generation per second')
     case 'audio_second':
-      return t('per audio second')
+      return t('Audio generation per second')
     case 'character_10k':
       return t('per 10K characters')
     case 'character':
       return t('per 10K characters')
     case 'video_task':
-      return t('per video task')
+      return t('Video generation per task')
     default:
       return t('per request')
   }

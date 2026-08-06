@@ -131,10 +131,10 @@ type DashScopeNativePricingProps = {
 
 const UNIT_OPTIONS: Array<{ value: NativeUnit; label: string }> = [
   { value: 'character', label: '10K characters' },
-  { value: 'audio_second', label: 'Audio seconds' },
+  { value: 'audio_second', label: 'Audio generation per second' },
   { value: 'image', label: 'Images' },
-  { value: 'video_second', label: 'Video seconds' },
-  { value: 'video_task', label: 'Video tasks' },
+  { value: 'video_second', label: 'Video generation per second' },
+  { value: 'video_task', label: 'Video generation per task' },
   { value: 'request', label: 'Requests' },
   { value: 'token_input_output', label: 'Input/output tokens' },
 ]
@@ -886,6 +886,9 @@ def patch_i18n(root: Path) -> None:
         "Characters": "字符",
         "10K characters": "万字符",
         "per 10K characters": "每万字符",
+        "Video generation per second": "视频生成 每秒",
+        "Audio generation per second": "音频生成 每秒",
+        "Video generation per task": "视频生成 每次",
         "Audio seconds": "音频秒",
         "Images": "图片张数",
         "Video seconds": "视频秒",
