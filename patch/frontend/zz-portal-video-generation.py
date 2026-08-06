@@ -540,14 +540,14 @@ const VIDEO_SIZE_BY_RESOLUTION_RATIO: Record<VideoResolutionTier, Record<VideoAs
         text = replace_once(text, "                  {/* Generated images */}\n", video_render + "                  {/* Generated images */}\n", "video result render")
         video_popover = """              {chatMode === 'video' && (
                 <Popover open={videoSettingsOpen} onOpenChange={setVideoSettingsOpen}>
-                  <PopoverTrigger render={<Button variant="outline" size="sm" className={cn('h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs', videoSettingsOpen ? 'border-[#8B5CF6]/70 bg-[#7C3AED]/20 text-white shadow-sm shadow-[#7C3AED]/20 hover:bg-[#7C3AED]/30' : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-[#8B5CF6]/60 hover:bg-[#7C3AED]/15')} disabled={isGenerating} title="视频参数" />}>
+                  <PopoverTrigger render={<Button variant="outline" size="sm" className={cn('h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs', videoSettingsOpen ? '!border-violet-400/70 !bg-violet-600/20 !text-white shadow-sm shadow-violet-600/20 hover:!bg-violet-600/30' : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-violet-400/60 hover:bg-violet-600/15')} disabled={isGenerating} title="视频参数" />}>
                     <SlidersHorizontalIcon className="h-3.5 w-3.5" />
                     <span className="whitespace-nowrap">{resolveVideoRequestSettings(videoAspectRatio, videoResolution, videoDuration).summary.replace(/ · /g, ' ')}</span>
                   </PopoverTrigger>
                   <PopoverContent side="top" align="end" sideOffset={10} className="w-[min(94vw,34rem)] rounded-xl border border-[#8B5CF6]/25 bg-[#151124]/95 p-3 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl">
                     <div className="space-y-4">
                       <div className="space-y-2"><div className="text-xs text-white/55">比例</div><div className="grid grid-cols-6 gap-1.5 rounded-xl bg-white/[0.04] p-1.5">
-                        {VIDEO_ASPECT_OPTIONS.map((ratio) => <button key={ratio} type="button" aria-pressed={videoAspectRatio === ratio} className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[4.25rem] min-w-0 flex-col gap-1 px-1')} onClick={() => setVideoAspectRatio(ratio)}><span className={cn('rounded-[3px] border', aspectPreviewClass(ratio), videoAspectRatio === ratio ? 'border-[#8B5CF6] bg-[#7C3AED]/45' : 'border-white/30 bg-white/10')} /><span className="text-[10px] leading-none">{ratio}</span></button>)}
+                        {VIDEO_ASPECT_OPTIONS.map((ratio) => <button key={ratio} type="button" aria-pressed={videoAspectRatio === ratio} className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[4.25rem] min-w-0 flex-col gap-1 px-1')} onClick={() => setVideoAspectRatio(ratio)}><span className={cn('rounded-[3px] border', aspectPreviewClass(ratio), videoAspectRatio === ratio ? '!border-violet-400 !bg-violet-600/45' : 'border-white/30 bg-white/10')} /><span className="text-[10px] leading-none">{ratio}</span></button>)}
                       </div></div>
                       <div className="space-y-2"><div className="text-xs text-white/55">分辨率</div><div className="grid grid-cols-3 gap-2">
                         {VIDEO_RESOLUTION_OPTIONS.map((resolution) => <button key={resolution} type="button" aria-pressed={videoResolution === resolution} className={cn(imageChipClass(videoResolution === resolution), 'h-10 px-3')} onClick={() => setVideoResolution(resolution)}>{resolution}P</button>)}
@@ -847,14 +847,14 @@ function getImageSizePreview""",
     if "{chatMode === 'video' && (" not in text:
         video_popover = """              {chatMode === 'video' && (
                 <Popover open={videoSettingsOpen} onOpenChange={setVideoSettingsOpen}>
-                  <PopoverTrigger render={<Button variant="outline" size="sm" className={cn('h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs', videoSettingsOpen ? 'border-[#8B5CF6]/70 bg-[#7C3AED]/20 text-white shadow-sm shadow-[#7C3AED]/20 hover:bg-[#7C3AED]/30' : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-[#8B5CF6]/60 hover:bg-[#7C3AED]/15')} disabled={isGenerating} title="视频参数" />}>
+                  <PopoverTrigger render={<Button variant="outline" size="sm" className={cn('h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs', videoSettingsOpen ? '!border-violet-400/70 !bg-violet-600/20 !text-white shadow-sm shadow-violet-600/20 hover:!bg-violet-600/30' : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-violet-400/60 hover:bg-violet-600/15')} disabled={isGenerating} title="视频参数" />}>
                     <SlidersHorizontalIcon className="h-3.5 w-3.5" />
                     <span className="whitespace-nowrap">{videoRequestSettings.summary.replace(/ · /g, ' ')}</span>
                   </PopoverTrigger>
                   <PopoverContent side="top" align="end" sideOffset={10} className="w-[min(94vw,34rem)] rounded-xl border border-[#8B5CF6]/25 bg-[#151124]/95 p-3 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl">
                     <div className="space-y-4">
                       <div className="space-y-2"><div className="text-xs text-white/55">比例</div><div className="grid grid-cols-6 gap-1.5 rounded-xl bg-white/[0.04] p-1.5">
-                        {VIDEO_ASPECT_OPTIONS.map((ratio) => <button key={ratio} type="button" aria-pressed={videoAspectRatio === ratio} className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[4.25rem] min-w-0 flex-col gap-1 px-1')} onClick={() => setVideoAspectRatio(ratio)}><span className={cn('rounded-[3px] border', aspectPreviewClass(ratio), videoAspectRatio === ratio ? 'border-[#8B5CF6] bg-[#7C3AED]/45' : 'border-white/30 bg-white/10')} /><span className="text-[10px] leading-none">{ratio}</span></button>)}
+                        {VIDEO_ASPECT_OPTIONS.map((ratio) => <button key={ratio} type="button" aria-pressed={videoAspectRatio === ratio} className={cn(imageChipClass(videoAspectRatio === ratio), 'h-[4.25rem] min-w-0 flex-col gap-1 px-1')} onClick={() => setVideoAspectRatio(ratio)}><span className={cn('rounded-[3px] border', aspectPreviewClass(ratio), videoAspectRatio === ratio ? '!border-violet-400 !bg-violet-600/45' : 'border-white/30 bg-white/10')} /><span className="text-[10px] leading-none">{ratio}</span></button>)}
                       </div></div>
                       <div className="space-y-2"><div className="text-xs text-white/55">分辨率</div><div className="grid grid-cols-3 gap-2">
                         {VIDEO_RESOLUTION_OPTIONS.map((resolution) => <button key={resolution} type="button" aria-pressed={videoResolution === resolution} className={cn(imageChipClass(videoResolution === resolution), 'h-10 px-3')} onClick={() => setVideoResolution(resolution)}>{resolution}P</button>)}
@@ -870,16 +870,21 @@ function getImageSizePreview""",
 """
         text = replace_once(text, "            </div>\n          </div>\n        </div>\n      </div>\n      </div>\n    </div>", video_popover + "            </div>\n          </div>\n        </div>\n      </div>\n      </div>\n    </div>", "missing video settings popover")
     style_replacements = {
-        "'border-violet-300/80 bg-violet-500/85 text-white shadow-sm'": "'border-[#8B5CF6] bg-[#7C3AED] text-white shadow-sm shadow-[#7C3AED]/35 hover:bg-[#6D28D9]'",
-        "'border-primary bg-primary text-white shadow-sm shadow-primary/25 hover:bg-primary/90'": "'border-[#8B5CF6] bg-[#7C3AED] text-white shadow-sm shadow-[#7C3AED]/35 hover:bg-[#6D28D9]'",
-        "'border-white/10 bg-white/[0.04] text-white/65 hover:border-primary/50 hover:bg-primary/15 hover:text-white'": "'border-white/10 bg-white/[0.04] text-white/70 hover:border-[#8B5CF6]/70 hover:bg-[#7C3AED]/20 hover:text-white'",
-        "'border-primary/15 bg-primary/5 text-white/70 hover:border-primary/40 hover:bg-primary/10 hover:text-white'": "'border-white/10 bg-white/[0.04] text-white/70 hover:border-[#8B5CF6]/70 hover:bg-[#7C3AED]/20 hover:text-white'",
+        "'border-violet-300/80 bg-violet-500/85 text-white shadow-sm'": "'!border-violet-400 !bg-violet-600 !text-white shadow-sm shadow-violet-600/35 hover:!bg-violet-700'",
+        "'border-primary bg-primary text-white shadow-sm shadow-primary/25 hover:bg-primary/90'": "'!border-violet-400 !bg-violet-600 !text-white shadow-sm shadow-violet-600/35 hover:!bg-violet-700'",
+        "'border-[#8B5CF6] bg-[#7C3AED] text-white shadow-sm shadow-[#7C3AED]/35 hover:bg-[#6D28D9]'": "'!border-violet-400 !bg-violet-600 !text-white shadow-sm shadow-violet-600/35 hover:!bg-violet-700'",
+        "'border-white/10 bg-white/[0.04] text-white/65 hover:border-primary/50 hover:bg-primary/15 hover:text-white'": "'border-white/10 bg-white/[0.04] text-white/70 hover:border-violet-400/70 hover:bg-violet-600/20 hover:text-white'",
+        "'border-primary/15 bg-primary/5 text-white/70 hover:border-primary/40 hover:bg-primary/10 hover:text-white'": "'border-white/10 bg-white/[0.04] text-white/70 hover:border-violet-400/70 hover:bg-violet-600/20 hover:text-white'",
+        "'border-white/10 bg-white/[0.04] text-white/70 hover:border-[#8B5CF6]/70 hover:bg-[#7C3AED]/20 hover:text-white'": "'border-white/10 bg-white/[0.04] text-white/70 hover:border-violet-400/70 hover:bg-violet-600/20 hover:text-white'",
+        "'border-[#8B5CF6]/70 bg-[#7C3AED]/20 text-white shadow-sm shadow-[#7C3AED]/20 hover:bg-[#7C3AED]/30'": "'!border-violet-400/70 !bg-violet-600/20 !text-white shadow-sm shadow-violet-600/20 hover:!bg-violet-600/30'",
+        "'border-white/10 bg-white/[0.03] text-white/80 hover:border-[#8B5CF6]/60 hover:bg-[#7C3AED]/15'": "'border-white/10 bg-white/[0.03] text-white/80 hover:border-violet-400/60 hover:bg-violet-600/15'",
         "border border-white/10 bg-[#151124]/95 p-4 text-white shadow-2xl backdrop-blur-xl": "border border-[#8B5CF6]/25 bg-[#151124]/95 p-4 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl",
         "border border-primary/20 bg-[#151124]/95 p-4 text-white shadow-2xl shadow-primary/10 backdrop-blur-xl": "border border-[#8B5CF6]/25 bg-[#151124]/95 p-4 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl",
         "border border-white/10 bg-[#151124]/95 p-3 text-white shadow-2xl backdrop-blur-xl": "border border-[#8B5CF6]/25 bg-[#151124]/95 p-3 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl",
         "border border-primary/20 bg-[#151124]/95 p-3 text-white shadow-2xl shadow-primary/10 backdrop-blur-xl": "border border-[#8B5CF6]/25 bg-[#151124]/95 p-3 text-white shadow-2xl shadow-[#7C3AED]/15 backdrop-blur-xl",
-        "'border-violet-200 bg-violet-200/40' : 'border-white/30 bg-white/10'": "'border-[#8B5CF6] bg-[#7C3AED]/45' : 'border-white/30 bg-white/10'",
-        "'border-white/80 bg-white/45' : 'border-primary/20 bg-primary/10'": "'border-[#8B5CF6] bg-[#7C3AED]/45' : 'border-white/30 bg-white/10'",
+        "'border-violet-200 bg-violet-200/40' : 'border-white/30 bg-white/10'": "'!border-violet-400 !bg-violet-600/45' : 'border-white/30 bg-white/10'",
+        "'border-white/80 bg-white/45' : 'border-primary/20 bg-primary/10'": "'!border-violet-400 !bg-violet-600/45' : 'border-white/30 bg-white/10'",
+        "'border-[#8B5CF6] bg-[#7C3AED]/45' : 'border-white/30 bg-white/10'": "'!border-violet-400 !bg-violet-600/45' : 'border-white/30 bg-white/10'",
     }
     for old, new in style_replacements.items():
         text = text.replace(old, new)

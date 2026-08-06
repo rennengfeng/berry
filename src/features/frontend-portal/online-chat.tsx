@@ -420,8 +420,8 @@ function imageChipClass(selected: boolean): string {
   return cn(
     'inline-flex min-w-0 items-center justify-center rounded-lg border text-sm transition',
     selected
-      ? 'border-[#8B5CF6] bg-[#7C3AED] text-white shadow-sm shadow-[#7C3AED]/35 hover:bg-[#6D28D9]'
-      : 'border-white/10 bg-white/[0.04] text-white/70 hover:border-[#8B5CF6]/70 hover:bg-[#7C3AED]/20 hover:text-white'
+      ? '!border-violet-400 !bg-violet-600 !text-white shadow-sm shadow-violet-600/35 hover:!bg-violet-700'
+      : 'border-white/10 bg-white/[0.04] text-white/70 hover:border-violet-400/70 hover:bg-violet-600/20 hover:text-white'
   )
 }
 
@@ -1671,8 +1671,8 @@ export function OnlineChat() {
                         className={cn(
                           'h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs',
                           imageSettingsOpen
-                            ? 'border-[#8B5CF6]/70 bg-[#7C3AED]/20 text-white shadow-sm shadow-[#7C3AED]/20 hover:bg-[#7C3AED]/30'
-                            : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-[#8B5CF6]/60 hover:bg-[#7C3AED]/15'
+                            ? '!border-violet-400/70 !bg-violet-600/20 !text-white shadow-sm shadow-violet-600/20 hover:!bg-violet-600/30'
+                            : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-violet-400/60 hover:bg-violet-600/15'
                         )}
                         disabled={isGenerating}
                         title={t('Settings')}
@@ -1703,7 +1703,7 @@ export function OnlineChat() {
                                 className={cn(
                                   'rounded-[3px] border',
                                   aspectPreviewClass(ratio),
-                                  imageAspectRatio === ratio ? 'border-[#8B5CF6] bg-[#7C3AED]/45' : 'border-white/30 bg-white/10'
+                                  imageAspectRatio === ratio ? '!border-violet-400 !bg-violet-600/45' : 'border-white/30 bg-white/10'
                                 )}
                               />
                               <span className="text-[11px] leading-none">{ratio === 'auto' ? t('Auto') : ratio}</span>
@@ -1804,8 +1804,8 @@ export function OnlineChat() {
                         className={cn(
                           'h-9 min-w-[11.5rem] justify-center gap-1 px-3 text-xs',
                           videoSettingsOpen
-                            ? 'border-[#8B5CF6]/70 bg-[#7C3AED]/20 text-white shadow-sm shadow-[#7C3AED]/20 hover:bg-[#7C3AED]/30'
-                            : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-[#8B5CF6]/60 hover:bg-[#7C3AED]/15'
+                            ? '!border-violet-400/70 !bg-violet-600/20 !text-white shadow-sm shadow-violet-600/20 hover:!bg-violet-600/30'
+                            : 'border-white/10 bg-white/[0.03] text-white/80 hover:border-violet-400/60 hover:bg-violet-600/15'
                         )}
                         disabled={isGenerating}
                         title={t('Video Parameters')}
@@ -1837,7 +1837,7 @@ export function OnlineChat() {
                                 className={cn(
                                   'rounded-[3px] border',
                                   aspectPreviewClass(ratio),
-                                  videoAspectRatio === ratio ? 'border-[#8B5CF6] bg-[#7C3AED]/45' : 'border-white/30 bg-white/10'
+                                  videoAspectRatio === ratio ? '!border-violet-400 !bg-violet-600/45' : 'border-white/30 bg-white/10'
                                 )}
                               />
                               <span className="text-[10px] leading-none">{ratio}</span>

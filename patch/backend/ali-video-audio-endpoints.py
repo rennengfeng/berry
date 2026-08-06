@@ -971,6 +971,20 @@ def patch_audio_pricing_meta() -> None:
             '\n\tvar autoGroup any\n\tvar exists bool\n\tif ctx != nil {\n\t\tautoGroup, exists = ctx.Get("auto_group")\n\t}\n',
             "group ratio safe auto group lookup",
         )
+    text = text.replace(
+        '''	if exists {
+		logger.LogDebug(ctx, "final group: %s", autoGroup)
+		relayInfo.UsingGroup = autoGroup.(string)
+	}
+''',
+        '''	if exists {
+		if group, ok := autoGroup.(string); ok && group != "" {
+			logger.LogDebug(ctx, "final group: %s", group)
+			relayInfo.UsingGroup = group
+		}
+	}
+''',
+    )
     if not re.search(r'func ModelPriceHelper\([\s\S]*?if info == nil \{[\s\S]*?relay info is nil while pricing request[\s\S]*?modelPrice, usePrice', text):
         text = replace_once_regex(
             text,
